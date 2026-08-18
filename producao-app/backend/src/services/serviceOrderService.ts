@@ -74,6 +74,17 @@ export async function importPendingServiceOrders(actingUserId?: string) {
 
       await initializeStageInstances(order.id, product.categoryId, tx);
 
+      // Especificações desta encomenda (Modelo, Dimensões, Acabamento,
+      // Enchimento, referência à Encomenda Cliente, etc.), tal como vieram
+      // da Ordem Serviço do Goldylocks — guardadas como Observação inicial
+      // em vez de campos estruturados próprios (decisão tomada por não
+      // exigir alterações ao modelo de dados por agora).
+      if (goldOrder.notes && actingUserId) {
+        await tx.observation.create({
+          data: { serviceOrderId: order.id, text: goldOrder.notes, userId: actingUserId },
+        });
+      }
+
       await logHistoryEvent({
         serviceOrderId: order.id,
         type: "CRIACAO",

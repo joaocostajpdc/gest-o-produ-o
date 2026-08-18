@@ -1,4 +1,6 @@
-import { PriorityLevel, ServiceOrderStatus } from "@prisma/client";
+   import { ServiceOrderStatus } from "@prisma/client";
+
+   export type PriorityLevel = "PRAZO_ULTRAPASSADO" | "URGENTE" | "PROXIMO" | "COM_MARGEM";
 
 // ============================================================================
 // Serviço de Prioridade / Código de Cores

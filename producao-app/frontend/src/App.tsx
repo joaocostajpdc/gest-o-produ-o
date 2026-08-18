@@ -4,7 +4,6 @@ import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
 import { ServiceOrdersListPage } from "./pages/ServiceOrdersListPage";
 import { ServiceOrderDetailPage } from "./pages/ServiceOrderDetailPage";
-import { CategoriesPage } from "./pages/CategoriesPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { StagesPage } from "./pages/StagesPage";
 import { ProductionLinesPage } from "./pages/ProductionLinesPage";
@@ -27,7 +26,6 @@ export default function App() {
         <Route path="/" element={<ServiceOrdersListPage />} />
         <Route path="/service-orders/:id" element={<ServiceOrderDetailPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
-        <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />
         <Route path="/production-lines" element={<ProductionLinesPage />} />

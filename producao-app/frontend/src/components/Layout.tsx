@@ -17,7 +17,6 @@ export function Layout() {
         {canManageConfig(user?.role) && (
           <>
             <div className="section-label">Configuração</div>
-            <NavLink to="/categories">Categorias de Produtos</NavLink>
             <NavLink to="/products">Produtos</NavLink>
             <NavLink to="/stages">Etapas</NavLink>
             <NavLink to="/production-lines">Linhas de Produção</NavLink>

@@ -11,19 +11,16 @@ productsRouter.use(requireAuth);
 const productSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  categoryId: z.string().min(1),
+  productionDays: z.number().int().nonnegative(),
   externalId: z.string().optional(),
 });
 
 productsRouter.get(
   "/",
   requirePermission("products:read"),
-  asyncHandler(async (req, res) => {
-    const { categoryId } = req.query;
+  asyncHandler(async (_req, res) => {
     const products = await prisma.product.findMany({
-      where: categoryId ? { categoryId: String(categoryId) } : undefined,
       orderBy: { name: "asc" },
-      include: { category: true },
     });
     res.json(products);
   })

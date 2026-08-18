@@ -14,7 +14,7 @@ export type PriorityLevel = "PRAZO_ULTRAPASSADO" | "URGENTE" | "PROXIMO" | "COM_
 // secção "Monitorização Visual dos Prazos" do documento de requisitos.
 //
 // Os limiares (em horas até à data-limite) são configuráveis abaixo e podem
-// ser ajustados/movidos para configuração por categoria no futuro.
+// ser ajustados/movidos para configuração por produto no futuro.
 // ============================================================================
 
 export const PRIORITY_THRESHOLDS_HOURS = {

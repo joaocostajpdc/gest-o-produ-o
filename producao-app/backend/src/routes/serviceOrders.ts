@@ -30,7 +30,6 @@ serviceOrdersRouter.use(requireAuth);
 const LIST_INCLUDE = {
   client: true,
   product: true,
-  category: true,
   currentStageInstance: { include: { stage: true, supplier: true } },
 } as const;
 
@@ -42,7 +41,6 @@ function serializeListItem(order: any, now: Date) {
     status: order.status,
     client: { id: order.client.id, name: order.client.name },
     product: { id: order.product.id, name: order.product.name },
-    category: { id: order.category.id, name: order.category.name },
     deadlineAt: order.deadlineAt,
     priority,
     priorityLabel: priority ? PRIORITY_LABELS[priority] : null,
@@ -60,7 +58,7 @@ function serializeListItem(order: any, now: Date) {
 }
 
 // ---------------------------------------------------------------------------
-// Listagem com filtros: prioridade, etapa, categoria, fornecedor, cliente.
+// Listagem com filtros: prioridade, etapa, fornecedor, cliente.
 // A ordenação por prioridade (mais urgente primeiro, data-limite como
 // critério secundário) é sempre aplicada automaticamente.
 // ---------------------------------------------------------------------------
@@ -68,11 +66,10 @@ serviceOrdersRouter.get(
   "/",
   requirePermission("serviceOrders:read"),
   asyncHandler(async (req, res) => {
-    const { status, categoryId, stageId, supplierId, clientId, priority, search } = req.query;
+    const { status, stageId, supplierId, clientId, priority, search } = req.query;
 
     const where: any = {};
     if (status) where.status = String(status);
-    if (categoryId) where.categoryId = String(categoryId);
     if (clientId) where.clientId = String(clientId);
     if (search) {
       where.OR = [

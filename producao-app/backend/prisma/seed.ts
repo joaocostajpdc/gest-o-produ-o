@@ -4,10 +4,10 @@ import bcrypt from "bcryptjs";
 // ============================================================================
 // Seed de dados de exemplo
 //
-// Popula: utilizadores (3 perfis), catálogo de etapas, categorias com linhas
-// de produção predefinidas, produtos (alinhados com os IDs simulados do
-// adaptador mock do Goldylocks), fornecedores, clientes e um conjunto de
-// Ordens de Serviço em diferentes estados/prioridades para demonstração.
+// Popula: utilizadores (3 perfis), catálogo de etapas, produtos com linhas
+// de produção predefinidas (alinhados com os IDs simulados do adaptador
+// mock do Goldylocks), fornecedores, clientes e um conjunto de Ordens de
+// Serviço em diferentes estados/prioridades para demonstração.
 //
 // Corre com: npm run prisma:seed  (dentro de backend/)
 // ============================================================================
@@ -23,7 +23,6 @@ async function main() {
   await prisma.serviceOrder.deleteMany();
   await prisma.productionLineStep.deleteMany();
   await prisma.product.deleteMany();
-  await prisma.productCategory.deleteMany();
   await prisma.stage.deleteMany();
   await prisma.supplier.deleteMany();
   await prisma.client.deleteMany();
@@ -59,50 +58,45 @@ async function main() {
     prisma.supplier.create({ data: { name: "Acabamentos Sul", contact: "Rita Costa", phone: "913456789" } }),
   ]);
 
-  console.log("A criar categorias e linhas de produção...");
-  const categoriaPaineisLisos = await prisma.productCategory.create({
-    data: { name: "Painéis Lisos", description: "Painéis lisos de várias dimensões e acabamentos.", defaultProductionHours: 48 },
-  });
-  const categoriaPainelFresado = await prisma.productCategory.create({
-    data: { name: "Painel Fresado", description: "Painéis com fresagem decorativa.", defaultProductionHours: 72 },
-  });
-  const categoriaPortasLacadas = await prisma.productCategory.create({
-    data: { name: "Portas Lacadas", description: "Portas com acabamento lacado, subcontratado.", defaultProductionHours: 96 },
-  });
-
-  await prisma.productionLineStep.createMany({
-    data: [
-      { categoryId: categoriaPaineisLisos.id, stageId: corte.id, order: 1 },
-      { categoryId: categoriaPaineisLisos.id, stageId: controloQualidade.id, order: 2 },
-      { categoryId: categoriaPaineisLisos.id, stageId: embalagem.id, order: 3 },
-
-      { categoryId: categoriaPainelFresado.id, stageId: corte.id, order: 1 },
-      { categoryId: categoriaPainelFresado.id, stageId: fresagem.id, order: 2 },
-      { categoryId: categoriaPainelFresado.id, stageId: controloQualidade.id, order: 3 },
-      { categoryId: categoriaPainelFresado.id, stageId: embalagem.id, order: 4 },
-
-      { categoryId: categoriaPortasLacadas.id, stageId: corte.id, order: 1 },
-      { categoryId: categoriaPortasLacadas.id, stageId: lacagem.id, order: 2, defaultSupplierId: lacasDoNorte.id },
-      { categoryId: categoriaPortasLacadas.id, stageId: controloQualidade.id, order: 3 },
-      { categoryId: categoriaPortasLacadas.id, stageId: embalagem.id, order: 4 },
-    ],
-  });
-
   console.log("A criar produtos (alinhados com o catálogo simulado do Goldylocks)...");
   const [painelLiso, painelFresadoClassico, painelFresadoModerno, portaLacada] = await Promise.all([
     prisma.product.create({
-      data: { externalId: "PRD-100", name: "Painel Liso 2400x1200", categoryId: categoriaPaineisLisos.id },
+      data: { externalId: "PRD-100", name: "Painel Liso 2400x1200", description: "Painéis lisos de várias dimensões e acabamentos.", productionDays: 2 },
     }),
     prisma.product.create({
-      data: { externalId: "PRD-101", name: "Painel Fresado Clássico", categoryId: categoriaPainelFresado.id },
+      data: { externalId: "PRD-101", name: "Painel Fresado Clássico", description: "Painéis com fresagem decorativa.", productionDays: 3 },
     }),
     prisma.product.create({
-      data: { externalId: "PRD-102", name: "Painel Fresado Moderno", categoryId: categoriaPainelFresado.id },
+      data: { externalId: "PRD-102", name: "Painel Fresado Moderno", description: "Painéis com fresagem decorativa.", productionDays: 3 },
     }),
     prisma.product.create({
-      data: { externalId: "PRD-103", name: "Porta Lacada Branca", categoryId: categoriaPortasLacadas.id },
+      data: { externalId: "PRD-103", name: "Porta Lacada Branca", description: "Portas com acabamento lacado, subcontratado.", productionDays: 4 },
     }),
   ]);
+
+  console.log("A criar linhas de produção...");
+  await prisma.productionLineStep.createMany({
+    data: [
+      { productId: painelLiso.id, stageId: corte.id, order: 1 },
+      { productId: painelLiso.id, stageId: controloQualidade.id, order: 2 },
+      { productId: painelLiso.id, stageId: embalagem.id, order: 3 },
+
+      { productId: painelFresadoClassico.id, stageId: corte.id, order: 1 },
+      { productId: painelFresadoClassico.id, stageId: fresagem.id, order: 2 },
+      { productId: painelFresadoClassico.id, stageId: controloQualidade.id, order: 3 },
+      { productId: painelFresadoClassico.id, stageId: embalagem.id, order: 4 },
+
+      { productId: painelFresadoModerno.id, stageId: corte.id, order: 1 },
+      { productId: painelFresadoModerno.id, stageId: fresagem.id, order: 2 },
+      { productId: painelFresadoModerno.id, stageId: controloQualidade.id, order: 3 },
+      { productId: painelFresadoModerno.id, stageId: embalagem.id, order: 4 },
+
+      { productId: portaLacada.id, stageId: corte.id, order: 1 },
+      { productId: portaLacada.id, stageId: lacagem.id, order: 2, defaultSupplierId: lacasDoNorte.id },
+      { productId: portaLacada.id, stageId: controloQualidade.id, order: 3 },
+      { productId: portaLacada.id, stageId: embalagem.id, order: 4 },
+    ],
+  });
 
   console.log("A criar clientes (espelhando o catálogo simulado do Goldylocks)...");
   const [clienteSilva, clienteInteriores, clienteAlmeida, clienteStudio] = await Promise.all([
@@ -123,7 +117,6 @@ async function main() {
       externalId: "OS-2001",
       clientId: clienteSilva.id,
       productId: painelLiso.id,
-      categoryId: categoriaPaineisLisos.id,
       status: "NAO_INICIADA",
       deadlineAt: hours(96),
     },
@@ -145,7 +138,6 @@ async function main() {
       externalId: "OS-2002",
       clientId: clienteInteriores.id,
       productId: painelFresadoClassico.id,
-      categoryId: categoriaPainelFresado.id,
       status: "EM_PRODUCAO",
       deadlineAt: hours(20),
       startedAt: hours(-10),
@@ -185,7 +177,6 @@ async function main() {
       externalId: "OS-2003",
       clientId: clienteAlmeida.id,
       productId: portaLacada.id,
-      categoryId: categoriaPortasLacadas.id,
       status: "SUSPENSA",
       deadlineAt: hours(-2),
       startedAt: hours(-30),
@@ -242,7 +233,6 @@ async function main() {
       externalId: "OS-2004",
       clientId: clienteStudio.id,
       productId: painelFresadoModerno.id,
-      categoryId: categoriaPainelFresado.id,
       status: "CONCLUIDA",
       deadlineAt: hours(-48),
       startedAt: hours(-96),
@@ -271,7 +261,6 @@ async function main() {
       externalId: "OS-2005",
       clientId: clienteSilva.id,
       productId: painelLiso.id,
-      categoryId: categoriaPaineisLisos.id,
       status: "CANCELADA",
       deadlineAt: hours(72),
     },

@@ -4,7 +4,6 @@ import { ZodError } from "zod";
 import path from "path";
 import fs from "fs";
 import { authRouter } from "./routes/auth";
-import { categoriesRouter } from "./routes/categories";
 import { productsRouter } from "./routes/products";
 import { stagesRouter, productionLinesRouter } from "./routes/stages";
 import { suppliersRouter } from "./routes/suppliers";
@@ -22,7 +21,6 @@ export function createApp() {
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
   app.use("/api/auth", authRouter);
-  app.use("/api/categories", categoriesRouter);
   app.use("/api/products", productsRouter);
   app.use("/api/stages", stagesRouter);
   app.use("/api/production-lines", productionLinesRouter);

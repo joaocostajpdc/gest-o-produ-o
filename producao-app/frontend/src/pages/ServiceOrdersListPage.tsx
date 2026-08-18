@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { api, buildQuery } from "../api/client";
 import {
   Client,
-  ProductCategory,
   ServiceOrderListItem,
   Stage,
   Supplier,
@@ -29,7 +28,6 @@ const STATUS_OPTIONS = [
 export function ServiceOrdersListPage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<ServiceOrderListItem[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -42,7 +40,6 @@ export function ServiceOrdersListPage() {
 
   const [filters, setFilters] = useState({
     status: "",
-    categoryId: "",
     stageId: "",
     supplierId: "",
     clientId: "",
@@ -52,13 +49,11 @@ export function ServiceOrdersListPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get<ProductCategory[]>("/categories"),
       api.get<Stage[]>("/stages"),
       api.get<Supplier[]>("/suppliers"),
       api.get<Client[]>("/clients"),
     ])
-      .then(([c, s, sup, cl]) => {
-        setCategories(c);
+      .then(([s, sup, cl]) => {
         setStages(s);
         setSuppliers(sup);
         setClients(cl);
@@ -186,17 +181,6 @@ export function ServiceOrdersListPage() {
               </option>
             ))}
           </select>
-          <select
-            value={filters.categoryId}
-            onChange={(e) => setFilters((f) => ({ ...f, categoryId: e.target.value }))}
-          >
-            <option value="">Categoria (todas)</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
           <select value={filters.stageId} onChange={(e) => setFilters((f) => ({ ...f, stageId: e.target.value }))}>
             <option value="">Etapa (todas)</option>
             {stages.map((s) => (
@@ -238,7 +222,6 @@ export function ServiceOrdersListPage() {
                 <th>OS</th>
                 <th>Cliente</th>
                 <th>Produto</th>
-                <th>Categoria</th>
                 <th>Estado</th>
                 <th>Etapa atual</th>
                 <th>Data-limite</th>
@@ -256,7 +239,6 @@ export function ServiceOrdersListPage() {
                   </td>
                   <td>{o.client.name}</td>
                   <td>{o.product.name}</td>
-                  <td>{o.category.name}</td>
                   <td>
                     <StatusBadge status={o.status} />
                   </td>
@@ -276,7 +258,7 @@ export function ServiceOrdersListPage() {
               ))}
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="muted">
+                  <td colSpan={8} className="muted">
                     Nenhuma Ordem de Serviço encontrada com os filtros selecionados.
                   </td>
                 </tr>

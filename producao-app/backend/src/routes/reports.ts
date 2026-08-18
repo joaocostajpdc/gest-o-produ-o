@@ -22,11 +22,10 @@ reportsRouter.get(
   "/service-orders",
   requirePermission("reports:printable"),
   asyncHandler(async (req, res) => {
-    const { status, categoryId, stageId, supplierId, clientId, priority, format } = req.query;
+    const { status, stageId, supplierId, clientId, priority, format } = req.query;
 
     const where: any = {};
     if (status) where.status = String(status);
-    if (categoryId) where.categoryId = String(categoryId);
     if (clientId) where.clientId = String(clientId);
     if (stageId || supplierId) {
       where.currentStageInstance = {
@@ -40,7 +39,6 @@ reportsRouter.get(
       include: {
         client: true,
         product: true,
-        category: true,
         currentStageInstance: { include: { stage: true } },
       },
     });
@@ -52,7 +50,6 @@ reportsRouter.get(
         externalId: o.externalId,
         cliente: o.client.name,
         produto: o.product.name,
-        categoria: o.category.name,
         estado: o.status,
         etapaAtual: o.currentStageInstance?.stage.name ?? "-",
         prazo: o.deadlineAt ? o.deadlineAt.toISOString() : "-",
@@ -67,7 +64,7 @@ reportsRouter.get(
     const cleanRows = rows.map(({ _priority, _deadline, ...rest }) => rest);
 
     if (format === "csv") {
-      const header = Object.keys(cleanRows[0] ?? { externalId: "", cliente: "", produto: "", categoria: "", estado: "", etapaAtual: "", prazo: "", prioridade: "" });
+      const header = Object.keys(cleanRows[0] ?? { externalId: "", cliente: "", produto: "", estado: "", etapaAtual: "", prazo: "", prioridade: "" });
       const csv = [
         header.join(";"),
         ...cleanRows.map((row) => header.map((h) => `"${String((row as any)[h] ?? "").replace(/"/g, '""')}"`).join(";")),

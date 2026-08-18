@@ -6,11 +6,11 @@ import { settleProductionMinutes } from "./timeTrackingService";
 // ============================================================================
 // Serviço de Fluxo de Etapas (Linhas de Produção)
 //
-// Cada categoria tem uma linha de produção predefinida (ProductionLineStep,
+// Cada produto tem uma linha de produção predefinida (ProductionLineStep,
 // sequência ordenada de etapas). Ao criar uma OS, essa sequência é copiada
 // para ServiceOrderStageInstance (uma "cópia de trabalho" por OS), o que
 // permite alterações pontuais (avançar, recuar, inserir, omitir) sem afetar
-// a linha predefinida da categoria nem outras Ordens de Serviço.
+// a linha predefinida do produto nem outras Ordens de Serviço.
 //
 // A ordenação usa incrementos de 10 (10, 20, 30, ...) para permitir inserir
 // etapas entre posições existentes sem ter de renumerar tudo.
@@ -18,20 +18,20 @@ import { settleProductionMinutes } from "./timeTrackingService";
 
 const ORDER_STEP = 10;
 
-/** Cria as instâncias de etapa (todas PENDENTE) a partir da linha predefinida da categoria. */
+/** Cria as instâncias de etapa (todas PENDENTE) a partir da linha predefinida do produto. */
 export async function initializeStageInstances(
   serviceOrderId: string,
-  categoryId: string,
+  productId: string,
   tx: Prisma.TransactionClient
 ) {
   const lineSteps = await tx.productionLineStep.findMany({
-    where: { categoryId },
+    where: { productId },
     orderBy: { order: "asc" },
   });
 
   if (lineSteps.length === 0) {
     throw new Error(
-      "A categoria do produto não tem uma linha de produção configurada (nenhuma etapa definida)."
+      "O produto não tem uma linha de produção configurada (nenhuma etapa definida)."
     );
   }
 
@@ -155,7 +155,7 @@ export async function advanceStage(serviceOrderId: string, userId?: string) {
 /**
  * Regressa a uma etapa anterior já visitada. Cria uma nova instância dessa
  * etapa (nova passagem), inserida imediatamente a seguir à etapa atual, sem
- * alterar a linha de produção predefinida da categoria.
+ * alterar a linha de produção predefinida do produto.
  */
 export async function returnToStage(serviceOrderId: string, targetStageId: string, userId?: string) {
   return prisma.$transaction(async (tx) => {
@@ -265,10 +265,10 @@ export async function skipStage(serviceOrderId: string, stageInstanceId: string,
 }
 
 /**
- * Retoma o fluxo produtivo predefinido da categoria a partir de uma etapa
+ * Retoma o fluxo produtivo predefinido do produto a partir de uma etapa
  * escolhida ("Voltar à Linha de Produção"). Remove instâncias futuras ainda
  * PENDENTE (incluindo alterações pontuais) e recria a sequência predefinida
- * da categoria a partir da etapa indicada.
+ * do produto a partir da etapa indicada.
  */
 export async function revertToDefaultLine(
   serviceOrderId: string,
@@ -284,12 +284,12 @@ export async function revertToDefaultLine(
     });
 
     const lineSteps = await tx.productionLineStep.findMany({
-      where: { categoryId: order.categoryId },
+      where: { productId: order.productId },
       orderBy: { order: "asc" },
     });
     const resumeIndex = lineSteps.findIndex((s) => s.stageId === resumeFromStageId);
     if (resumeIndex === -1) {
-      throw new Error("A etapa indicada não pertence à linha de produção predefinida desta categoria.");
+      throw new Error("A etapa indicada não pertence à linha de produção predefinida deste produto.");
     }
 
     const currentInstance = order.currentStageInstanceId

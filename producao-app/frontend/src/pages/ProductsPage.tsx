@@ -1,23 +1,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Product, ProductCategory } from "../types";
+import { Product } from "../types";
 
-const EMPTY = { name: "", description: "", categoryId: "", externalId: "" };
+const EMPTY = { name: "", description: "", productionDays: 0, externalId: "" };
 
 export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [form, setForm] = useState<typeof EMPTY & { id?: string }>(EMPTY);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const [p, c] = await Promise.all([
-      api.get<Product[]>("/products"),
-      api.get<ProductCategory[]>("/categories"),
-    ]);
+    const p = await api.get<Product[]>("/products");
     setProducts(p);
-    setCategories(c);
-    if (!form.categoryId && c.length) setForm((f) => ({ ...f, categoryId: c[0].id }));
   }
 
   useEffect(() => {
@@ -32,12 +26,12 @@ export function ProductsPage() {
       const payload = {
         name: form.name,
         description: form.description,
-        categoryId: form.categoryId,
+        productionDays: Number(form.productionDays),
         externalId: form.externalId || undefined,
       };
       if (form.id) await api.put(`/products/${form.id}`, payload);
       else await api.post("/products", payload);
-      setForm({ ...EMPTY, categoryId: form.categoryId });
+      setForm(EMPTY);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao guardar produto.");
@@ -64,14 +58,14 @@ export function ProductsPage() {
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <label>Categoria</label>
-              <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })} required>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <label>Tempo de produção (dias)</label>
+              <input
+                type="number"
+                min={0}
+                value={form.productionDays}
+                onChange={(e) => setForm({ ...form, productionDays: Number(e.target.value) })}
+                required
+              />
             </div>
             <div>
               <label>ID externo (Goldylocks)</label>
@@ -91,7 +85,7 @@ export function ProductsPage() {
               className="btn secondary"
               type="button"
               style={{ marginLeft: 8 }}
-              onClick={() => setForm({ ...EMPTY, categoryId: categories[0]?.id ?? "" })}
+              onClick={() => setForm(EMPTY)}
             >
               Cancelar
             </button>
@@ -104,7 +98,7 @@ export function ProductsPage() {
           <thead>
             <tr>
               <th>Nome</th>
-              <th>Categoria</th>
+              <th>Tempo de produção (dias)</th>
               <th>ID externo</th>
               <th></th>
             </tr>
@@ -113,7 +107,7 @@ export function ProductsPage() {
             {products.map((p) => (
               <tr key={p.id}>
                 <td>{p.name}</td>
-                <td>{p.category?.name}</td>
+                <td>{p.productionDays}</td>
                 <td className="muted">{p.externalId ?? "—"}</td>
                 <td style={{ display: "flex", gap: 6 }}>
                   <button
@@ -123,7 +117,7 @@ export function ProductsPage() {
                         id: p.id,
                         name: p.name,
                         description: p.description ?? "",
-                        categoryId: p.categoryId,
+                        productionDays: p.productionDays,
                         externalId: p.externalId ?? "",
                       })
                     }

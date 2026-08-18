@@ -75,7 +75,7 @@ export function ServiceOrderDetailPage() {
             <PriorityBadge priority={order.priority} label={order.priorityLabel} color={order.priorityColor} />
           </h2>
           <p className="muted">
-            {order.client.name} · {order.product.name} · {order.category.name}
+            {order.client.name} · {order.product.name}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>

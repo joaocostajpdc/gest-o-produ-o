@@ -31,7 +31,7 @@ suppliersRouter.get(
     const supplier = await prisma.supplier.findUnique({
       where: { id: req.params.id },
       include: {
-        stageAssociations: { include: { stage: true, category: true } },
+        stageAssociations: { include: { stage: true, product: true } },
         stageInstances: {
           include: { serviceOrder: true, stage: true },
           orderBy: { enteredAt: "desc" },

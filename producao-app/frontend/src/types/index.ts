@@ -49,21 +49,12 @@ export const INTERRUPTION_REASON_LABELS: Record<InterruptionReason, string> = {
   OUTRO: "Outro",
 };
 
-export interface ProductCategory {
-  id: string;
-  name: string;
-  description?: string | null;
-  defaultProductionHours: number;
-  _count?: { products: number; serviceOrders: number };
-}
-
 export interface Product {
   id: string;
   externalId?: string | null;
   name: string;
   description?: string | null;
-  categoryId: string;
-  category?: ProductCategory;
+  productionDays: number;
 }
 
 export interface Stage {
@@ -84,8 +75,8 @@ export interface Supplier {
 
 export interface ProductionLineStep {
   id: string;
-  categoryId: string;
-  category?: ProductCategory;
+  productId: string;
+  product?: Product;
   stageId: string;
   stage?: Stage;
   order: number;
@@ -99,7 +90,6 @@ export interface ServiceOrderListItem {
   status: ServiceOrderStatus;
   client: { id: string; name: string };
   product: { id: string; name: string };
-  category: { id: string; name: string };
   deadlineAt: string | null;
   priority: PriorityLevel | null;
   priorityLabel: string | null;

@@ -51,11 +51,11 @@ stagesRouter.delete(
 );
 
 // ---------------------------------------------------------------------------
-// Linhas de Produção predefinidas por categoria (sequência ordenada de etapas)
+// Linhas de Produção predefinidas por produto (sequência ordenada de etapas)
 // ---------------------------------------------------------------------------
 
 const lineStepSchema = z.object({
-  categoryId: z.string().min(1),
+  productId: z.string().min(1),
   stageId: z.string().min(1),
   order: z.number().int().positive(),
   defaultSupplierId: z.string().optional().nullable(),
@@ -68,11 +68,11 @@ productionLinesRouter.get(
   "/",
   requirePermission("productionLines:read"),
   asyncHandler(async (req, res) => {
-    const { categoryId } = req.query;
+    const { productId } = req.query;
     const steps = await prisma.productionLineStep.findMany({
-      where: categoryId ? { categoryId: String(categoryId) } : undefined,
-      orderBy: [{ categoryId: "asc" }, { order: "asc" }],
-      include: { stage: true, defaultSupplier: true, category: true },
+      where: productId ? { productId: String(productId) } : undefined,
+      orderBy: [{ productId: "asc" }, { order: "asc" }],
+      include: { stage: true, defaultSupplier: true, product: true },
     });
     res.json(steps);
   })

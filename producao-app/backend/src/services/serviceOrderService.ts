@@ -9,7 +9,7 @@ import { initializeStageInstances } from "./stageFlowService";
 //
 // As Ordens de Serviço são criadas no Goldylocks; este serviço trata da
 // importação para a aplicação de produção (associação a cliente/produto já
-// existentes, cálculo da data-limite a partir do prazo padrão da categoria,
+// existentes, cálculo da data-limite a partir do prazo padrão do produto,
 // e inicialização da linha de etapas).
 //
 // A criação de uma única Ordem de Serviço a partir dos dados do Goldylocks
@@ -29,7 +29,6 @@ export async function importSingleGoldylocksOrder(
 ): Promise<ImportResult> {
   const product = await prisma.product.findUnique({
     where: { externalId: goldOrder.product.externalId },
-    include: { category: true },
   });
 
   if (!product) {
@@ -58,7 +57,7 @@ export async function importSingleGoldylocksOrder(
   }
 
   const now = new Date();
-  const deadlineAt = new Date(now.getTime() + product.category.defaultProductionHours * 60 * 60 * 1000);
+  const deadlineAt = new Date(now.getTime() + product.productionDays * 24 * 60 * 60 * 1000);
 
   await prisma.$transaction(async (tx) => {
     const order = await tx.serviceOrder.create({
@@ -66,13 +65,12 @@ export async function importSingleGoldylocksOrder(
         externalId: goldOrder.externalId,
         clientId: client.id,
         productId: product.id,
-        categoryId: product.categoryId,
         status: "NAO_INICIADA",
         deadlineAt,
       },
     });
 
-    await initializeStageInstances(order.id, product.categoryId, tx);
+    await initializeStageInstances(order.id, product.id, tx);
 
     // Especificações desta encomenda (Modelo, Dimensões, Acabamento,
     // Enchimento, referência à Encomenda Cliente, etc.), tal como vieram

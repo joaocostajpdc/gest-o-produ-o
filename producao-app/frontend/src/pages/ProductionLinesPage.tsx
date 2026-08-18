@@ -1,51 +1,51 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { ProductCategory, ProductionLineStep, Stage, Supplier } from "../types";
+import { Product, ProductionLineStep, Stage, Supplier } from "../types";
 
 export function ProductionLinesPage() {
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState("");
   const [steps, setSteps] = useState<ProductionLineStep[]>([]);
   const [form, setForm] = useState({ stageId: "", order: 10, defaultSupplierId: "" });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
-      api.get<ProductCategory[]>("/categories"),
+      api.get<Product[]>("/products"),
       api.get<Stage[]>("/stages"),
       api.get<Supplier[]>("/suppliers"),
-    ]).then(([c, s, sup]) => {
-      setCategories(c);
+    ]).then(([p, s, sup]) => {
+      setProducts(p);
       setStages(s);
       setSuppliers(sup);
-      if (c.length) setSelectedCategoryId(c[0].id);
+      if (p.length) setSelectedProductId(p[0].id);
     });
   }, []);
 
-  async function loadSteps(categoryId: string) {
-    if (!categoryId) return;
-    setSteps(await api.get<ProductionLineStep[]>(`/production-lines?categoryId=${categoryId}`));
+  async function loadSteps(productId: string) {
+    if (!productId) return;
+    setSteps(await api.get<ProductionLineStep[]>(`/production-lines?productId=${productId}`));
   }
 
   useEffect(() => {
-    loadSteps(selectedCategoryId);
+    loadSteps(selectedProductId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategoryId]);
+  }, [selectedProductId]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     try {
       await api.post("/production-lines", {
-        categoryId: selectedCategoryId,
+        productId: selectedProductId,
         stageId: form.stageId,
         order: Number(form.order),
         defaultSupplierId: form.defaultSupplierId || null,
       });
       setForm({ stageId: "", order: (steps.length + 1) * 10, defaultSupplierId: "" });
-      loadSteps(selectedCategoryId);
+      loadSteps(selectedProductId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao adicionar etapa à linha de produção.");
     }
@@ -54,21 +54,21 @@ export function ProductionLinesPage() {
   async function handleDelete(id: string) {
     if (!window.confirm("Remover esta etapa da linha de produção?")) return;
     await api.delete(`/production-lines/${id}`);
-    loadSteps(selectedCategoryId);
+    loadSteps(selectedProductId);
   }
 
   return (
     <div>
       <div className="page-header">
-        <h2>Linhas de Produção por Categoria</h2>
+        <h2>Linhas de Produção por Produto</h2>
       </div>
 
       <div className="card">
-        <label>Categoria</label>
-        <select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)}>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+        <label>Produto</label>
+        <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)}>
+          {products.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
             </option>
           ))}
         </select>
@@ -103,7 +103,7 @@ export function ProductionLinesPage() {
             {steps.length === 0 && (
               <tr>
                 <td colSpan={4} className="muted">
-                  Esta categoria ainda não tem uma linha de produção configurada.
+                  Este produto ainda não tem uma linha de produção configurada.
                 </td>
               </tr>
             )}

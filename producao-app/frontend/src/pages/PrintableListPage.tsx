@@ -5,7 +5,6 @@ interface ReportRow {
   externalId: string;
   cliente: string;
   produto: string;
-  categoria: string;
   estado: string;
   etapaAtual: string;
   prazo: string;
@@ -79,7 +78,6 @@ export function PrintableListPage() {
               <th>OS</th>
               <th>Cliente</th>
               <th>Produto</th>
-              <th>Categoria</th>
               <th>Estado</th>
               <th>Etapa atual</th>
               <th>Prazo</th>
@@ -92,7 +90,6 @@ export function PrintableListPage() {
                 <td>{r.externalId}</td>
                 <td>{r.cliente}</td>
                 <td>{r.produto}</td>
-                <td>{r.categoria}</td>
                 <td>{r.estado}</td>
                 <td>{r.etapaAtual}</td>
                 <td>{r.prazo !== "-" ? new Date(r.prazo).toLocaleString("pt-PT") : "-"}</td>
@@ -101,7 +98,7 @@ export function PrintableListPage() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="muted">
+                <td colSpan={7} className="muted">
                   Sem dados. Escolhe os filtros e clica em "Gerar listagem".
                 </td>
               </tr>

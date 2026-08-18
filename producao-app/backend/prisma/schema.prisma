@@ -2,8 +2,8 @@
 // Schema Prisma - App de Gestão de Produção
 //
 // Cobre os requisitos do documento "Proposta de Alteração AppProdução":
-//   - Categorias e Produtos
-//   - Prazos de Produção por Categoria + Prioridade/Cores
+//   - Produtos
+//   - Prazos de Produção por Produto + Prioridade/Cores
 //   - Estados da Ordem de Serviço + Tempo por Etapa
 //   - Distinção Tempo de Produção vs Tempo de Permanência
 //   - Interrupções de Produção (motivo obrigatório)
@@ -71,35 +71,20 @@ model Client {
 }
 
 // ---------------------------------------------------------------------------
-// Categorias e Produtos
+// Produtos
 // ---------------------------------------------------------------------------
 
-model ProductCategory {
-  id                     String   @id @default(cuid())
-  name                   String   @unique
-  description            String?
-  defaultProductionHours Int      @default(0) // prazo de produção padrão (horas) usado para calcular a data-limite
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-
-  products         Product[]
-  lineSteps        ProductionLineStep[]
-  serviceOrders    ServiceOrder[]
-
-  @@map("product_categories")
-}
-
 model Product {
-  id          String   @id @default(cuid())
-  externalId  String?  @unique // id no Goldylocks, se aplicável
-  name        String
-  description String?
-  categoryId  String
-  category    ProductCategory @relation(fields: [categoryId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  externalId      String?  @unique // id no Goldylocks, se aplicável
+  name            String
+  description     String?
+  productionDays  Int      @default(0) // prazo de produção padrão (dias) usado para calcular a data-limite
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  serviceOrders ServiceOrder[]
+  serviceOrders   ServiceOrder[]
+  lineSteps       ProductionLineStep[]
 
   @@map("products")
 }
@@ -124,7 +109,7 @@ model Supplier {
 }
 
 // ---------------------------------------------------------------------------
-// Etapas de Produção (catálogo global) e Linhas de Produção (por categoria)
+// Etapas de Produção (catálogo global) e Linhas de Produção (por produto)
 // ---------------------------------------------------------------------------
 
 model Stage {
@@ -140,18 +125,18 @@ model Stage {
   @@map("stages")
 }
 
-// Linha de produção predefinida por categoria: sequência ordenada de etapas.
+// Linha de produção predefinida por produto: sequência ordenada de etapas.
 model ProductionLineStep {
   id         String   @id @default(cuid())
-  categoryId String
-  category   ProductCategory @relation(fields: [categoryId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
   stageId    String
   stage      Stage    @relation(fields: [stageId], references: [id])
   order      Int      // posição na sequência (1, 2, 3, ...)
   defaultSupplierId String?
   defaultSupplier    Supplier? @relation("StageDefaultSupplier", fields: [defaultSupplierId], references: [id])
 
-  @@unique([categoryId, order])
+  @@unique([productId, order])
   @@map("production_line_steps")
 }
 
@@ -181,15 +166,13 @@ model ServiceOrder {
   client            Client             @relation(fields: [clientId], references: [id])
   productId         String
   product           Product            @relation(fields: [productId], references: [id])
-  categoryId        String
-  category          ProductCategory    @relation(fields: [categoryId], references: [id])
 
   status            ServiceOrderStatus @default(NAO_INICIADA)
 
   createdAt         DateTime           @default(now()) // entrada na aplicação
   startedAt         DateTime?          // início efetivo de produção
   completedAt       DateTime?          // conclusão
-  deadlineAt        DateTime?          // data-limite calculada (createdAt/startedAt + defaultProductionHours da categoria)
+  deadlineAt        DateTime?          // data-limite calculada (createdAt/startedAt + productionDays do produto)
 
   // Tempo de produção acumulado (excluindo suspensões), em minutos.
   // Atualizado incrementalmente pelo timeTrackingService.
@@ -211,7 +194,7 @@ model ServiceOrder {
 
 // Instância concreta de uma OS numa etapa (permite alterações pontuais ao fluxo:
 // avançar, recuar, inserir etapas adicionais, omitir etapas, sem alterar a
-// linha de produção predefinida da categoria).
+// linha de produção predefinida do produto).
 enum StageInstanceStatus {
   PENDENTE
   ATIVA

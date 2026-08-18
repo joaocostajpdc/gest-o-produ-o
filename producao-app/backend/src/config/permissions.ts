@@ -12,8 +12,6 @@ import { UserRole } from "@prisma/client";
 // ============================================================================
 
 export type Permission =
-  | "categories:read"
-  | "categories:write"
   | "products:read"
   | "products:write"
   | "stages:read"
@@ -32,8 +30,6 @@ export type Permission =
   | "reports:printable";
 
 const ALL_PERMISSIONS: Permission[] = [
-  "categories:read",
-  "categories:write",
   "products:read",
   "products:write",
   "stages:read",
@@ -58,8 +54,6 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
 
   // Supervisor - gestão e acompanhamento da produção
   SUPERVISOR: [
-    "categories:read",
-    "categories:write",
     "products:read",
     "products:write",
     "stages:read",
@@ -79,7 +73,6 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
 
   // Operário - execução e consulta das operações produtivas
   OPERARIO: [
-    "categories:read",
     "products:read",
     "stages:read",
     "productionLines:read",

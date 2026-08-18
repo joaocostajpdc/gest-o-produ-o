@@ -1,4 +1,4 @@
-https://app.goldylocks.pt/jpdcmynhoferragens/?pagina=opcoesimport { GoldylocksAdapter, GoldylocksClient, GoldylocksServiceOrder } from "./types";
+import { GoldylocksAdapter, GoldylocksClient, GoldylocksServiceOrder } from "./types";
 
 // ============================================================================
 // Adaptador REAL de integração com o Goldylocks (software de faturação).

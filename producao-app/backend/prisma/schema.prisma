@@ -1,0 +1,332 @@
+// ============================================================================
+// Schema Prisma - App de Gestão de Produção
+//
+// Cobre os requisitos do documento "Proposta de Alteração AppProdução":
+//   - Categorias e Produtos
+//   - Prazos de Produção por Categoria + Prioridade/Cores
+//   - Estados da Ordem de Serviço + Tempo por Etapa
+//   - Distinção Tempo de Produção vs Tempo de Permanência
+//   - Interrupções de Produção (motivo obrigatório)
+//   - Clientes (via integração Goldylocks)
+//   - Observações de Produção
+//   - Histórico Global da Ordem de Serviço
+//   - Etapas e Linhas de Produção (predefinidas + alterações pontuais)
+//   - Fornecedores associados a etapas
+//   - Utilizadores e Permissões (Administrador / Supervisor / Operário)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Utilizadores e Permissões
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMINISTRADOR
+  SUPERVISOR
+  OPERARIO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(OPERARIO)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  observations      Observation[]
+  interruptions     Interruption[]
+  historyEvents     HistoryEvent[]
+  stageTransitions  ServiceOrderStageInstance[] @relation("StageChangedBy")
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Clientes (originados no software de faturação - Goldylocks)
+// ---------------------------------------------------------------------------
+
+model Client {
+  id          String   @id @default(cuid())
+  externalId  String   @unique // id no Goldylocks
+  name        String
+  taxNumber   String?
+  email       String?
+  phone       String?
+  syncedAt    DateTime @default(now())
+
+  serviceOrders ServiceOrder[]
+
+  @@map("clients")
+}
+
+// ---------------------------------------------------------------------------
+// Categorias e Produtos
+// ---------------------------------------------------------------------------
+
+model ProductCategory {
+  id                     String   @id @default(cuid())
+  name                   String   @unique
+  description            String?
+  defaultProductionHours Int      @default(0) // prazo de produção padrão (horas) usado para calcular a data-limite
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  products         Product[]
+  lineSteps        ProductionLineStep[]
+  serviceOrders    ServiceOrder[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  externalId  String?  @unique // id no Goldylocks, se aplicável
+  name        String
+  description String?
+  categoryId  String
+  category    ProductCategory @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  serviceOrders ServiceOrder[]
+
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Fornecedores
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String?
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  stageAssociations   ProductionLineStep[] @relation("StageDefaultSupplier")
+  stageInstances      ServiceOrderStageInstance[]
+
+  @@map("suppliers")
+}
+
+// ---------------------------------------------------------------------------
+// Etapas de Produção (catálogo global) e Linhas de Produção (por categoria)
+// ---------------------------------------------------------------------------
+
+model Stage {
+  id          String   @id @default(cuid())
+  name        String   @unique // ex.: "Corte", "Fresagem", "Lacagem", "Embalagem"
+  description String?
+  requiresSupplier Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  lineSteps      ProductionLineStep[]
+  stageInstances ServiceOrderStageInstance[]
+
+  @@map("stages")
+}
+
+// Linha de produção predefinida por categoria: sequência ordenada de etapas.
+model ProductionLineStep {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id])
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id])
+  order      Int      // posição na sequência (1, 2, 3, ...)
+  defaultSupplierId String?
+  defaultSupplier    Supplier? @relation("StageDefaultSupplier", fields: [defaultSupplierId], references: [id])
+
+  @@unique([categoryId, order])
+  @@map("production_line_steps")
+}
+
+// ---------------------------------------------------------------------------
+// Ordens de Serviço
+// ---------------------------------------------------------------------------
+
+enum ServiceOrderStatus {
+  NAO_INICIADA
+  EM_PRODUCAO
+  SUSPENSA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum PriorityLevel {
+  PRAZO_ULTRAPASSADO
+  URGENTE
+  PROXIMO
+  COM_MARGEM
+}
+
+model ServiceOrder {
+  id                String             @id @default(cuid())
+  externalId        String             @unique // Ordem de Serviço no Goldylocks
+  clientId          String
+  client            Client             @relation(fields: [clientId], references: [id])
+  productId         String
+  product           Product            @relation(fields: [productId], references: [id])
+  categoryId        String
+  category          ProductCategory    @relation(fields: [categoryId], references: [id])
+
+  status            ServiceOrderStatus @default(NAO_INICIADA)
+
+  createdAt         DateTime           @default(now()) // entrada na aplicação
+  startedAt         DateTime?          // início efetivo de produção
+  completedAt       DateTime?          // conclusão
+  deadlineAt        DateTime?          // data-limite calculada (createdAt/startedAt + defaultProductionHours da categoria)
+
+  // Tempo de produção acumulado (excluindo suspensões), em minutos.
+  // Atualizado incrementalmente pelo timeTrackingService.
+  productionMinutes Int                @default(0)
+  lastResumedAt     DateTime?          // timestamp do último "retomar" (para calcular o incremento em curso)
+
+  currentStageInstanceId String?       @unique
+
+  stageInstances    ServiceOrderStageInstance[] @relation("SOStageInstances")
+  currentStageInstance ServiceOrderStageInstance? @relation("CurrentStage", fields: [currentStageInstanceId], references: [id])
+  interruptions     Interruption[]
+  observations      Observation[]
+  historyEvents     HistoryEvent[]
+
+  @@index([status])
+  @@index([deadlineAt])
+  @@map("service_orders")
+}
+
+// Instância concreta de uma OS numa etapa (permite alterações pontuais ao fluxo:
+// avançar, recuar, inserir etapas adicionais, omitir etapas, sem alterar a
+// linha de produção predefinida da categoria).
+enum StageInstanceStatus {
+  PENDENTE
+  ATIVA
+  CONCLUIDA
+  OMITIDA
+}
+
+model ServiceOrderStageInstance {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation("SOStageInstances", fields: [serviceOrderId], references: [id])
+  stageId        String
+  stage          Stage    @relation(fields: [stageId], references: [id])
+  order          Int      // posição desta etapa no percurso *desta* OS (pode divergir da linha predefinida)
+  status         StageInstanceStatus @default(PENDENTE)
+
+  supplierId     String?
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
+
+  enteredAt      DateTime?
+  exitedAt       DateTime?
+
+  wasManuallyAdded  Boolean @default(false) // etapa inserida pontualmente (não fazia parte da linha predefinida)
+  wasSkipped        Boolean @default(false) // etapa omitida pontualmente
+
+  changedById    String?
+  changedBy      User?    @relation("StageChangedBy", fields: [changedById], references: [id])
+
+  currentFor     ServiceOrder? @relation("CurrentStage")
+
+  @@index([serviceOrderId])
+  @@map("service_order_stage_instances")
+}
+
+// ---------------------------------------------------------------------------
+// Interrupções de Produção
+// ---------------------------------------------------------------------------
+
+enum InterruptionReason {
+  FALTA_MATERIA_PRIMA
+  AVARIA_EQUIPAMENTO
+  FALTA_CAPACIDADE
+  AGUARDAR_INFORMACAO
+  AGUARDAR_APROVACAO
+  AGUARDAR_FORNECEDOR
+  PROBLEMA_QUALIDADE
+  OUTRO
+}
+
+model Interruption {
+  id             String    @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  reason         InterruptionReason
+  otherDescription String? // obrigatório quando reason = OUTRO (validado na aplicação)
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  durationMinutes Int?     // calculado ao terminar a interrupção
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+
+  @@index([serviceOrderId])
+  @@map("interruptions")
+}
+
+// ---------------------------------------------------------------------------
+// Observações de Produção
+// ---------------------------------------------------------------------------
+
+model Observation {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  text           String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+  editedAt       DateTime?
+
+  @@index([serviceOrderId])
+  @@map("observations")
+}
+
+// ---------------------------------------------------------------------------
+// Histórico Global da Ordem de Serviço (log de auditoria cronológico)
+// ---------------------------------------------------------------------------
+
+enum HistoryEventType {
+  CRIACAO
+  ALTERACAO_ESTADO
+  ENTRADA_ETAPA
+  SAIDA_ETAPA
+  INICIO_INTERRUPCAO
+  FIM_INTERRUPCAO
+  ALTERACAO_LINHA_PRODUCAO
+  INSERCAO_ETAPA
+  OMISSAO_ETAPA
+  ENCAMINHAMENTO_FORNECEDOR
+  ENVIO_TRABALHO_EXTERNO
+  RETORNO_TRABALHO_EXTERNO
+  OBSERVACAO_REGISTADA
+  OUTRA_ALTERACAO
+}
+
+model HistoryEvent {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  type           HistoryEventType
+  description    String
+  metadata       Json?
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([serviceOrderId, createdAt])
+  @@map("history_events")
+}

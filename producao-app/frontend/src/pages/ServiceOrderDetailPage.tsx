@@ -7,6 +7,7 @@ import {
   InterruptionReason,
   ServiceOrderDetail,
   Stage,
+  Supplier,
 } from "../types";
 import { minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
 import { canChangeFlow, useAuth } from "../contexts/AuthContext";
@@ -19,6 +20,7 @@ export function ServiceOrderDetailPage() {
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [tab, setTab] = useState<Tab>("etapas");
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function ServiceOrderDetailPage() {
   useEffect(() => {
     load();
     api.get<Stage[]>("/stages").then(setStages).catch(() => {});
+    api.get<Supplier[]>("/suppliers").then(setSuppliers).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -189,6 +192,7 @@ export function ServiceOrderDetailPage() {
         <EtapasTab
           order={order}
           stages={stages}
+          suppliers={suppliers}
           canFlow={canFlow}
           busy={busy}
           onAction={runAction}
@@ -220,6 +224,7 @@ function tabLabel(t: Tab) {
 function EtapasTab({
   order,
   stages,
+  suppliers,
   canFlow,
   busy,
   onAction,
@@ -227,6 +232,7 @@ function EtapasTab({
 }: {
   order: ServiceOrderDetail;
   stages: Stage[];
+  suppliers: Supplier[];
   canFlow: boolean;
   busy: boolean;
   onAction: (fn: () => Promise<unknown>) => Promise<void>;
@@ -258,7 +264,31 @@ function EtapasTab({
                 )}
               </div>
               {si.wasManuallyAdded && <div className="muted">(alteração pontual)</div>}
-              {si.supplier && <div className="muted">Fornecedor: {si.supplier.name}</div>}
+              {si.stage.requiresSupplier && si.status === "ATIVA" && canFlow ? (
+                <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 4 }}>
+                  <select
+                    value={si.supplierId ?? ""}
+                    disabled={busy}
+                    onChange={(e) =>
+                      onAction(() =>
+                        api.put(`/service-orders/${id}/stage-instances/${si.id}/supplier`, {
+                          supplierId: e.target.value || null,
+                        })
+                      )
+                    }
+                    style={{ fontSize: 12, padding: "4px 6px", width: "100%" }}
+                  >
+                    <option value="">Escolher fornecedor...</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                si.supplier && <div className="muted">Fornecedor: {si.supplier.name}</div>
+              )}
               <div className="muted">{minutesToHuman(si.residenceMinutes)} de permanência</div>
               {order.currentStage?.id === si.id && order.currentStage.expectedReturnAt && (
                 <div className="lead-time-hint">

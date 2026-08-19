@@ -357,6 +357,40 @@ serviceOrdersRouter.post(
   })
 );
 
+// Atribuir/alterar o fornecedor de uma etapa concreta desta OS (ex.: ao
+// entrar em "Lacagem", escolher a qual fornecedor/lacador a peça é
+// enviada). Independente do fornecedor predefinido na linha de produção do
+// produto — permite decidir caso a caso.
+const assignSupplierSchema = z.object({ supplierId: z.string().min(1).nullable() });
+serviceOrdersRouter.put(
+  "/:id/stage-instances/:stageInstanceId/supplier",
+  requirePermission("serviceOrders:changeFlow"),
+  asyncHandler(async (req, res) => {
+    const { supplierId } = assignSupplierSchema.parse(req.body);
+    const stageInstance = await prisma.serviceOrderStageInstance.findFirst({
+      where: { id: req.params.stageInstanceId, serviceOrderId: req.params.id },
+      include: { stage: true },
+    });
+    if (!stageInstance) {
+      return res.status(404).json({ error: "Etapa não encontrada nesta Ordem de Serviço." });
+    }
+    const updated = await prisma.serviceOrderStageInstance.update({
+      where: { id: stageInstance.id },
+      data: { supplierId },
+      include: { stage: true, supplier: true },
+    });
+    await logHistoryEvent({
+      serviceOrderId: req.params.id,
+      type: "OUTRA_ALTERACAO",
+      description: updated.supplier
+        ? `Fornecedor da etapa "${updated.stage.name}" definido para "${updated.supplier.name}".`
+        : `Fornecedor da etapa "${updated.stage.name}" removido.`,
+      userId: req.user?.id,
+    });
+    res.json(updated);
+  })
+);
+
 // ---------------------------------------------------------------------------
 // Interrupções
 // ---------------------------------------------------------------------------

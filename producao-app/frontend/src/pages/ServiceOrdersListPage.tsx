@@ -273,6 +273,15 @@ export function ServiceOrdersListPage() {
                       <>
                         {o.currentStage.name}
                         <div className="muted">{minutesToHuman(o.currentStage.residenceMinutes)} na etapa</div>
+                        {o.currentStage.supplier && (
+                          <div className="muted">Fornecedor: {o.currentStage.supplier}</div>
+                        )}
+                        {o.currentStage.expectedReturnAt && (
+                          <div className="lead-time-hint">
+                            Entrega prevista:{" "}
+                            {new Date(o.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
+                          </div>
+                        )}
                       </>
                     ) : (
                       "—"

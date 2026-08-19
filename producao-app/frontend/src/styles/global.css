@@ -289,6 +289,30 @@ label {
   line-height: 1.4;
 }
 
+/* Prazo de entrega previsto (etapa Lacagem) — destaque âmbar, para se
+   distinguir da data-limite geral da OS. */
+.lead-time-hint {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lead-times-panel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.lead-times-panel table {
+  margin-bottom: 10px;
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;

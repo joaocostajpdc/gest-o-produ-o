@@ -65,6 +65,13 @@ export interface Stage {
   requiresSupplier: boolean;
 }
 
+export interface SupplierLeadTime {
+  id: string;
+  supplierId: string;
+  category: string;
+  leadDays: number;
+}
+
 export interface Supplier {
   id: string;
   name: string;
@@ -72,6 +79,7 @@ export interface Supplier {
   email?: string | null;
   phone?: string | null;
   notes?: string | null;
+  leadTimes?: SupplierLeadTime[];
 }
 
 export interface ProductionLineStep {
@@ -90,12 +98,21 @@ export interface ServiceOrderListItem {
   externalId: string;
   status: ServiceOrderStatus;
   client: { id: string; name: string };
-  product: { id: string; name: string };
+  product: { id: string; name: string; category?: string | null };
   deadlineAt: string | null;
   priority: PriorityLevel | null;
   priorityLabel: string | null;
   priorityColor: string | null;
-  currentStage: { id: string; name: string; supplier: string | null; residenceMinutes: number } | null;
+  currentStage: {
+    id: string;
+    name: string;
+    supplier: string | null;
+    residenceMinutes: number;
+    // Preenchido apenas quando a etapa atual é "Lacagem" e existe um prazo
+    // de entrega configurado para [fornecedor, categoria do produto].
+    expectedReturnAt: string | null;
+    leadDays: number | null;
+  } | null;
   productionMinutes: number;
 }
 

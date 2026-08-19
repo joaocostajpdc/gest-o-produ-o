@@ -109,8 +109,27 @@ model Supplier {
 
   stageAssociations   ProductionLineStep[] @relation("StageDefaultSupplier")
   stageInstances      ServiceOrderStageInstance[]
+  leadTimes           SupplierLeadTime[]
 
   @@map("suppliers")
+}
+
+// Prazo de entrega (dias) que este fornecedor pratica para peças de uma
+// dada categoria de produto (ex.: Alumiasas / Mosquiteiras -> 10 dias).
+// Usado, por agora, apenas para a etapa "Lacagem": ao entrar nessa etapa
+// junto de um fornecedor, calcula-se a data prevista de devolução como
+// data de entrada + leadDays (procurado por [fornecedor, categoria]).
+model SupplierLeadTime {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  category   String   // mesmo valor usado em Product.category
+  leadDays   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([supplierId, category])
+  @@map("supplier_lead_times")
 }
 
 // ---------------------------------------------------------------------------

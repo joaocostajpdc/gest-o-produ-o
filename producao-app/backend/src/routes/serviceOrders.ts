@@ -31,17 +31,42 @@ serviceOrdersRouter.use(requireAuth);
 const LIST_INCLUDE = {
   client: true,
   product: true,
-  currentStageInstance: { include: { stage: true, supplier: true } },
+  currentStageInstance: {
+    include: { stage: true, supplier: { include: { leadTimes: true } } },
+  },
 } as const;
+
+// Data prevista de devolução quando a OS está atualmente na etapa
+// "Lacagem" junto de um fornecedor: entrada na etapa + prazo (dias)
+// configurado em Fornecedores para [fornecedor, categoria do produto].
+// Por agora aplica-se apenas a esta etapa (ver AppProdução — pedido do
+// utilizador de 2026-08-19).
+const LACAGEM_STAGE_NAME = "Lacagem";
+
+function computeLacagemExpectedReturn(order: any) {
+  const csi = order.currentStageInstance;
+  if (!csi || csi.stage.name !== LACAGEM_STAGE_NAME || !csi.supplier || !csi.enteredAt) {
+    return { expectedReturnAt: null, leadDays: null };
+  }
+  const leadTime = (csi.supplier.leadTimes as any[] | undefined)?.find(
+    (lt) => lt.category === order.product.category
+  );
+  if (!leadTime) return { expectedReturnAt: null, leadDays: null };
+  const expectedReturnAt = new Date(
+    new Date(csi.enteredAt).getTime() + leadTime.leadDays * 24 * 60 * 60 * 1000
+  ).toISOString();
+  return { expectedReturnAt, leadDays: leadTime.leadDays };
+}
 
 function serializeListItem(order: any, now: Date) {
   const priority = computePriority(order.deadlineAt, order.status, now);
+  const { expectedReturnAt, leadDays } = computeLacagemExpectedReturn(order);
   return {
     id: order.id,
     externalId: order.externalId,
     status: order.status,
     client: { id: order.client.id, name: order.client.name },
-    product: { id: order.product.id, name: order.product.name },
+    product: { id: order.product.id, name: order.product.name, category: order.product.category },
     deadlineAt: order.deadlineAt,
     priority,
     priorityLabel: priority ? PRIORITY_LABELS[priority] : null,
@@ -52,6 +77,8 @@ function serializeListItem(order: any, now: Date) {
           name: order.currentStageInstance.stage.name,
           supplier: order.currentStageInstance.supplier?.name ?? null,
           residenceMinutes: getStageResidenceMinutes(order.currentStageInstance, now),
+          expectedReturnAt,
+          leadDays,
         }
       : null,
     productionMinutes: getCurrentProductionMinutes(order, now),

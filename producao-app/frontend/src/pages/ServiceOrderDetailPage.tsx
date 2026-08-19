@@ -139,6 +139,19 @@ export function ServiceOrderDetailPage() {
         </div>
       )}
 
+      {order.currentStage?.expectedReturnAt && (
+        <div className="card spec-card">
+          <div className="spec-card-label">
+            {order.currentStage.name}
+            {order.currentStage.supplier ? ` — ${order.currentStage.supplier}` : ""}
+          </div>
+          <div className="spec-card-body">
+            Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
+            {order.currentStage.leadDays != null && ` (prazo de ${order.currentStage.leadDays} dias)`}
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="form-grid">
           <div>
@@ -247,6 +260,11 @@ function EtapasTab({
               {si.wasManuallyAdded && <div className="muted">(alteração pontual)</div>}
               {si.supplier && <div className="muted">Fornecedor: {si.supplier.name}</div>}
               <div className="muted">{minutesToHuman(si.residenceMinutes)} de permanência</div>
+              {order.currentStage?.id === si.id && order.currentStage.expectedReturnAt && (
+                <div className="lead-time-hint">
+                  Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
+                </div>
+              )}
               {si.status === "PENDENTE" && canFlow && (
                 <button
                   className="btn secondary"

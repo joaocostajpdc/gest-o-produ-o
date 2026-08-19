@@ -450,16 +450,39 @@ function ObservacoesTab({
   id: string;
 }) {
   const [text, setText] = useState("");
+  const activeStage = order.stageInstances.find((si) => si.status === "ATIVA");
+  const [stageInstanceId, setStageInstanceId] = useState(activeStage?.id ?? "");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
-    onAction(() => api.post(`/service-orders/${id}/observations`, { text })).then(() => setText(""));
+    onAction(() =>
+      api.post(`/service-orders/${id}/observations`, { text, stageInstanceId: stageInstanceId || undefined })
+    ).then(() => setText(""));
   }
+
+  // Etapas já visitadas/atuais, para escolher a que a observação diz respeito
+  // (uma OS pode passar mais do que uma vez pela mesma etapa — cada passagem
+  // é uma instância própria, listada separadamente).
+  const stageOptions = order.stageInstances.filter((si) => si.status !== "PENDENTE" || si.id === stageInstanceId);
 
   return (
     <div className="card">
       <form onSubmit={handleSubmit} style={{ marginBottom: 16 }}>
+        <div className="form-grid">
+          <div>
+            <label>Etapa (opcional)</label>
+            <select value={stageInstanceId} onChange={(e) => setStageInstanceId(e.target.value)}>
+              <option value="">Geral (sem etapa específica)</option>
+              {stageOptions.map((si) => (
+                <option key={si.id} value={si.id}>
+                  {si.stage.name}
+                  {si.status === "ATIVA" ? " (etapa atual)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <label>Nova observação</label>
         <textarea rows={3} style={{ width: "100%" }} value={text} onChange={(e) => setText(e.target.value)} />
         <button className="btn" type="submit" disabled={busy} style={{ marginTop: 8 }}>
@@ -472,6 +495,11 @@ function ObservacoesTab({
           <li key={o.id}>
             <time>
               {new Date(o.createdAt).toLocaleString("pt-PT")} — {o.user.name}
+              {o.stageInstance && (
+                <span className="badge badge-neutral" style={{ marginLeft: 8 }}>
+                  {o.stageInstance.stage.name}
+                </span>
+              )}
             </time>
             {o.text}
           </li>

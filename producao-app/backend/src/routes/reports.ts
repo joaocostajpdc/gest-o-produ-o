@@ -3,7 +3,8 @@ import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { asyncHandler } from "../utils/asyncHandler";
-import { comparePriority, computePriority, PRIORITY_LABELS } from "../services/priorityService";
+import { comparePriority, computePriority, PRIORITY_COLORS, PRIORITY_LABELS } from "../services/priorityService";
+import { streamServiceOrdersPdf } from "../services/pdfReportService";
 
 // ============================================================================
 // Listagens Imprimíveis
@@ -74,6 +75,40 @@ reportsRouter.get(
       return res.send(csv);
     }
 
-    res.json(cleanRows);
+    if (format === "pdf") {
+      const STATUS_LABELS: Record<string, string> = {
+        NAO_INICIADA: "Não iniciada",
+        EM_PRODUCAO: "Em produção",
+        SUSPENSA: "Suspensa",
+        CONCLUIDA: "Concluída",
+        CANCELADA: "Cancelada",
+      };
+      const filterParts: string[] = [];
+      if (status) filterParts.push(`Estado: ${STATUS_LABELS[String(status)] ?? String(status)}`);
+      if (priority) filterParts.push(`Prioridade: ${PRIORITY_LABELS[String(priority) as keyof typeof PRIORITY_LABELS]}`);
+      const filtersSummary = filterParts.length ? filterParts.join(" · ") : "Sem filtros aplicados";
+
+      const pdfRows = rows.map((r) => ({
+        externalId: r.externalId,
+        cliente: r.cliente,
+        produto: r.produto,
+        estado: STATUS_LABELS[r.estado] ?? r.estado,
+        etapaAtual: r.etapaAtual,
+        prazo: r.prazo,
+        prioridade: r.prioridade,
+        prioridadeNivel: r._priority,
+      }));
+
+      return streamServiceOrdersPdf(res, pdfRows, filtersSummary);
+    }
+
+    // Resposta JSON (usada pela UI): inclui o nível e a cor de prioridade,
+    // para desenhar o mesmo badge colorido usado no resto da aplicação.
+    const jsonRows = rows.map(({ _priority, _deadline, ...rest }) => ({
+      ...rest,
+      prioridadeNivel: _priority,
+      prioridadeCor: _priority ? PRIORITY_COLORS[_priority] : null,
+    }));
+    res.json(jsonRows);
   })
 );

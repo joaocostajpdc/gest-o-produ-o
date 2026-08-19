@@ -224,6 +224,7 @@ model ServiceOrderStageInstance {
   changedBy      User?    @relation("StageChangedBy", fields: [changedById], references: [id])
 
   currentFor     ServiceOrder? @relation("CurrentStage")
+  observations   Observation[]
 
   @@index([serviceOrderId])
   @@map("service_order_stage_instances")
@@ -268,6 +269,11 @@ model Observation {
   id             String   @id @default(cuid())
   serviceOrderId String
   serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  // Etapa a que esta observação diz respeito (opcional — uma observação pode
+  // ser geral à OS ou específica de uma etapa, ex.: "faltou verniz nesta
+  // passagem pela Lacagem").
+  stageInstanceId String?
+  stageInstance   ServiceOrderStageInstance? @relation(fields: [stageInstanceId], references: [id])
   text           String
   userId         String
   user           User     @relation(fields: [userId], references: [id])

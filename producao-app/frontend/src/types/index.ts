@@ -127,6 +127,8 @@ export interface Interruption {
 export interface Observation {
   id: string;
   serviceOrderId: string;
+  stageInstanceId?: string | null;
+  stageInstance?: { id: string; stage: { name: string } } | null;
   text: string;
   createdAt: string;
   editedAt: string | null;

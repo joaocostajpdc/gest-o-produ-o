@@ -62,7 +62,39 @@ export const api = {
   // — usado para a importação de Ordens de Serviço a partir de um PDF.
   postFile: <T>(path: string, file: File | Blob, contentType: string) =>
     request<T>(path, { method: "POST", body: file, headers: { "Content-Type": contentType } }),
+  // Descarrega um ficheiro (CSV/PDF) autenticado e devolve-o como Blob, para
+  // depois se gerar um link de download local — usar window.open() direto
+  // não funciona para endpoints autenticados, pois não envia o token.
+  getBlob: async (path: string): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`/api${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let message = `Erro ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body?.error) message = body.error;
+      } catch {
+        // resposta não é JSON (ex.: erro genérico do servidor) — mantém a mensagem por defeito
+      }
+      throw new ApiError(message, res.status);
+    }
+    return res.blob();
+  },
 };
+
+// Dispara o download de um Blob no browser com o nome de ficheiro indicado.
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 function buildQuery(params: Record<string, string | undefined>): string {
   const usable = Object.entries(params).filter(([, v]) => v);

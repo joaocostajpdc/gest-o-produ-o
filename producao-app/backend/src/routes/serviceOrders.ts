@@ -117,7 +117,10 @@ serviceOrdersRouter.get(
           include: { stage: true, supplier: true, changedBy: { select: { id: true, name: true } } },
         },
         interruptions: { orderBy: { startedAt: "desc" }, include: { user: { select: { id: true, name: true } } } },
-        observations: { orderBy: { createdAt: "desc" }, include: { user: { select: { id: true, name: true } } } },
+        observations: {
+          orderBy: { createdAt: "desc" },
+          include: { user: { select: { id: true, name: true } }, stageInstance: { include: { stage: true } } },
+        },
       },
     });
     if (!order) return res.status(404).json({ error: "Ordem de Serviço não encontrada." });
@@ -286,19 +289,38 @@ serviceOrdersRouter.post(
 // ---------------------------------------------------------------------------
 // Observações
 // ---------------------------------------------------------------------------
-const observationSchema = z.object({ text: z.string().min(1) });
+const observationSchema = z.object({
+  text: z.string().min(1),
+  // Etapa a que a observação diz respeito (opcional — omitir para uma
+  // observação geral, não associada a nenhuma etapa em particular).
+  stageInstanceId: z.string().optional().nullable(),
+});
 serviceOrdersRouter.post(
   "/:id/observations",
   requirePermission("observations:write"),
   asyncHandler(async (req, res) => {
-    const { text } = observationSchema.parse(req.body);
+    const { text, stageInstanceId } = observationSchema.parse(req.body);
+
+    if (stageInstanceId) {
+      const belongsToOrder = await prisma.serviceOrderStageInstance.findFirst({
+        where: { id: stageInstanceId, serviceOrderId: req.params.id },
+        select: { id: true },
+      });
+      if (!belongsToOrder) {
+        return res.status(400).json({ error: "A etapa indicada não pertence a esta Ordem de Serviço." });
+      }
+    }
+
     const observation = await prisma.observation.create({
-      data: { serviceOrderId: req.params.id, text, userId: req.user!.id },
+      data: { serviceOrderId: req.params.id, text, userId: req.user!.id, stageInstanceId: stageInstanceId || null },
+      include: { user: { select: { id: true, name: true } }, stageInstance: { include: { stage: true } } },
     });
     await logHistoryEvent({
       serviceOrderId: req.params.id,
       type: "OBSERVACAO_REGISTADA",
-      description: "Nova observação registada.",
+      description: stageInstanceId
+        ? `Nova observação registada na etapa "${observation.stageInstance?.stage.name}".`
+        : "Nova observação registada.",
       userId: req.user!.id,
       metadata: { observationId: observation.id },
     });

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { api, downloadBlob } from "../api/client";
 import {
   HistoryEvent,
   INTERRUPTION_REASON_LABELS,
@@ -23,6 +23,21 @@ export function ServiceOrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  async function downloadTravelerPdf() {
+    if (!id) return;
+    setDownloadingPdf(true);
+    setActionError(null);
+    try {
+      const blob = await api.getBlob(`/service-orders/${id}/pdf`);
+      downloadBlob(blob, `ficha-producao-${order?.externalId ?? id}.pdf`);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Erro ao gerar a Ficha de Produção.");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   async function load() {
     if (!id) return;
@@ -79,6 +94,9 @@ export function ServiceOrderDetailPage() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn secondary" disabled={downloadingPdf} onClick={downloadTravelerPdf}>
+            {downloadingPdf ? "A gerar..." : "Baixar Ficha de Produção (PDF)"}
+          </button>
           {order.status === "NAO_INICIADA" && (
             <button className="btn" disabled={busy} onClick={() => runAction(() => api.post(`/service-orders/${id}/start`))}>
               Iniciar produção
@@ -207,8 +225,30 @@ function EtapasTab({
 
   const visited = order.stageInstances.filter((si) => si.status === "CONCLUIDA" || si.status === "ATIVA");
 
+  // Observações associadas a uma etapa específica (ex.: um defeito
+  // detetado na Fresagem) devem continuar visíveis aqui quando a OS avança
+  // para as etapas seguintes, em vez de ficarem "perdidas" apenas na aba
+  // Observações — para quem está a trabalhar na etapa seguinte não perder
+  // essa informação.
+  const stageObservations = order.observations.filter((o) => o.stageInstance);
+
   return (
     <div className="card">
+      {stageObservations.length > 0 && (
+        <div className="stage-notes-banner">
+          <div className="stage-notes-banner-label">Notas registadas nas etapas</div>
+          <ul className="stage-notes-list">
+            {stageObservations.map((o) => (
+              <li key={o.id}>
+                <span className="badge badge-neutral">{o.stageInstance!.stage.name}</span>
+                {" "}
+                {o.text}
+                <span className="muted"> — {o.user.name}, {new Date(o.createdAt).toLocaleDateString("pt-PT")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="stage-timeline">
         {order.stageInstances.map((si) => (
           <div key={si.id} className={`stage-pill ${si.status.toLowerCase()}`}>

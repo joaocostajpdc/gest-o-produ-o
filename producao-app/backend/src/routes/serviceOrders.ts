@@ -22,6 +22,7 @@ import {
   cancelServiceOrder,
 } from "../services/serviceOrderService";
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
+import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
 import { getServiceOrderHistory, logHistoryEvent } from "../services/historyService";
 
 export const serviceOrdersRouter = Router();
@@ -147,6 +148,76 @@ serviceOrdersRouter.get(
   requirePermission("serviceOrders:read"),
   asyncHandler(async (req, res) => {
     res.json(await getServiceOrderHistory(req.params.id));
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Ficha de Produção (PDF por OS) — documento pronto a imprimir e a
+// acompanhar a peça física, com código de barras, características do
+// produto e checklist de etapas (com as observações de cada etapa, para
+// que uma nota registada numa etapa continue visível nas seguintes).
+// ---------------------------------------------------------------------------
+serviceOrdersRouter.get(
+  "/:id/pdf",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const order = await prisma.serviceOrder.findUnique({
+      where: { id: req.params.id },
+      include: {
+        client: true,
+        product: true,
+        stageInstances: {
+          orderBy: { order: "asc" },
+          include: {
+            stage: true,
+            supplier: true,
+            observations: {
+              orderBy: { createdAt: "asc" },
+              include: { user: { select: { id: true, name: true } } },
+            },
+          },
+        },
+        observations: {
+          where: { stageInstanceId: null },
+          orderBy: { createdAt: "asc" },
+          include: { user: { select: { id: true, name: true } } },
+        },
+      },
+    });
+    if (!order) return res.status(404).json({ error: "Ordem de Serviço não encontrada." });
+
+    const now = new Date();
+    const priority = computePriority(order.deadlineAt, order.status, now);
+
+    const data: TravelerData = {
+      externalId: order.externalId,
+      clienteName: order.client.name,
+      produtoName: order.product.name,
+      status: order.status,
+      createdAt: order.createdAt.toISOString(),
+      startedAt: order.startedAt ? order.startedAt.toISOString() : null,
+      deadlineAt: order.deadlineAt ? order.deadlineAt.toISOString() : null,
+      priorityNivel: priority,
+      priorityLabel: priority ? PRIORITY_LABELS[priority] : null,
+      specifications: order.specifications,
+      stages: order.stageInstances.map((si) => ({
+        stageName: si.stage.name,
+        status: si.status,
+        supplierName: si.supplier?.name ?? null,
+        observations: si.observations.map((o) => ({
+          text: o.text,
+          userName: o.user.name,
+          createdAt: o.createdAt.toISOString(),
+        })),
+      })),
+      generalObservations: order.observations.map((o) => ({
+        text: o.text,
+        userName: o.user.name,
+        createdAt: o.createdAt.toISOString(),
+      })),
+    };
+
+    await streamServiceOrderTravelerPdf(res, data);
   })
 );
 

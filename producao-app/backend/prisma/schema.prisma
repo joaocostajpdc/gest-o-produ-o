@@ -174,6 +174,13 @@ model ServiceOrder {
   completedAt       DateTime?          // conclusão
   deadlineAt        DateTime?          // data-limite calculada (createdAt/startedAt + productionDays do produto)
 
+  // Características específicas desta encomenda (Modelo, Dimensões,
+  // Acabamento, Enchimento, referência à Encomenda Cliente, etc.), tal como
+  // vieram da Ordem Serviço do Goldylocks — mostradas em destaque no topo da
+  // página da OS, por serem informação de produto importante para a
+  // produção (distinta das observações de acompanhamento do dia a dia).
+  specifications    String?            @db.Text
+
   // Tempo de produção acumulado (excluindo suspensões), em minutos.
   // Atualizado incrementalmente pelo timeTrackingService.
   productionMinutes Int                @default(0)

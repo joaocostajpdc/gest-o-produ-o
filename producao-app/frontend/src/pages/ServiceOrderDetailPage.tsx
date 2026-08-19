@@ -110,6 +110,17 @@ export function ServiceOrderDetailPage() {
 
       {actionError && <p className="error-text">{actionError}</p>}
 
+      {order.specifications && (
+        <div className="card spec-card">
+          <div className="spec-card-label">Características do Produto</div>
+          <div className="spec-card-body">
+            {order.specifications.split("\n").map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="form-grid">
           <div>

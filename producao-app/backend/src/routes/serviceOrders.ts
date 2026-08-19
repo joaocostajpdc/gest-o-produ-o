@@ -131,6 +131,7 @@ serviceOrdersRouter.get(
       createdAt: order.createdAt,
       startedAt: order.startedAt,
       completedAt: order.completedAt,
+      specifications: order.specifications,
       stageInstances: order.stageInstances.map((si) => ({
         ...si,
         residenceMinutes: getStageResidenceMinutes(si, now),

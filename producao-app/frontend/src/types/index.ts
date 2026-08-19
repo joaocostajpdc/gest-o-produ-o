@@ -148,6 +148,7 @@ export interface ServiceOrderDetail extends ServiceOrderListItem {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  specifications?: string | null;
   stageInstances: StageInstance[];
   interruptions: Interruption[];
   observations: Observation[];

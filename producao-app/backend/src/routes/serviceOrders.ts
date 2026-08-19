@@ -67,11 +67,14 @@ serviceOrdersRouter.get(
   "/",
   requirePermission("serviceOrders:read"),
   asyncHandler(async (req, res) => {
-    const { status, stageId, supplierId, clientId, priority, search } = req.query;
+    const { status, stageId, supplierId, clientId, priority, search, category } = req.query;
 
     const where: any = {};
     if (status) where.status = String(status);
     if (clientId) where.clientId = String(clientId);
+    // Filtra pela categoria "leve" do produto associado (ex.: "Mosquiteiras"),
+    // útil quando há muitas OS de categorias diferentes em simultâneo.
+    if (category) where.product = { category: String(category) };
     if (search) {
       where.OR = [
         { externalId: { contains: String(search), mode: "insensitive" } },

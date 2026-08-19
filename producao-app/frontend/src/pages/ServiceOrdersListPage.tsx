@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, buildQuery } from "../api/client";
 import {
   Client,
+  Product,
   ServiceOrderListItem,
   Stage,
   Supplier,
@@ -31,6 +32,7 @@ export function ServiceOrdersListPage() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -44,6 +46,7 @@ export function ServiceOrdersListPage() {
     supplierId: "",
     clientId: "",
     priority: "",
+    category: "",
     search: "",
   });
 
@@ -52,16 +55,28 @@ export function ServiceOrdersListPage() {
       api.get<Stage[]>("/stages"),
       api.get<Supplier[]>("/suppliers"),
       api.get<Client[]>("/clients"),
+      api.get<Product[]>("/products"),
     ])
-      .then(([s, sup, cl]) => {
+      .then(([s, sup, cl, prod]) => {
         setStages(s);
         setSuppliers(sup);
         setClients(cl);
+        setProducts(prod);
       })
       .catch(() => {
         /* filtros são opcionais; falha silenciosa não bloqueia a listagem principal */
       });
   }, []);
+
+  // Categorias de produto disponíveis (ex.: "Mosquiteiras", "Painéis"), para
+  // filtrar as OS pela categoria do respetivo produto.
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-PT"));
+  }, [products]);
 
   async function loadOrders() {
     setLoading(true);
@@ -205,6 +220,17 @@ export function ServiceOrdersListPage() {
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.category}
+            onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
+          >
+            <option value="">Categoria (todas)</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </select>

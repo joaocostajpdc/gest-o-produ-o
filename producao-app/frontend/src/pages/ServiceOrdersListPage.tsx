@@ -78,6 +78,18 @@ export function ServiceOrdersListPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-PT"));
   }, [products]);
 
+  // Resumo rápido do que está atualmente à vista (respeita os filtros
+  // aplicados), para dar uma leitura imediata do estado da produção sem
+  // precisar de percorrer a tabela.
+  const stats = useMemo(() => {
+    return {
+      total: orders.length,
+      atrasadas: orders.filter((o) => o.priority === "PRAZO_ULTRAPASSADO").length,
+      urgentes: orders.filter((o) => o.priority === "URGENTE").length,
+      emProducao: orders.filter((o) => o.status === "EM_PRODUCAO").length,
+    };
+  }, [orders]);
+
   async function loadOrders() {
     setLoading(true);
     setError(null);
@@ -168,6 +180,25 @@ export function ServiceOrdersListPage() {
       </div>
 
       {importMsg && <p className="muted">{importMsg}</p>}
+
+      <div className="stat-grid">
+        <div className="stat-card" style={{ ["--stat-accent" as string]: "#1f3fe0" }}>
+          <div className="stat-card-value">{stats.total}</div>
+          <div className="stat-card-label">Total de OS</div>
+        </div>
+        <div className="stat-card" style={{ ["--stat-accent" as string]: "#DC2626" }}>
+          <div className="stat-card-value">{stats.atrasadas}</div>
+          <div className="stat-card-label">Prazo ultrapassado</div>
+        </div>
+        <div className="stat-card" style={{ ["--stat-accent" as string]: "#F97316" }}>
+          <div className="stat-card-value">{stats.urgentes}</div>
+          <div className="stat-card-label">Urgentes</div>
+        </div>
+        <div className="stat-card" style={{ ["--stat-accent" as string]: "#16A34A" }}>
+          <div className="stat-card-value">{stats.emProducao}</div>
+          <div className="stat-card-label">Em produção</div>
+        </div>
+      </div>
 
       <div className="card">
         <div className="filters-bar">
@@ -270,8 +301,8 @@ export function ServiceOrdersListPage() {
                   </td>
                   <td>
                     {o.currentStage ? (
-                      <>
-                        {o.currentStage.name}
+                      <div className="current-stage">
+                        <div className="current-stage-name">{o.currentStage.name}</div>
                         <div className="muted">{minutesToHuman(o.currentStage.residenceMinutes)} na etapa</div>
                         {o.currentStage.supplier && (
                           <div className="muted">Fornecedor: {o.currentStage.supplier}</div>
@@ -282,7 +313,7 @@ export function ServiceOrdersListPage() {
                             {new Date(o.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
                           </div>
                         )}
-                      </>
+                      </div>
                     ) : (
                       "—"
                     )}

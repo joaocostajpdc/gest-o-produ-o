@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ApiError } from "../api/client";
+import logoMark from "../assets/logo-mark.png";
 
 export function LoginPage() {
   const { user, login } = useAuth();
@@ -28,6 +29,7 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={handleSubmit}>
+        <img src={logoMark} alt="Minho Ferragens" className="login-logo" />
         <h1>Gestão de Produção</h1>
         <p className="muted">Inicia sessão para aceder à aplicação.</p>
 

@@ -54,6 +54,7 @@ export interface Product {
   externalId?: string | null;
   name: string;
   description?: string | null;
+  category?: string | null;
   productionDays: number;
 }
 

@@ -79,6 +79,11 @@ model Product {
   externalId      String?  @unique // id no Goldylocks, se aplicável
   name            String
   description     String?
+  // Categoria "leve", apenas para agrupar/filtrar produtos na pesquisa
+  // (ex.: "Mosquiteiras", "Painéis") — ao contrário do antigo modelo de
+  // Categoria, não tem prazo de produção nem linha de produção própria;
+  // isso continua a ser definido por Produto.
+  category        String?
   productionDays  Int      @default(0) // prazo de produção padrão (dias) usado para calcular a data-limite
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

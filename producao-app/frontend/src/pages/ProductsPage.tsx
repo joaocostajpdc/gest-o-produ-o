@@ -1,13 +1,15 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { Product } from "../types";
 
-const EMPTY = { name: "", description: "", productionDays: 0, externalId: "" };
+const EMPTY = { name: "", description: "", category: "", productionDays: 0, externalId: "" };
 
 export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [form, setForm] = useState<typeof EMPTY & { id?: string }>(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
 
   async function load() {
     const p = await api.get<Product[]>("/products");
@@ -26,6 +28,7 @@ export function ProductsPage() {
       const payload = {
         name: form.name,
         description: form.description,
+        category: form.category || undefined,
         productionDays: Number(form.productionDays),
         externalId: form.externalId || undefined,
       };
@@ -44,6 +47,30 @@ export function ProductsPage() {
     load();
   }
 
+  // Categorias já usadas nos produtos existentes — para o filtro e para
+  // sugerir opções no campo do formulário (datalist), em vez de obrigar a
+  // escrever sempre o nome da categoria do zero.
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-PT"));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return products.filter((p) => {
+      if (categoryFilter && p.category !== categoryFilter) return false;
+      if (!term) return true;
+      return (
+        p.name.toLowerCase().includes(term) ||
+        (p.externalId ?? "").toLowerCase().includes(term) ||
+        (p.category ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [products, search, categoryFilter]);
+
   return (
     <div>
       <div className="page-header">
@@ -56,6 +83,20 @@ export function ProductsPage() {
             <div>
               <label>Nome</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </div>
+            <div>
+              <label>Categoria</label>
+              <input
+                list="product-categories"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                placeholder="ex.: Mosquiteiras"
+              />
+              <datalist id="product-categories">
+                {categories.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label>Tempo de produção (dias)</label>
@@ -94,19 +135,44 @@ export function ProductsPage() {
       </div>
 
       <div className="card">
+        <div className="filters-bar">
+          <input
+            type="text"
+            placeholder="Pesquisar por nome, ID externo ou categoria..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ minWidth: 260 }}
+          />
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">Categoria (todas)</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
         <table>
           <thead>
             <tr>
               <th>Nome</th>
+              <th>Categoria</th>
               <th>Tempo de produção (dias)</th>
               <th>ID externo</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
+            {filteredProducts.map((p) => (
               <tr key={p.id}>
                 <td>{p.name}</td>
+                <td>
+                  {p.category ? (
+                    <span className="badge badge-neutral">{p.category}</span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </td>
                 <td>{p.productionDays}</td>
                 <td className="muted">{p.externalId ?? "—"}</td>
                 <td style={{ display: "flex", gap: 6 }}>
@@ -117,6 +183,7 @@ export function ProductsPage() {
                         id: p.id,
                         name: p.name,
                         description: p.description ?? "",
+                        category: p.category ?? "",
                         productionDays: p.productionDays,
                         externalId: p.externalId ?? "",
                       })
@@ -130,6 +197,13 @@ export function ProductsPage() {
                 </td>
               </tr>
             ))}
+            {filteredProducts.length === 0 && (
+              <tr>
+                <td colSpan={5} className="muted">
+                  Sem produtos para os filtros aplicados.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

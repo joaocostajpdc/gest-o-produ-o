@@ -226,30 +226,8 @@ function EtapasTab({
 
   const visited = order.stageInstances.filter((si) => si.status === "CONCLUIDA" || si.status === "ATIVA");
 
-  // Observações associadas a uma etapa específica (ex.: um defeito
-  // detetado na Fresagem) devem continuar visíveis aqui quando a OS avança
-  // para as etapas seguintes, em vez de ficarem "perdidas" apenas na aba
-  // Observações — para quem está a trabalhar na etapa seguinte não perder
-  // essa informação.
-  const stageObservations = order.observations.filter((o) => o.stageInstance);
-
   return (
     <div className="card">
-      {stageObservations.length > 0 && (
-        <div className="stage-notes-banner">
-          <div className="stage-notes-banner-label">Notas registadas nas etapas</div>
-          <ul className="stage-notes-list">
-            {stageObservations.map((o) => (
-              <li key={o.id}>
-                <span className="badge badge-neutral">{o.stageInstance!.stage.name}</span>
-                {" "}
-                {o.text}
-                <span className="muted"> — {o.user.name}, {new Date(o.createdAt).toLocaleDateString("pt-PT")}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       <div className="stage-timeline">
         {order.stageInstances.map((si) => {
           const siObservations = order.observations.filter((o) => o.stageInstanceId === si.id);

@@ -248,6 +248,47 @@ label {
   text-decoration: line-through;
 }
 
+.stage-pill.clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.stage-pill.clickable:hover {
+  box-shadow: 0 1px 4px rgba(22, 27, 44, 0.12);
+  border-color: var(--color-primary);
+}
+
+.stage-pill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.stage-note-count {
+  background: #f59e0b;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.stage-pill-observations {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+
+.stage-pill-observation {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;

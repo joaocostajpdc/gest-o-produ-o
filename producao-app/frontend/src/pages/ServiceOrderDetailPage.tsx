@@ -222,6 +222,7 @@ function EtapasTab({
   const [insertStageId, setInsertStageId] = useState("");
   const [returnStageId, setReturnStageId] = useState("");
   const [revertStageId, setRevertStageId] = useState("");
+  const [expandedStageId, setExpandedStageId] = useState<string | null>(null);
 
   const visited = order.stageInstances.filter((si) => si.status === "CONCLUIDA" || si.status === "ATIVA");
 
@@ -250,24 +251,55 @@ function EtapasTab({
         </div>
       )}
       <div className="stage-timeline">
-        {order.stageInstances.map((si) => (
-          <div key={si.id} className={`stage-pill ${si.status.toLowerCase()}`}>
-            <strong>{si.stage.name}</strong>
-            {si.wasManuallyAdded && <div className="muted">(alteração pontual)</div>}
-            {si.supplier && <div className="muted">Fornecedor: {si.supplier.name}</div>}
-            <div className="muted">{minutesToHuman(si.residenceMinutes)} de permanência</div>
-            {si.status === "PENDENTE" && canFlow && (
-              <button
-                className="btn secondary"
-                style={{ marginTop: 6, fontSize: 11, padding: "4px 8px" }}
-                disabled={busy}
-                onClick={() => onAction(() => api.post(`/service-orders/${id}/stage-flow/skip`, { stageInstanceId: si.id }))}
-              >
-                Omitir
-              </button>
-            )}
-          </div>
-        ))}
+        {order.stageInstances.map((si) => {
+          const siObservations = order.observations.filter((o) => o.stageInstanceId === si.id);
+          const isExpanded = expandedStageId === si.id;
+          return (
+            <div
+              key={si.id}
+              className={`stage-pill ${si.status.toLowerCase()} clickable`}
+              onClick={() => setExpandedStageId(isExpanded ? null : si.id)}
+            >
+              <div className="stage-pill-header">
+                <strong>{si.stage.name}</strong>
+                {siObservations.length > 0 && (
+                  <span className="badge stage-note-count">{siObservations.length}</span>
+                )}
+              </div>
+              {si.wasManuallyAdded && <div className="muted">(alteração pontual)</div>}
+              {si.supplier && <div className="muted">Fornecedor: {si.supplier.name}</div>}
+              <div className="muted">{minutesToHuman(si.residenceMinutes)} de permanência</div>
+              {si.status === "PENDENTE" && canFlow && (
+                <button
+                  className="btn secondary"
+                  style={{ marginTop: 6, fontSize: 11, padding: "4px 8px" }}
+                  disabled={busy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAction(() => api.post(`/service-orders/${id}/stage-flow/skip`, { stageInstanceId: si.id }));
+                  }}
+                >
+                  Omitir
+                </button>
+              )}
+              {isExpanded && (
+                <div className="stage-pill-observations" onClick={(e) => e.stopPropagation()}>
+                  {siObservations.length === 0 && (
+                    <div className="muted">Sem observações registadas nesta etapa.</div>
+                  )}
+                  {siObservations.map((o) => (
+                    <div key={o.id} className="stage-pill-observation">
+                      <div className="muted">
+                        {o.user.name} · {new Date(o.createdAt).toLocaleString("pt-PT")}
+                      </div>
+                      {o.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {canFlow && (

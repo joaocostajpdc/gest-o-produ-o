@@ -28,6 +28,13 @@ export interface GoldylocksServiceOrder {
   product: GoldylocksProduct;
   createdAt: string; // ISO date
   notes?: string;
+  /**
+   * Data-limite de entrega, quando o próprio documento do Goldylocks já a
+   * indica (linha "Prazo de entrega:" na Ordem Serviço). Quando presente,
+   * substitui o cálculo padrão (data de importação + prazo do produto) —
+   * cobre o caso de encomendas com um prazo pontual diferente do standard.
+   */
+  deadlineAt?: string; // ISO date
 }
 
 // Contrato de integração: a aplicação de produção consome apenas estes

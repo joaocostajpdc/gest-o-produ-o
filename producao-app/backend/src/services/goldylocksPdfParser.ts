@@ -77,6 +77,29 @@ interface ParsedOrdemServico {
   acabamento?: string;
   enchimento?: string;
   referencia?: string;
+  /** Data no formato DD/MM/AAAA, tal como impressa na linha "Prazo de entrega:". */
+  prazoEntrega?: string;
+}
+
+/**
+ * Converte uma data no formato português "DD/MM/AAAA" (tal como impressa na
+ * Ordem Serviço) para uma data ISO, à 23:59 desse dia (a encomenda deve estar
+ * pronta/entregue até ao fim desse dia).
+ */
+function parsePrazoEntregaDate(value: string): string | undefined {
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return undefined;
+  const [, day, month, year] = match;
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    23,
+    59,
+    0
+  );
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
 }
 
 function parseText(text: string): ParsedOrdemServico {
@@ -125,6 +148,7 @@ function parseText(text: string): ParsedOrdemServico {
     acabamento: extractAfterLabel(text, "Acabamento:"),
     enchimento: extractAfterLabel(text, "Enchimento:"),
     referencia: extractAfterLabel(text, "Referente a:"),
+    prazoEntrega: text.match(/Prazo de entrega:?\s*\|?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1],
   };
 }
 
@@ -160,5 +184,6 @@ export async function parseOrdemServicoPdf(pdfBuffer: Buffer): Promise<Goldylock
     },
     createdAt: parsed.dataHora ? parsed.dataHora.replace(" ", "T") : new Date().toISOString(),
     notes: buildNotes(parsed),
+    deadlineAt: parsed.prazoEntrega ? parsePrazoEntregaDate(parsed.prazoEntrega) : undefined,
   };
 }

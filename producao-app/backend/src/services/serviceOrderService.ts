@@ -57,7 +57,13 @@ export async function importSingleGoldylocksOrder(
   }
 
   const now = new Date();
-  const deadlineAt = new Date(now.getTime() + product.productionDays * 24 * 60 * 60 * 1000);
+  // Por defeito, a data-limite é calculada a partir do prazo padrão do
+  // produto. Quando a própria Ordem Serviço do Goldylocks já traz uma data
+  // de "Prazo de entrega" impressa (caso pontual em que o prazo combinado
+  // com o cliente é diferente do standard), essa data tem prioridade.
+  const standardDeadlineAt = new Date(now.getTime() + product.productionDays * 24 * 60 * 60 * 1000);
+  const deadlineFromDocument = goldOrder.deadlineAt ? new Date(goldOrder.deadlineAt) : null;
+  const deadlineAt = deadlineFromDocument ?? standardDeadlineAt;
 
   await prisma.$transaction(async (tx) => {
     const order = await tx.serviceOrder.create({
@@ -84,6 +90,18 @@ export async function importSingleGoldylocksOrder(
       userId: actingUserId,
       tx,
     });
+
+    if (deadlineFromDocument) {
+      await logHistoryEvent({
+        serviceOrderId: order.id,
+        type: "OUTRA_ALTERACAO",
+        description: `Data-limite definida a partir do "Prazo de entrega" indicado na Ordem Serviço (${deadlineFromDocument.toLocaleDateString(
+          "pt-PT"
+        )}), em vez do prazo padrão do produto.`,
+        userId: actingUserId,
+        tx,
+      });
+    }
   });
 
   return { status: "created", externalId: goldOrder.externalId };

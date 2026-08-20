@@ -48,6 +48,7 @@ model User {
   interruptions     Interruption[]
   historyEvents     HistoryEvent[]
   stageTransitions  ServiceOrderStageInstance[] @relation("StageChangedBy")
+  uploadedAttachments Attachment[]
 
   @@map("users")
 }
@@ -217,6 +218,7 @@ model ServiceOrder {
   interruptions     Interruption[]
   observations      Observation[]
   historyEvents     HistoryEvent[]
+  attachments       Attachment[]
 
   @@index([status])
   @@index([deadlineAt])
@@ -311,8 +313,42 @@ model Observation {
   createdAt      DateTime @default(now())
   editedAt       DateTime?
 
+  attachments    Attachment[]
+
   @@index([serviceOrderId])
   @@map("observations")
+}
+
+// ---------------------------------------------------------------------------
+// Anexos (desenhos técnicos, fotos do produto, fotos de observações)
+//
+// Guardados diretamente na base de dados (coluna bytea) em vez de num
+// serviço de armazenamento externo — simples de operar e suficiente para o
+// volume esperado (desenhos técnicos e fotografias tiradas no telemóvel
+// para acompanhar uma OS/observação, não um repositório de média em massa).
+// Quando associado a uma observação (observationId preenchido), é a
+// fotografia tirada diretamente no telemóvel que documenta essa observação
+// (ex.: um defeito detetado); quando não, é um anexo geral da OS (ex.: um
+// desenho técnico).
+// ---------------------------------------------------------------------------
+
+model Attachment {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  observationId  String?
+  observation    Observation? @relation(fields: [observationId], references: [id])
+  filename       String
+  mimeType       String
+  size           Int
+  data           Bytes
+  uploadedById   String?
+  uploadedBy     User?    @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([serviceOrderId])
+  @@index([observationId])
+  @@map("attachments")
 }
 
 // ---------------------------------------------------------------------------

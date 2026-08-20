@@ -154,6 +154,16 @@ export interface Observation {
   user: { id: string; name: string };
 }
 
+export interface Attachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  observationId: string | null;
+  createdAt: string;
+  uploadedBy: { id: string; name: string } | null;
+}
+
 export interface HistoryEvent {
   id: string;
   serviceOrderId: string;

@@ -592,3 +592,143 @@ serviceOrdersRouter.put(
     res.json(observation);
   })
 );
+
+// ---------------------------------------------------------------------------
+// Anexos — desenhos técnicos e outros ficheiros gerais da OS quando
+// observationId não é indicado; fotografias tiradas diretamente no
+// telemóvel para documentar uma observação quando é. Ficheiro em bruto no
+// corpo do pedido (tal como a importação de PDF acima), com o nome
+// original passado como query param (o browser não o expõe de outra forma
+// num upload em bruto, sem multipart).
+// ---------------------------------------------------------------------------
+const ATTACHMENT_ALLOWED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+  "application/pdf",
+];
+const ATTACHMENT_SIZE_LIMIT = "20mb";
+
+function serializeAttachment(a: {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  observationId: string | null;
+  createdAt: Date;
+  uploadedBy: { id: string; name: string } | null;
+}) {
+  return {
+    id: a.id,
+    filename: a.filename,
+    mimeType: a.mimeType,
+    size: a.size,
+    observationId: a.observationId,
+    createdAt: a.createdAt,
+    uploadedBy: a.uploadedBy,
+  };
+}
+
+serviceOrdersRouter.get(
+  "/:id/attachments",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const attachments = await prisma.attachment.findMany({
+      where: { serviceOrderId: req.params.id },
+      orderBy: { createdAt: "desc" },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+    res.json(attachments.map(serializeAttachment));
+  })
+);
+
+serviceOrdersRouter.post(
+  "/:id/attachments",
+  requirePermission("observations:write"),
+  express.raw({ type: ATTACHMENT_ALLOWED_TYPES, limit: ATTACHMENT_SIZE_LIMIT }),
+  asyncHandler(async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Nenhum ficheiro recebido, ou tipo de ficheiro não suportado (aceita-se imagens e PDF)." });
+    }
+    const order = await prisma.serviceOrder.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!order) return res.status(404).json({ error: "Ordem de Serviço não encontrada." });
+
+    const filename = typeof req.query.filename === "string" && req.query.filename.trim() ? String(req.query.filename) : "ficheiro";
+    const observationId = typeof req.query.observationId === "string" ? req.query.observationId : null;
+    if (observationId) {
+      const belongsToOrder = await prisma.observation.findFirst({
+        where: { id: observationId, serviceOrderId: req.params.id },
+        select: { id: true },
+      });
+      if (!belongsToOrder) {
+        return res.status(400).json({ error: "A observação indicada não pertence a esta Ordem de Serviço." });
+      }
+    }
+
+    const mimeType = req.headers["content-type"] ?? "application/octet-stream";
+    const attachment = await prisma.attachment.create({
+      data: {
+        serviceOrderId: req.params.id,
+        observationId,
+        filename,
+        mimeType,
+        size: req.body.length,
+        data: req.body,
+        uploadedById: req.user?.id,
+      },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    });
+
+    await logHistoryEvent({
+      serviceOrderId: req.params.id,
+      type: "OUTRA_ALTERACAO",
+      description: observationId
+        ? `Fotografia anexada a uma observação: "${filename}".`
+        : `Anexo adicionado à Ordem de Serviço: "${filename}".`,
+      userId: req.user?.id,
+    });
+
+    res.status(201).json(serializeAttachment(attachment));
+  })
+);
+
+serviceOrdersRouter.get(
+  "/:id/attachments/:attachmentId",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: req.params.attachmentId, serviceOrderId: req.params.id },
+    });
+    if (!attachment) return res.status(404).json({ error: "Anexo não encontrado." });
+    res.setHeader("Content-Type", attachment.mimeType);
+    // "inline" (não "attachment"): imagens e PDFs devem poder ser vistos
+    // diretamente no browser (ex.: miniatura de uma foto de observação),
+    // não forçados a download.
+    res.setHeader("Content-Disposition", `inline; filename="${attachment.filename.replace(/"/g, "")}"`);
+    res.send(Buffer.from(attachment.data));
+  })
+);
+
+serviceOrdersRouter.delete(
+  "/:id/attachments/:attachmentId",
+  requirePermission("observations:write"),
+  asyncHandler(async (req, res) => {
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: req.params.attachmentId, serviceOrderId: req.params.id },
+    });
+    if (!attachment) return res.status(404).json({ error: "Anexo não encontrado." });
+    await prisma.attachment.delete({ where: { id: attachment.id } });
+    await logHistoryEvent({
+      serviceOrderId: req.params.id,
+      type: "OUTRA_ALTERACAO",
+      description: `Anexo removido: "${attachment.filename}".`,
+      userId: req.user?.id,
+    });
+    res.status(204).send();
+  })
+);

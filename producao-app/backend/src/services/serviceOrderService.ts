@@ -56,12 +56,23 @@ export async function importSingleGoldylocksOrder(
     return { status: "skipped", externalId: goldOrder.externalId, reason: "Já importada anteriormente." };
   }
 
+  // A "Data de início" da OS é a data do próprio documento Goldylocks (ex.:
+  // a Ordem Serviço foi criada no Goldylocks em 20/08, mas só é importada
+  // para a aplicação em 21/08) — não o momento em que é importada/submetida
+  // na aplicação, que seria sempre o valor por omissão (now()) do Prisma.
   const now = new Date();
+  const parsedDocumentCreatedAt = new Date(goldOrder.createdAt);
+  const documentCreatedAt = Number.isNaN(parsedDocumentCreatedAt.getTime()) ? now : parsedDocumentCreatedAt;
+
   // Por defeito, a data-limite é calculada a partir do prazo padrão do
-  // produto. Quando a própria Ordem Serviço do Goldylocks já traz uma data
-  // de "Prazo de entrega" impressa (caso pontual em que o prazo combinado
-  // com o cliente é diferente do standard), essa data tem prioridade.
-  const standardDeadlineAt = new Date(now.getTime() + product.productionDays * 24 * 60 * 60 * 1000);
+  // produto, contado a partir da data de início (a do documento, não a da
+  // importação). Quando a própria Ordem Serviço do Goldylocks já traz uma
+  // data de "Prazo de entrega" impressa (caso pontual em que o prazo
+  // combinado com o cliente é diferente do standard), essa data tem
+  // prioridade.
+  const standardDeadlineAt = new Date(
+    documentCreatedAt.getTime() + product.productionDays * 24 * 60 * 60 * 1000
+  );
   const deadlineFromDocument = goldOrder.deadlineAt ? new Date(goldOrder.deadlineAt) : null;
   const deadlineAt = deadlineFromDocument ?? standardDeadlineAt;
 
@@ -72,6 +83,7 @@ export async function importSingleGoldylocksOrder(
         clientId: client.id,
         productId: product.id,
         status: "NAO_INICIADA",
+        createdAt: documentCreatedAt,
         deadlineAt,
         // Características desta encomenda (Modelo, Dimensões, Acabamento,
         // Enchimento, referência à Encomenda Cliente, etc.), tal como vieram

@@ -66,8 +66,9 @@ function serializeListItem(order: any, now: Date) {
     id: order.id,
     externalId: order.externalId,
     status: order.status,
-    client: { id: order.client.id, name: order.client.name },
+    client: { id: order.client.id, name: order.client.name, externalId: order.client.externalId },
     product: { id: order.product.id, name: order.product.name, category: order.product.category },
+    createdAt: order.createdAt,
     deadlineAt: order.deadlineAt,
     priority,
     priorityLabel: priority ? PRIORITY_LABELS[priority] : null,
@@ -107,6 +108,10 @@ serviceOrdersRouter.get(
       where.OR = [
         { externalId: { contains: String(search), mode: "insensitive" } },
         { client: { name: { contains: String(search), mode: "insensitive" } } },
+        // Número de cliente (ex.: código Goldylocks do cliente), para
+        // permitir encontrar rapidamente todas as OS de um cliente mesmo
+        // sem saber/escrever o nome completo.
+        { client: { externalId: { contains: String(search), mode: "insensitive" } } },
         { product: { name: { contains: String(search), mode: "insensitive" } } },
       ];
     }
@@ -377,12 +382,18 @@ serviceOrdersRouter.post(
 // de produção do produto), mas por vezes o cliente pede um prazo mais
 // curto (ou mais longo) do que o padrão do produto — este endpoint permite
 // a um Administrador/Supervisor substituir esse valor caso a caso.
-const setDeadlineSchema = z.object({ deadlineAt: z.string().min(1).nullable() });
+// A justificação é obrigatória: uma alteração manual à data-limite sai do
+// prazo padrão do produto/fornecedor, por isso fica sempre registada no
+// histórico da OS o motivo dessa exceção (ex.: "cliente pediu adiamento").
+const setDeadlineSchema = z.object({
+  deadlineAt: z.string().min(1).nullable(),
+  reason: z.string().trim().min(1, "É obrigatório justificar a alteração da data-limite."),
+});
 serviceOrdersRouter.put(
   "/:id/deadline",
   requirePermission("serviceOrders:changeFlow"),
   asyncHandler(async (req, res) => {
-    const { deadlineAt } = setDeadlineSchema.parse(req.body);
+    const { deadlineAt, reason } = setDeadlineSchema.parse(req.body);
     const order = await prisma.serviceOrder.findUnique({ where: { id: req.params.id } });
     if (!order) return res.status(404).json({ error: "Ordem de Serviço não encontrada." });
     const newDeadline = deadlineAt ? new Date(deadlineAt) : null;
@@ -394,8 +405,8 @@ serviceOrdersRouter.put(
       serviceOrderId: req.params.id,
       type: "OUTRA_ALTERACAO",
       description: newDeadline
-        ? `Data-limite alterada manualmente para ${newDeadline.toLocaleString("pt-PT")} (prazo padrão do produto substituído).`
-        : "Data-limite removida manualmente.",
+        ? `Data-limite alterada manualmente para ${newDeadline.toLocaleString("pt-PT")} (prazo padrão do produto substituído). Motivo: ${reason}`
+        : `Data-limite removida manualmente. Motivo: ${reason}`,
       userId: req.user?.id,
     });
     res.json(updated);

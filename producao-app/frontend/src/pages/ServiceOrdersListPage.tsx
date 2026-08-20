@@ -204,7 +204,7 @@ export function ServiceOrdersListPage() {
         <div className="filters-bar">
           <input
             type="text"
-            placeholder="Pesquisar OS, cliente ou produto..."
+            placeholder="Pesquisar OS, cliente, nº cliente ou produto..."
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
@@ -250,7 +250,7 @@ export function ServiceOrdersListPage() {
             <option value="">Cliente (todos)</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.externalId ? `${c.externalId} — ${c.name}` : c.name}
               </option>
             ))}
           </select>
@@ -281,6 +281,7 @@ export function ServiceOrdersListPage() {
                 <th>Produto</th>
                 <th>Estado</th>
                 <th>Etapa atual</th>
+                <th>Data de início</th>
                 <th>Data-limite</th>
                 <th>Tempo de produção</th>
               </tr>
@@ -318,13 +319,14 @@ export function ServiceOrdersListPage() {
                       "—"
                     )}
                   </td>
+                  <td>{new Date(o.createdAt).toLocaleDateString("pt-PT")}</td>
                   <td>{o.deadlineAt ? new Date(o.deadlineAt).toLocaleString("pt-PT") : "—"}</td>
                   <td>{minutesToHuman(o.productionMinutes)}</td>
                 </tr>
               ))}
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="muted">
+                  <td colSpan={9} className="muted">
                     Nenhuma Ordem de Serviço encontrada com os filtros selecionados.
                   </td>
                 </tr>

@@ -23,11 +23,23 @@ reportsRouter.get(
   "/service-orders",
   requirePermission("reports:printable"),
   asyncHandler(async (req, res) => {
-    const { status, stageId, supplierId, clientId, priority, format } = req.query;
+    const { status, stageId, supplierId, clientId, priority, category, search, format } = req.query;
 
     const where: any = {};
     if (status) where.status = String(status);
     if (clientId) where.clientId = String(clientId);
+    // Mesmos filtros de categoria e pesquisa livre (OS, cliente, número de
+    // cliente, produto) da listagem principal de Ordens de Serviço, para que
+    // esta listagem imprimível possa refletir exatamente a mesma seleção.
+    if (category) where.product = { category: String(category) };
+    if (search) {
+      where.OR = [
+        { externalId: { contains: String(search), mode: "insensitive" } },
+        { client: { name: { contains: String(search), mode: "insensitive" } } },
+        { client: { externalId: { contains: String(search), mode: "insensitive" } } },
+        { product: { name: { contains: String(search), mode: "insensitive" } } },
+      ];
+    }
     if (stageId || supplierId) {
       where.currentStageInstance = {
         ...(stageId ? { stageId: String(stageId) } : {}),
@@ -86,6 +98,8 @@ reportsRouter.get(
       const filterParts: string[] = [];
       if (status) filterParts.push(`Estado: ${STATUS_LABELS[String(status)] ?? String(status)}`);
       if (priority) filterParts.push(`Prioridade: ${PRIORITY_LABELS[String(priority) as keyof typeof PRIORITY_LABELS]}`);
+      if (category) filterParts.push(`Categoria: ${String(category)}`);
+      if (search) filterParts.push(`Pesquisa: "${String(search)}"`);
       const filtersSummary = filterParts.length ? filterParts.join(" · ") : "Sem filtros aplicados";
 
       const pdfRows = rows.map((r) => ({

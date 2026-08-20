@@ -37,6 +37,7 @@ export function ServiceOrderDetailPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [editingDeadline, setEditingDeadline] = useState(false);
   const [deadlineInput, setDeadlineInput] = useState("");
+  const [deadlineReason, setDeadlineReason] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   async function downloadTravelerPdf() {
@@ -90,12 +91,18 @@ export function ServiceOrderDetailPage() {
 
   async function saveDeadline() {
     if (!id) return;
+    if (!deadlineReason.trim()) {
+      setActionError("É obrigatório justificar a alteração da data-limite.");
+      return;
+    }
     await runAction(() =>
       api.put(`/service-orders/${id}/deadline`, {
         deadlineAt: deadlineInput ? new Date(deadlineInput).toISOString() : null,
+        reason: deadlineReason.trim(),
       })
     );
     setEditingDeadline(false);
+    setDeadlineReason("");
   }
 
   async function handleDelete() {
@@ -126,7 +133,7 @@ export function ServiceOrderDetailPage() {
         <Link to="/">&larr; Voltar às Ordens de Serviço</Link>
       </p>
 
-      <div className="page-header">
+      <div className="os-header">
         <div>
           <h2>
             {order.externalId} <StatusBadge status={order.status} />{" "}
@@ -136,7 +143,7 @@ export function ServiceOrderDetailPage() {
             {order.client.name} · {order.product.name}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="os-header-actions">
           <button className="btn secondary" disabled={downloadingPdf} onClick={downloadTravelerPdf}>
             {downloadingPdf ? "A gerar..." : "Baixar Ficha de Produção (PDF)"}
           </button>
@@ -200,18 +207,20 @@ export function ServiceOrderDetailPage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="form-grid">
-          <div>
-            <div className="muted">Data de entrada</div>
-            <div>{new Date(order.createdAt).toLocaleString("pt-PT")}</div>
+      <div className="info-tiles">
+        <div className="info-tile">
+          <div className="info-tile-label">Data de início</div>
+          <div className="info-tile-value">{new Date(order.createdAt).toLocaleString("pt-PT")}</div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Início da produção</div>
+          <div className="info-tile-value">
+            {order.startedAt ? new Date(order.startedAt).toLocaleString("pt-PT") : "—"}
           </div>
-          <div>
-            <div className="muted">Início da produção</div>
-            <div>{order.startedAt ? new Date(order.startedAt).toLocaleString("pt-PT") : "—"}</div>
-          </div>
-          <div>
-            <div className="muted">Data-limite</div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Data-limite</div>
+          <div className="info-tile-value">
             {editingDeadline ? (
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 <input
@@ -220,10 +229,17 @@ export function ServiceOrderDetailPage() {
                   onChange={(e) => setDeadlineInput(e.target.value)}
                   style={{ fontSize: 13, padding: "4px 6px" }}
                 />
+                <input
+                  type="text"
+                  placeholder="Motivo da alteração (obrigatório)"
+                  value={deadlineReason}
+                  onChange={(e) => setDeadlineReason(e.target.value)}
+                  style={{ fontSize: 13, padding: "4px 6px", minWidth: 220 }}
+                />
                 <button
                   className="btn secondary"
                   style={{ padding: "4px 8px", fontSize: 12 }}
-                  disabled={busy}
+                  disabled={busy || !deadlineReason.trim()}
                   onClick={saveDeadline}
                 >
                   Guardar
@@ -231,7 +247,10 @@ export function ServiceOrderDetailPage() {
                 <button
                   className="btn secondary"
                   style={{ padding: "4px 8px", fontSize: 12 }}
-                  onClick={() => setEditingDeadline(false)}
+                  onClick={() => {
+                    setEditingDeadline(false);
+                    setDeadlineReason("");
+                  }}
                 >
                   Cancelar
                 </button>
@@ -254,14 +273,16 @@ export function ServiceOrderDetailPage() {
               </div>
             )}
           </div>
-          <div>
-            <div className="muted">Conclusão</div>
-            <div>{order.completedAt ? new Date(order.completedAt).toLocaleString("pt-PT") : "—"}</div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Conclusão</div>
+          <div className="info-tile-value">
+            {order.completedAt ? new Date(order.completedAt).toLocaleString("pt-PT") : "—"}
           </div>
-          <div>
-            <div className="muted">Tempo de produção (total)</div>
-            <div>{minutesToHuman(order.productionMinutes)}</div>
-          </div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Tempo de produção (total)</div>
+          <div className="info-tile-value">{minutesToHuman(order.productionMinutes)}</div>
         </div>
       </div>
 

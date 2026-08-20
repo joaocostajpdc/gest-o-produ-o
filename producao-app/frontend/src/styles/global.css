@@ -291,6 +291,67 @@ tr:hover td {
   background: #f8f9fc;
 }
 
+.os-header {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.os-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.os-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.info-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.info-tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.info-tile-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.info-tile-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
 .current-stage {
   display: flex;
   flex-direction: column;

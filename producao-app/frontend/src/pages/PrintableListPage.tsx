@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, buildQuery, downloadBlob } from "../api/client";
 import { PriorityBadge, StatusBadge } from "../components/Badges";
-import { PriorityLevel, ServiceOrderStatus } from "../types";
+import { Client, PriorityLevel, Product, ServiceOrderStatus, Stage, Supplier } from "../types";
 
 interface ReportRow {
   externalId: string;
@@ -36,7 +36,47 @@ export function PrintableListPage() {
   const [downloading, setDownloading] = useState<"csv" | "pdf" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
-  const [filters, setFilters] = useState({ status: "", priority: "" });
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filters, setFilters] = useState({
+    status: "",
+    stageId: "",
+    supplierId: "",
+    clientId: "",
+    priority: "",
+    category: "",
+    search: "",
+  });
+
+  useEffect(() => {
+    Promise.all([
+      api.get<Stage[]>("/stages"),
+      api.get<Supplier[]>("/suppliers"),
+      api.get<Client[]>("/clients"),
+      api.get<Product[]>("/products"),
+    ])
+      .then(([s, sup, cl, prod]) => {
+        setStages(s);
+        setSuppliers(sup);
+        setClients(cl);
+        setProducts(prod);
+      })
+      .catch(() => {
+        /* filtros são opcionais; falha silenciosa não bloqueia a listagem */
+      });
+  }, []);
+
+  // Mesma lógica da listagem principal de OS: categorias de produto
+  // disponíveis, derivadas dos produtos existentes.
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-PT"));
+  }, [products]);
 
   async function loadReport() {
     setLoading(true);
@@ -81,6 +121,12 @@ export function PrintableListPage() {
           planeamento diário, distribuição entre setores ou consulta offline.
         </p>
         <div className="filters-bar">
+          <input
+            type="text"
+            placeholder="Pesquisar OS, cliente, nº cliente ou produto..."
+            value={filters.search}
+            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+          />
           <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
             <option value="">Estado (todos)</option>
             {STATUS_OPTIONS.map((s) => (
@@ -94,6 +140,44 @@ export function PrintableListPage() {
             {PRIORITY_OPTIONS.map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
+              </option>
+            ))}
+          </select>
+          <select value={filters.stageId} onChange={(e) => setFilters((f) => ({ ...f, stageId: e.target.value }))}>
+            <option value="">Etapa (todas)</option>
+            {stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.supplierId}
+            onChange={(e) => setFilters((f) => ({ ...f, supplierId: e.target.value }))}
+          >
+            <option value="">Fornecedor (todos)</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <select value={filters.clientId} onChange={(e) => setFilters((f) => ({ ...f, clientId: e.target.value }))}>
+            <option value="">Cliente (todos)</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.externalId ? `${c.externalId} — ${c.name}` : c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.category}
+            onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
+          >
+            <option value="">Categoria (todas)</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </select>
@@ -179,11 +263,18 @@ export function PrintableListPage() {
   );
 }
 
-function describeFilters(filters: { status: string; priority: string }): string {
+function describeFilters(filters: {
+  status: string;
+  priority: string;
+  category: string;
+  search: string;
+}): string {
   const parts: string[] = [];
   const statusLabel = STATUS_OPTIONS.find((s) => s.value === filters.status)?.label;
   const priorityLabel = PRIORITY_OPTIONS.find((p) => p.value === filters.priority)?.label;
   if (statusLabel) parts.push(`Estado: ${statusLabel}`);
   if (priorityLabel) parts.push(`Prioridade: ${priorityLabel}`);
+  if (filters.category) parts.push(`Categoria: ${filters.category}`);
+  if (filters.search) parts.push(`Pesquisa: "${filters.search}"`);
   return parts.length ? parts.join(" · ") : "Sem filtros aplicados";
 }

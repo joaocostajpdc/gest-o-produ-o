@@ -14,6 +14,14 @@ import { canChangeFlow, useAuth } from "../contexts/AuthContext";
 
 type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "historico";
 
+// Converte um ISO string para o formato aceite por <input type="datetime-local">.
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function ServiceOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -26,6 +34,8 @@ export function ServiceOrderDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [editingDeadline, setEditingDeadline] = useState(false);
+  const [deadlineInput, setDeadlineInput] = useState("");
 
   async function downloadTravelerPdf() {
     if (!id) return;
@@ -74,6 +84,16 @@ export function ServiceOrderDetailPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function saveDeadline() {
+    if (!id) return;
+    await runAction(() =>
+      api.put(`/service-orders/${id}/deadline`, {
+        deadlineAt: deadlineInput ? new Date(deadlineInput).toISOString() : null,
+      })
+    );
+    setEditingDeadline(false);
   }
 
   if (loading || !order) return <p className="muted">A carregar...</p>;
@@ -167,7 +187,47 @@ export function ServiceOrderDetailPage() {
           </div>
           <div>
             <div className="muted">Data-limite</div>
-            <div>{order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}</div>
+            {editingDeadline ? (
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="datetime-local"
+                  value={deadlineInput}
+                  onChange={(e) => setDeadlineInput(e.target.value)}
+                  style={{ fontSize: 13, padding: "4px 6px" }}
+                />
+                <button
+                  className="btn secondary"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  disabled={busy}
+                  onClick={saveDeadline}
+                >
+                  Guardar
+                </button>
+                <button
+                  className="btn secondary"
+                  style={{ padding: "4px 8px", fontSize: 12 }}
+                  onClick={() => setEditingDeadline(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <div>
+                {order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}
+                {canFlow && (
+                  <button
+                    className="btn secondary"
+                    style={{ marginLeft: 8, padding: "2px 8px", fontSize: 11 }}
+                    onClick={() => {
+                      setDeadlineInput(toDatetimeLocalValue(order.deadlineAt));
+                      setEditingDeadline(true);
+                    }}
+                  >
+                    Editar
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <div className="muted">Conclusão</div>

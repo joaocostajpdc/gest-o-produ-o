@@ -357,6 +357,36 @@ serviceOrdersRouter.post(
   })
 );
 
+// Alterar manualmente a data-limite de uma OS. Por predefinição a
+// data-limite é calculada automaticamente na importação (entrada + prazo
+// de produção do produto), mas por vezes o cliente pede um prazo mais
+// curto (ou mais longo) do que o padrão do produto — este endpoint permite
+// a um Administrador/Supervisor substituir esse valor caso a caso.
+const setDeadlineSchema = z.object({ deadlineAt: z.string().min(1).nullable() });
+serviceOrdersRouter.put(
+  "/:id/deadline",
+  requirePermission("serviceOrders:changeFlow"),
+  asyncHandler(async (req, res) => {
+    const { deadlineAt } = setDeadlineSchema.parse(req.body);
+    const order = await prisma.serviceOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "Ordem de Serviço não encontrada." });
+    const newDeadline = deadlineAt ? new Date(deadlineAt) : null;
+    const updated = await prisma.serviceOrder.update({
+      where: { id: req.params.id },
+      data: { deadlineAt: newDeadline },
+    });
+    await logHistoryEvent({
+      serviceOrderId: req.params.id,
+      type: "OUTRA_ALTERACAO",
+      description: newDeadline
+        ? `Data-limite alterada manualmente para ${newDeadline.toLocaleString("pt-PT")} (prazo padrão do produto substituído).`
+        : "Data-limite removida manualmente.",
+      userId: req.user?.id,
+    });
+    res.json(updated);
+  })
+);
+
 // Atribuir/alterar o fornecedor de uma etapa concreta desta OS (ex.: ao
 // entrar em "Lacagem", escolher a qual fornecedor/lacador a peça é
 // enviada). Independente do fornecedor predefinido na linha de produção do

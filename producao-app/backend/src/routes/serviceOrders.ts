@@ -20,6 +20,7 @@ import {
   importPendingServiceOrders,
   importSingleGoldylocksOrder,
   cancelServiceOrder,
+  deleteServiceOrder,
 } from "../services/serviceOrderService";
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
 import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
@@ -301,6 +302,20 @@ serviceOrdersRouter.post(
   asyncHandler(async (req, res) => {
     const { reason } = cancelSchema.parse(req.body);
     await cancelServiceOrder(req.params.id, reason, req.user?.id);
+    res.status(204).send();
+  })
+);
+
+// Eliminação definitiva de uma Ordem de Serviço (distinta de "Cancelar", que
+// apenas muda o estado e mantém o registo) — reservada à Administração, para
+// remover encomendas lançadas por engano. Apaga também todos os registos
+// associados (etapas, interrupções, observações, histórico).
+serviceOrdersRouter.delete(
+  "/:id",
+  requirePermission("serviceOrders:delete"),
+  asyncHandler(async (req, res) => {
+    const deleted = await deleteServiceOrder(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "Ordem de Serviço não encontrada." });
     res.status(204).send();
   })
 );

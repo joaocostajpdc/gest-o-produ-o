@@ -55,6 +55,10 @@ export function useAuth(): AuthContextValue {
 const ROLE_CAN_MANAGE_CONFIG = ["ADMINISTRADOR", "SUPERVISOR"];
 const ROLE_CAN_CHANGE_FLOW = ["ADMINISTRADOR", "SUPERVISOR"];
 const ROLE_CAN_MANAGE_USERS = ["ADMINISTRADOR"];
+// Eliminação definitiva de uma Ordem de Serviço — reservada à Administração
+// (distinta de "Cancelar OS", que qualquer Supervisor/Administrador pode
+// fazer e mantém o registo para auditoria).
+const ROLE_CAN_DELETE_SERVICE_ORDERS = ["ADMINISTRADOR"];
 
 export function canManageConfig(role?: string | null) {
   return !!role && ROLE_CAN_MANAGE_CONFIG.includes(role);
@@ -64,4 +68,7 @@ export function canChangeFlow(role?: string | null) {
 }
 export function canManageUsers(role?: string | null) {
   return !!role && ROLE_CAN_MANAGE_USERS.includes(role);
+}
+export function canDeleteServiceOrders(role?: string | null) {
+  return !!role && ROLE_CAN_DELETE_SERVICE_ORDERS.includes(role);
 }

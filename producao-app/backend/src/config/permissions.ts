@@ -25,6 +25,7 @@ export type Permission =
   | "serviceOrders:read"
   | "serviceOrders:changeStatus"
   | "serviceOrders:changeFlow" // alterações pontuais: avançar/recuar/inserir/omitir/retomar
+  | "serviceOrders:delete" // eliminação definitiva de uma Ordem de Serviço (apenas Administração)
   | "interruptions:write"
   | "observations:write"
   | "reports:printable";
@@ -43,6 +44,7 @@ const ALL_PERMISSIONS: Permission[] = [
   "serviceOrders:read",
   "serviceOrders:changeStatus",
   "serviceOrders:changeFlow",
+  "serviceOrders:delete",
   "interruptions:write",
   "observations:write",
   "reports:printable",

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, downloadBlob } from "../api/client";
 import {
   HistoryEvent,
@@ -10,7 +10,7 @@ import {
   Supplier,
 } from "../types";
 import { minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
-import { canChangeFlow, useAuth } from "../contexts/AuthContext";
+import { canChangeFlow, canDeleteServiceOrders, useAuth } from "../contexts/AuthContext";
 
 type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "historico";
 
@@ -24,6 +24,7 @@ function toDatetimeLocalValue(iso: string | null): string {
 
 export function ServiceOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
@@ -36,6 +37,7 @@ export function ServiceOrderDetailPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [editingDeadline, setEditingDeadline] = useState(false);
   const [deadlineInput, setDeadlineInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   async function downloadTravelerPdf() {
     if (!id) return;
@@ -96,6 +98,24 @@ export function ServiceOrderDetailPage() {
     setEditingDeadline(false);
   }
 
+  async function handleDelete() {
+    if (!id || !order) return;
+    const confirmed = window.confirm(
+      `Apagar definitivamente a Ordem de Serviço "${order.externalId}"?\n\n` +
+        "Esta ação remove também todas as etapas, interrupções, observações e histórico associados, e não pode ser desfeita."
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      await api.delete(`/service-orders/${id}`);
+      navigate("/");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Erro ao apagar a Ordem de Serviço.");
+      setDeleting(false);
+    }
+  }
+
   if (loading || !order) return <p className="muted">A carregar...</p>;
 
   const canFlow = canChangeFlow(user?.role);
@@ -144,6 +164,11 @@ export function ServiceOrderDetailPage() {
               }}
             >
               Cancelar OS
+            </button>
+          )}
+          {canDeleteServiceOrders(user?.role) && (
+            <button className="btn danger" disabled={busy || deleting} onClick={handleDelete}>
+              {deleting ? "A apagar..." : "Apagar OS"}
             </button>
           )}
         </div>

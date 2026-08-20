@@ -127,6 +127,34 @@ export async function importPendingServiceOrders(actingUserId?: string) {
   return { created, skipped };
 }
 
+/**
+ * Elimina definitivamente uma Ordem de Serviço e todos os registos
+ * associados (instâncias de etapas, interrupções, observações, histórico).
+ * Ao contrário de `cancelServiceOrder` (que apenas muda o estado, mantendo
+ * o registo para auditoria), esta operação é irreversível — reservada à
+ * Administração, para remover encomendas lançadas por engano.
+ */
+export async function deleteServiceOrder(serviceOrderId: string) {
+  const order = await prisma.serviceOrder.findUnique({ where: { id: serviceOrderId } });
+  if (!order) return false;
+
+  await prisma.$transaction(async (tx) => {
+    // Quebra a referência circular (ServiceOrder.currentStageInstanceId ->
+    // ServiceOrderStageInstance) antes de apagar as instâncias de etapa.
+    await tx.serviceOrder.update({
+      where: { id: serviceOrderId },
+      data: { currentStageInstanceId: null },
+    });
+    await tx.observation.deleteMany({ where: { serviceOrderId } });
+    await tx.interruption.deleteMany({ where: { serviceOrderId } });
+    await tx.historyEvent.deleteMany({ where: { serviceOrderId } });
+    await tx.serviceOrderStageInstance.deleteMany({ where: { serviceOrderId } });
+    await tx.serviceOrder.delete({ where: { id: serviceOrderId } });
+  });
+
+  return true;
+}
+
 export async function cancelServiceOrder(serviceOrderId: string, reason: string, userId?: string) {
   return prisma.$transaction(async (tx) => {
     await tx.serviceOrder.update({

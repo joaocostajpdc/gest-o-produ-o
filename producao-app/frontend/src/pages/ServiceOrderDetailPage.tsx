@@ -39,6 +39,7 @@ export function ServiceOrderDetailPage() {
   const [deadlineInput, setDeadlineInput] = useState("");
   const [deadlineReason, setDeadlineReason] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [downloadingLabel, setDownloadingLabel] = useState<"barcode" | "product" | null>(null);
 
   async function downloadTravelerPdf() {
     if (!id) return;
@@ -51,6 +52,23 @@ export function ServiceOrderDetailPage() {
       setActionError(err instanceof Error ? err.message : "Erro ao gerar a Ficha de Produção.");
     } finally {
       setDownloadingPdf(false);
+    }
+  }
+
+  async function downloadLabel(kind: "barcode" | "product") {
+    if (!id) return;
+    setDownloadingLabel(kind);
+    setActionError(null);
+    try {
+      const blob = await api.getBlob(`/service-orders/${id}/label-${kind}`);
+      const suffix = kind === "barcode" ? "etiqueta-qr" : "etiqueta-produto";
+      downloadBlob(blob, `${suffix}-${order?.externalId ?? id}.pdf`);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao gerar a etiqueta."
+      );
+    } finally {
+      setDownloadingLabel(null);
     }
   }
 
@@ -141,12 +159,33 @@ export function ServiceOrderDetailPage() {
           </h2>
           <p className="muted">
             {order.client.name} · {order.product.name}
+            {order.product.externalId ? ` (${order.product.externalId})` : ""}
           </p>
         </div>
         <div className="os-header-actions">
           <button className="btn secondary" disabled={downloadingPdf} onClick={downloadTravelerPdf}>
             {downloadingPdf ? "A gerar..." : "Baixar Ficha de Produção (PDF)"}
           </button>
+          {order.product.category === "Painéis" && (
+            <>
+              <button
+                className="btn secondary"
+                disabled={downloadingLabel !== null}
+                onClick={() => downloadLabel("barcode")}
+                title="Etiqueta pequena com código QR para colar no produto — ao ler, abre esta OS"
+              >
+                {downloadingLabel === "barcode" ? "A gerar..." : "Etiqueta QR"}
+              </button>
+              <button
+                className="btn secondary"
+                disabled={downloadingLabel !== null}
+                onClick={() => downloadLabel("product")}
+                title="Etiqueta com as características do produto"
+              >
+                {downloadingLabel === "product" ? "A gerar..." : "Etiqueta do Produto"}
+              </button>
+            </>
+          )}
           {order.status === "NAO_INICIADA" && (
             <button className="btn" disabled={busy} onClick={() => runAction(() => api.post(`/service-orders/${id}/start`))}>
               Iniciar produção

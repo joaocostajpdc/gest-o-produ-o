@@ -24,6 +24,8 @@ import {
 } from "../services/serviceOrderService";
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
 import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
+import { streamBarcodeLabelPdf, streamProductLabelPdf, LabelOrderData } from "../services/labelPdfService";
+import { PUBLIC_APP_URL } from "../config/publicUrl";
 import { getServiceOrderHistory, logHistoryEvent } from "../services/historyService";
 
 export const serviceOrdersRouter = Router();
@@ -67,7 +69,12 @@ function serializeListItem(order: any, now: Date) {
     externalId: order.externalId,
     status: order.status,
     client: { id: order.client.id, name: order.client.name, externalId: order.client.externalId },
-    product: { id: order.product.id, name: order.product.name, category: order.product.category },
+    product: {
+      id: order.product.id,
+      name: order.product.name,
+      category: order.product.category,
+      externalId: order.product.externalId,
+    },
     createdAt: order.createdAt,
     deadlineAt: order.deadlineAt,
     priority,
@@ -254,6 +261,59 @@ serviceOrdersRouter.get(
     };
 
     await streamServiceOrderTravelerPdf(res, data);
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Etiquetas para colar no produto — por agora disponíveis apenas para a
+// categoria "Painéis" (pedido do utilizador de 2026-08-20; alargar a mais
+// categorias no futuro é apenas remover esta condição).
+// ---------------------------------------------------------------------------
+const LABEL_CATEGORIES = ["Painéis"];
+
+async function loadLabelOrderData(orderId: string): Promise<LabelOrderData | { error: string; status: number }> {
+  const order = await prisma.serviceOrder.findUnique({
+    where: { id: orderId },
+    include: { client: true, product: true },
+  });
+  if (!order) return { error: "Ordem de Serviço não encontrada.", status: 404 };
+  if (!order.product.category || !LABEL_CATEGORIES.includes(order.product.category)) {
+    return {
+      error: `As etiquetas estão disponíveis apenas para as categorias: ${LABEL_CATEGORIES.join(", ")}.`,
+      status: 400,
+    };
+  }
+  return {
+    externalId: order.externalId,
+    clienteName: order.client.name,
+    clienteExternalId: order.client.externalId,
+    productExternalId: order.product.externalId,
+    productName: order.product.name,
+    category: order.product.category,
+    createdAt: order.createdAt.toISOString(),
+    deadlineAt: order.deadlineAt ? order.deadlineAt.toISOString() : null,
+    specifications: order.specifications,
+    orderUrl: `${PUBLIC_APP_URL}/service-orders/${order.id}`,
+  };
+}
+
+serviceOrdersRouter.get(
+  "/:id/label-barcode",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const data = await loadLabelOrderData(req.params.id);
+    if ("error" in data) return res.status(data.status).json({ error: data.error });
+    await streamBarcodeLabelPdf(res, data);
+  })
+);
+
+serviceOrdersRouter.get(
+  "/:id/label-product",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const data = await loadLabelOrderData(req.params.id);
+    if ("error" in data) return res.status(data.status).json({ error: data.error });
+    await streamProductLabelPdf(res, data);
   })
 );
 

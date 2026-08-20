@@ -98,7 +98,7 @@ export interface ServiceOrderListItem {
   externalId: string;
   status: ServiceOrderStatus;
   client: { id: string; name: string; externalId?: string };
-  product: { id: string; name: string; category?: string | null };
+  product: { id: string; name: string; category?: string | null; externalId?: string };
   createdAt: string;
   deadlineAt: string | null;
   priority: PriorityLevel | null;

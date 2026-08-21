@@ -2,7 +2,7 @@ import { PriorityLevel, ServiceOrderStatus, SERVICE_ORDER_STATUS_LABELS } from "
 
 const STATUS_COLORS: Record<ServiceOrderStatus, string> = {
   NAO_INICIADA: "#6b7280",
-  EM_PRODUCAO: "#2f5ce0",
+  EM_PRODUCAO: "#1f3fe0",
   SUSPENSA: "#d97706",
   CONCLUIDA: "#16a34a",
   CANCELADA: "#9ca3af",

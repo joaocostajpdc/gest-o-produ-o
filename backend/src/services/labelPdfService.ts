@@ -78,6 +78,7 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
     margin: 10,
   });
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="etiqueta-qr-${sanitizeFilename(data.externalId)}.pdf"`
@@ -207,6 +208,7 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
     margin: PL_MARGIN,
   });
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="etiqueta-produto-${sanitizeFilename(data.externalId)}.pdf"`

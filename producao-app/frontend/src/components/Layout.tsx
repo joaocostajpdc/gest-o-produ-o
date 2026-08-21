@@ -1,11 +1,14 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import logoMark from "../assets/logo-mark.png";
 import {
   IconBox,
   IconClipboard,
+  IconClose,
   IconLayers,
   IconLogout,
+  IconMenu,
   IconPrinter,
   IconRoute,
   IconTruck,
@@ -22,10 +25,34 @@ function initials(name?: string) {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
+  // gaveta deslizante aberta pela barra superior); em ecrã de computador o
+  // CSS ignora esta flag e o menu está sempre visível.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // Fecha a gaveta sempre que se navega para outra página.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <header className="mobile-topbar">
+        <button
+          className="mobile-menu-btn"
+          onClick={() => setMenuOpen(true)}
+          aria-label="Abrir menu"
+        >
+          <IconMenu />
+        </button>
+        <img src={logoMark} alt="Minho Ferragens" className="mobile-topbar-logo" />
+        <span className="mobile-topbar-title">Gestão de Produção</span>
+      </header>
+
+      {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
+
+      <aside className={`sidebar${menuOpen ? " open" : ""}`}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">
             <img src={logoMark} alt="Minho Ferragens" />
@@ -34,6 +61,13 @@ export function Layout() {
             <div className="sidebar-brand-name">Minho Ferragens</div>
             <div className="sidebar-brand-sub">Gestão de Produção</div>
           </div>
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setMenuOpen(false)}
+            aria-label="Fechar menu"
+          >
+            <IconClose />
+          </button>
         </div>
 
         <nav>

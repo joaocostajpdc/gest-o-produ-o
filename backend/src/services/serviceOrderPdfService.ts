@@ -91,6 +91,7 @@ export async function streamServiceOrderTravelerPdf(res: Response, data: Travele
 
   const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, bufferPages: true });
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="ficha-producao-${sanitizeFilename(data.externalId)}.pdf"`

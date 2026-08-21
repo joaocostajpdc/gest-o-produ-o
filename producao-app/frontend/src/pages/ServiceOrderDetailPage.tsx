@@ -185,59 +185,74 @@ export function ServiceOrderDetailPage() {
           </p>
         </div>
         <div className="os-header-actions">
-          <button className="btn secondary" disabled={downloadingPdf} onClick={downloadTravelerPdf}>
-            {downloadingPdf ? "A gerar..." : "Baixar Ficha de Produção (PDF)"}
-          </button>
-          {order.product.category === "Painéis" && (
+          <div className="os-actions-group">
+            {order.status === "NAO_INICIADA" && (
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => runAction(() => api.post(`/service-orders/${id}/start`))}
+              >
+                Iniciar produção
+              </button>
+            )}
+            {order.status === "EM_PRODUCAO" && (
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => runAction(() => api.post(`/service-orders/${id}/stage-flow/advance`))}
+              >
+                Avançar etapa
+              </button>
+            )}
+            <button className="btn secondary" disabled={downloadingPdf} onClick={downloadTravelerPdf}>
+              {downloadingPdf ? "A gerar..." : "Ficha de Produção (PDF)"}
+            </button>
+            {order.product.category === "Painéis" && (
+              <>
+                <button
+                  className="btn secondary"
+                  disabled={downloadingLabel !== null}
+                  onClick={() => downloadLabel("barcode")}
+                  title="Etiqueta pequena com código QR para colar no produto — ao ler, abre esta OS"
+                >
+                  {downloadingLabel === "barcode" ? "A gerar..." : "Etiqueta QR"}
+                </button>
+                <button
+                  className="btn secondary"
+                  disabled={downloadingLabel !== null}
+                  onClick={() => downloadLabel("product")}
+                  title="Etiqueta com as características do produto"
+                >
+                  {downloadingLabel === "product" ? "A gerar..." : "Etiqueta do Produto"}
+                </button>
+              </>
+            )}
+          </div>
+
+          {((order.status === "NAO_INICIADA" || order.status === "EM_PRODUCAO" || order.status === "SUSPENSA") ||
+            canDeleteServiceOrders(user?.role)) && (
             <>
-              <button
-                className="btn secondary"
-                disabled={downloadingLabel !== null}
-                onClick={() => downloadLabel("barcode")}
-                title="Etiqueta pequena com código QR para colar no produto — ao ler, abre esta OS"
-              >
-                {downloadingLabel === "barcode" ? "A gerar..." : "Etiqueta QR"}
-              </button>
-              <button
-                className="btn secondary"
-                disabled={downloadingLabel !== null}
-                onClick={() => downloadLabel("product")}
-                title="Etiqueta com as características do produto"
-              >
-                {downloadingLabel === "product" ? "A gerar..." : "Etiqueta do Produto"}
-              </button>
+              <div className="os-actions-divider" />
+              <div className="os-actions-group">
+                {(order.status === "NAO_INICIADA" || order.status === "EM_PRODUCAO" || order.status === "SUSPENSA") && (
+                  <button
+                    className="btn danger"
+                    disabled={busy}
+                    onClick={() => {
+                      const reason = window.prompt("Motivo do cancelamento:");
+                      if (reason) runAction(() => api.post(`/service-orders/${id}/cancel`, { reason }));
+                    }}
+                  >
+                    Cancelar OS
+                  </button>
+                )}
+                {canDeleteServiceOrders(user?.role) && (
+                  <button className="btn danger" disabled={busy || deleting} onClick={handleDelete}>
+                    {deleting ? "A apagar..." : "Apagar OS"}
+                  </button>
+                )}
+              </div>
             </>
-          )}
-          {order.status === "NAO_INICIADA" && (
-            <button className="btn" disabled={busy} onClick={() => runAction(() => api.post(`/service-orders/${id}/start`))}>
-              Iniciar produção
-            </button>
-          )}
-          {order.status === "EM_PRODUCAO" && (
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() => runAction(() => api.post(`/service-orders/${id}/stage-flow/advance`))}
-            >
-              Avançar etapa
-            </button>
-          )}
-          {(order.status === "NAO_INICIADA" || order.status === "EM_PRODUCAO" || order.status === "SUSPENSA") && (
-            <button
-              className="btn danger"
-              disabled={busy}
-              onClick={() => {
-                const reason = window.prompt("Motivo do cancelamento:");
-                if (reason) runAction(() => api.post(`/service-orders/${id}/cancel`, { reason }));
-              }}
-            >
-              Cancelar OS
-            </button>
-          )}
-          {canDeleteServiceOrders(user?.role) && (
-            <button className="btn danger" disabled={busy || deleting} onClick={handleDelete}>
-              {deleting ? "A apagar..." : "Apagar OS"}
-            </button>
           )}
         </div>
       </div>

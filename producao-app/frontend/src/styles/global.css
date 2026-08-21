@@ -206,6 +206,122 @@ a {
   flex: 1;
   padding: 26px 34px;
   max-width: 1280px;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------- */
+/* Barra superior e gaveta do menu para telemóvel/tablet — escondidas por */
+/* omissão; só aparecem abaixo do breakpoint móvel definido mais abaixo.  */
+/* --------------------------------------------------------------------- */
+
+.mobile-topbar {
+  display: none;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+.sidebar-close-btn {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #161b2c;
+    color: #fff;
+    padding: 12px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: var(--shadow-md);
+  }
+
+  .mobile-menu-btn {
+    background: transparent;
+    border: none;
+    color: #fff;
+    padding: 4px;
+    display: flex;
+    cursor: pointer;
+  }
+
+  .mobile-topbar-logo {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    background: #fff;
+    border-radius: 6px;
+    padding: 3px;
+  }
+
+  .mobile-topbar-title {
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 25% 0 0;
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    overflow-y: auto;
+    width: auto;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+    background: transparent;
+    border: none;
+    color: #c8cde0;
+    padding: 4px;
+    cursor: pointer;
+    margin-left: auto;
+    align-self: flex-start;
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 24, 0.5);
+    z-index: 25;
+  }
+
+  .main-content {
+    padding: 18px 16px 32px;
+    max-width: 100%;
+  }
+
+  /* Tabelas mantêm as suas colunas (não colapsam em cartões) mas o cartão
+     que as contém ganha scroll horizontal próprio, para não partir o
+     layout da página nem obrigar a fazer zoom out. */
+  .card:has(table) {
+    overflow-x: auto;
+  }
+
+  /* Nos campos de formulário, tamanho de letra 16px evita que o Safari do
+     iPhone/iPad faça zoom automático ao tocar no campo. */
+  select,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  textarea {
+    font-size: 16px;
+  }
 }
 
 .page-header {
@@ -591,13 +707,17 @@ label {
   align-items: center;
   justify-content: center;
   background: radial-gradient(circle at 20% 20%, #232a4a 0%, #12162a 60%, #0d1020 100%);
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .login-card {
   background: #fff;
   padding: 34px 32px;
   border-radius: 14px;
-  width: 360px;
+  width: 100%;
+  max-width: 360px;
+  box-sizing: border-box;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
 

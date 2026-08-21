@@ -318,13 +318,32 @@ tr:hover td {
 
 .os-header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
+.os-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Separa visualmente as ações destrutivas (Cancelar/Apagar OS) das ações
+   normais, para reduzir o risco de clique acidental — ver pedido do
+   utilizador de tornar a página "mais prática". */
+.os-actions-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 24px;
+  background: var(--color-border);
+  margin: 0 2px;
+}
+
 .info-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -335,6 +354,8 @@ tr:hover td {
   border-radius: var(--radius);
   padding: 12px 14px;
   box-shadow: var(--shadow-sm);
+  flex: 1 1 160px;
+  min-width: 150px;
 }
 
 .info-tile-label {

@@ -1,3 +1,11 @@
+
+serviceOrders_ts.txt
+
+Página
+1
+/
+1
+100%
 import express, { Router } from "express";
 import { z } from "zod";
 import { InterruptionReason } from "@prisma/client";
@@ -732,3 +740,4 @@ serviceOrdersRouter.delete(
     res.status(204).send();
   })
 );
+A apresentar serviceOrders_ts.txt.

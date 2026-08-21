@@ -287,7 +287,7 @@ async function loadLabelOrderData(orderId: string): Promise<LabelOrderData | { e
     externalId: order.externalId,
     clienteName: order.client.name,
     clienteExternalId: order.client.externalId,
-    productExternalId: order.product.externalId,
+    productExternalId: order.product.externalId ?? "—",
     productName: order.product.name,
     category: order.product.category,
     createdAt: order.createdAt.toISOString(),

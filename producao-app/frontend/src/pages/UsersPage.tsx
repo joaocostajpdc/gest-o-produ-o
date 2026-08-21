@@ -9,6 +9,7 @@ export function UsersPage() {
   const [matrix, setMatrix] = useState<Record<UserRole, string[]> | null>(null);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   async function load() {
     const [u, m] = await Promise.all([
@@ -41,6 +42,8 @@ export function UsersPage() {
   }
 
   const allPermissions = matrix ? Array.from(new Set(Object.values(matrix).flat())).sort() : [];
+  const activeUsers = users.filter((u) => (u as any).active);
+  const inactiveUsers = users.filter((u) => !(u as any).active);
 
   return (
     <div>
@@ -103,7 +106,7 @@ export function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {activeUsers.map((u) => (
               <tr key={u.id}>
                 <td>{u.name}</td>
                 <td>{u.email}</td>
@@ -118,6 +121,48 @@ export function UsersPage() {
             ))}
           </tbody>
         </table>
+
+        {inactiveUsers.length > 0 && (
+          <>
+            <button
+              className="btn secondary"
+              style={{ marginTop: 12 }}
+              onClick={() => setShowInactive((v) => !v)}
+            >
+              {showInactive
+                ? "Ocultar utilizadores inativos"
+                : `Mostrar utilizadores inativos (${inactiveUsers.length})`}
+            </button>
+            {showInactive && (
+              <table style={{ marginTop: 12 }}>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Perfil</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inactiveUsers.map((u) => (
+                    <tr key={u.id}>
+                      <td>{u.name}</td>
+                      <td>{u.email}</td>
+                      <td>{u.role}</td>
+                      <td>Inativo</td>
+                      <td>
+                        <button className="btn secondary" onClick={() => toggleActive(u as any)}>
+                          Ativar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
       </div>
 
       {matrix && (

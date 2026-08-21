@@ -6,8 +6,8 @@ import logoMark from "../assets/logo-mark.png";
 
 export function LoginPage() {
   const { user, login } = useAuth();
-  const [email, setEmail] = useState("admin@producao.local");
-  const [password, setPassword] = useState("producao123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -59,11 +59,6 @@ export function LoginPage() {
         <button className="btn" type="submit" disabled={submitting} style={{ width: "100%" }}>
           {submitting ? "A entrar..." : "Entrar"}
         </button>
-
-        <p className="muted" style={{ marginTop: 16 }}>
-          Utilizadores de demonstração (seed): admin@producao.local, supervisor@producao.local,
-          operario@producao.local — palavra-passe: producao123
-        </p>
       </form>
     </div>
   );

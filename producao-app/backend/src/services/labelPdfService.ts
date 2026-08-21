@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import bwipjs from "bwip-js";
 import { Response } from "express";
+import { LOGO_MARK_PNG_BASE64 } from "../assets/logoMark";
 
 // ============================================================================
 // Etiquetas para colar no produto físico (inicialmente apenas para a
@@ -39,9 +40,11 @@ const COLORS = {
   ink: "#161b2c",
   muted: "#667085",
   border: "#e2e4e9",
-  primary: "#2f5ce0",
-  specBg: "#f4f7ff",
+  primary: "#1f3fe0",
+  specBg: "#eef1ff",
 };
+
+const LOGO_PNG = Buffer.from(LOGO_MARK_PNG_BASE64, "base64");
 
 function sanitizeFilename(value: string): string {
   return value.replace(/[^a-z0-9-_]+/gi, "-");
@@ -75,6 +78,7 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
     margin: 10,
   });
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="etiqueta-qr-${sanitizeFilename(data.externalId)}.pdf"`
@@ -145,17 +149,66 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 
 // ---------------------------------------------------------------------------
 // Etiqueta do produto (ficha detalhada, tipo tag) — 100mm x 150mm.
+//
+// Segue o modelo de etiqueta já usado nas caixas físicas (logótipo, campos
+// Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant./V.Ref./N.O.S.,
+// código QR e data) — ver pedido do utilizador de 2026-08-21. Os valores dos
+// campos são lidos do mesmo texto livre de "Características do Produto" já
+// usado na Ficha de Produção e na página da OS (sem exigir novos campos
+// estruturados na aplicação); os campos ausentes desse texto são omitidos.
 // ---------------------------------------------------------------------------
 const PRODUCT_LABEL_WIDTH = 100 * 2.83465;
 const PRODUCT_LABEL_HEIGHT = 150 * 2.83465;
 const PL_MARGIN = 16;
 
+/** Lê linhas "Rótulo: valor" do texto livre de especificações. */
+function parseSpecLines(specifications?: string | null): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!specifications) return map;
+  for (const rawLine of specifications.split("\n")) {
+    const match = rawLine.match(/^([^:]+):\s*(.+)$/);
+    if (!match) continue;
+    const key = match[1].trim().toLowerCase();
+    const value = match[2].trim().replace(/,\s*$/, "");
+    if (value) map[key] = value;
+  }
+  return map;
+}
+
+function buildProductLabelFields(data: LabelOrderData): { label: string; value: string }[] {
+  const specs = parseSpecLines(data.specifications);
+  const fields: { label: string; value: string }[] = [];
+  const push = (label: string, ...keys: string[]) => {
+    const value = keys.map((k) => specs[k]).find((v) => !!v);
+    if (value) fields.push({ label, value });
+  };
+  push("Modelo", "modelo");
+  push("Acabamento", "acabamento");
+  push("Enchimento", "enchimento");
+  push("Espessura", "espessura");
+  push("Vidro", "vidro");
+  push("Medida", "medida", "dimensões", "dimensoes");
+  push("Quant.", "quant.", "quant", "quantidade");
+  // "Referente a" é a referência do cliente para esta encomenda — mostra-se
+  // como "V/Ref." (Vossa Referência), tal como no modelo físico.
+  const vRef = specs["referente a"] ?? specs["v/ref"] ?? specs["v/ref."];
+  fields.push({ label: "V/Ref.", value: vRef ?? "—" });
+  // N.O.S. (Nº da nossa Ordem de Serviço) é sempre o nosso próprio número —
+  // não depende do texto de especificações.
+  fields.push({ label: "N.O.S.", value: data.externalId });
+  return fields;
+}
+
 export async function streamProductLabelPdf(res: Response, data: LabelOrderData) {
+  const qrPng = await generateQrCode(data.orderUrl);
+  const fields = buildProductLabelFields(data);
+
   const doc = new PDFDocument({
     size: [PRODUCT_LABEL_WIDTH, PRODUCT_LABEL_HEIGHT],
     margin: PL_MARGIN,
   });
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="etiqueta-produto-${sanitizeFilename(data.externalId)}.pdf"`
@@ -164,58 +217,54 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 
   const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
 
-  doc.fontSize(9).fillColor(COLORS.primary).font("Helvetica-Bold").text("MINHO FERRAGENS", { width });
-  doc.fontSize(11).fillColor(COLORS.muted).font("Helvetica-Bold").text("Etiqueta do Produto", { width });
-  doc.moveDown(0.6);
+  // Todo o texto usa coordenadas (x, y) absolutas em vez do cursor "fluido"
+  // do pdfkit — mesma razão da etiqueta QR acima: o número de campos aqui é
+  // sempre limitado (no máximo 9), o que torna seguro calcular a posição de
+  // cada linha à partida, sem risco de o pdfkit inserir uma página extra.
+  const logoSize = 42;
+  const logoX = PL_MARGIN + (width - logoSize) / 2;
+  doc.image(LOGO_PNG, logoX, PL_MARGIN, { width: logoSize, height: logoSize });
 
-  const line = () => {
-    doc
-      .moveTo(PL_MARGIN, doc.y)
-      .lineTo(PRODUCT_LABEL_WIDTH - PL_MARGIN, doc.y)
-      .strokeColor(COLORS.border)
-      .lineWidth(1)
-      .stroke();
-    doc.moveDown(0.5);
-  };
+  let y = PL_MARGIN + logoSize + 8;
+  doc
+    .fontSize(13)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text("MINHO FERRAGENS", PL_MARGIN, y, { width, align: "center" });
+  y += 17;
+  doc
+    .fontSize(8)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Oblique")
+    .text("JPDC - MYNHOFERRAGENS, LDA", PL_MARGIN, y, { width, align: "center" });
+  y += 16;
 
-  const field = (label: string, value: string, valueSize = 12) => {
-    doc.fontSize(8).fillColor(COLORS.muted).font("Helvetica-Bold").text(label.toUpperCase(), { width });
-    doc.fontSize(valueSize).fillColor(COLORS.ink).font("Helvetica-Bold").text(value || "—", { width });
-    doc.moveDown(0.5);
-  };
+  doc
+    .moveTo(PL_MARGIN, y)
+    .lineTo(PRODUCT_LABEL_WIDTH - PL_MARGIN, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(1)
+    .stroke();
+  y += 12;
 
-  line();
-  field("Código do produto", data.productExternalId, 16);
-  field("Descrição", data.productName);
-  if (data.category) field("Categoria", data.category, 10);
-  line();
-  field("Nº Ordem de Serviço", data.externalId, 14);
-  field("Cliente", data.clienteExternalId ? `${data.clienteExternalId} — ${data.clienteName}` : data.clienteName);
-  line();
-
-  if (data.specifications) {
-    doc
-      .fontSize(8)
-      .fillColor(COLORS.primary)
-      .font("Helvetica-Bold")
-      .text("CARACTERÍSTICAS", { width });
-    doc.moveDown(0.2);
-    const specLines = data.specifications.split("\n").filter(Boolean);
-    const boxY = doc.y;
-    const boxHeight = specLines.length * 15 + 12;
-    doc.rect(PL_MARGIN, boxY, width, boxHeight).fill(COLORS.specBg);
-    let ly = boxY + 6;
-    doc.fontSize(10).font("Helvetica-Bold").fillColor(COLORS.ink);
-    for (const l of specLines) {
-      doc.text(l, PL_MARGIN + 8, ly, { width: width - 16 });
-      ly += 15;
-    }
-    doc.y = boxY + boxHeight + 10;
-    line();
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.ink);
+  for (const f of fields) {
+    doc.text(`${f.label}: ${f.value}`, PL_MARGIN, y, { width, height: 15, ellipsis: true });
+    y += 16;
   }
 
-  field("Data de início", formatDate(data.createdAt), 10);
-  field("Data-limite", formatDate(data.deadlineAt), 10);
+  // Código QR + data, alinhados ao fundo da etiqueta, tal como no modelo
+  // físico. Ao ser lido, abre esta Ordem de Serviço na aplicação — mesmo
+  // comportamento da Etiqueta QR.
+  const qrSize = 68;
+  const qrY = PRODUCT_LABEL_HEIGHT - PL_MARGIN - qrSize;
+  doc.image(qrPng, PL_MARGIN, qrY, { width: qrSize, height: qrSize });
+
+  doc
+    .fontSize(9)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text(formatDate(data.createdAt), PL_MARGIN, qrY + qrSize - 12, { width, align: "right" });
 
   doc.end();
 }

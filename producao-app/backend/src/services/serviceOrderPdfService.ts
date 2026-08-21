@@ -14,6 +14,12 @@ import { PriorityLevel, PRIORITY_COLORS } from "./priorityService";
 // lhe foram associadas, para que uma nota registada (ex.: um defeito
 // detetado na Fresagem) continue visível quando a peça passa para a etapa
 // seguinte, em vez de ficar "perdida" numa lista separada.
+//
+// Nota de estilo (2026-08-21): paleta e "cartões" com borda arredondada
+// alinhados com o visual já usado na aplicação web (ver --color-primary em
+// frontend/src/styles/global.css e os .info-tile da página de detalhe da
+// OS) — só o aspeto foi alterado nesta revisão, todo o conteúdo e lógica
+// (estados, datas, checklist automático, observações) mantêm-se iguais.
 // ============================================================================
 
 export interface TravelerStageRow {
@@ -48,10 +54,12 @@ const COLORS = {
   ink: "#161b2c",
   muted: "#667085",
   border: "#e2e4e9",
-  headerBg: "#f4f5f7",
-  specBg: "#f4f7ff",
+  cardBg: "#fbfbfd",
+  specBg: "#eef1ff",
   noteBg: "#fff8ec",
-  primary: "#2f5ce0",
+  primary: "#1f3fe0",
+  primaryDark: "#16309e",
+  primarySoft: "#eef1ff",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -83,6 +91,7 @@ export async function streamServiceOrderTravelerPdf(res: Response, data: Travele
 
   const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, bufferPages: true });
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
     `attachment; filename="ficha-producao-${sanitizeFilename(data.externalId)}.pdf"`
@@ -128,20 +137,58 @@ function ensureSpace(doc: PDFKit.PDFDocument, neededHeight: number) {
   }
 }
 
+function drawSectionTitle(doc: PDFKit.PDFDocument, title: string) {
+  const y = doc.y;
+  doc.roundedRect(doc.page.margins.left, y + 3, 4, 12, 1.5).fill(COLORS.primary);
+  doc
+    .fontSize(12)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text(title, doc.page.margins.left + 11, y);
+}
+
 function drawHeader(doc: PDFKit.PDFDocument, data: TravelerData, barcodePng: Buffer) {
+  // Barra de destaque a toda a largura da página, para dar identidade
+  // visual consistente com a cor primária já usada na aplicação web.
+  doc.rect(0, 0, doc.page.width, 6).fill(COLORS.primary);
+
   const startY = doc.y;
-  doc.fontSize(18).fillColor(COLORS.ink).font("Helvetica-Bold").text("Gestão de Produção");
-  doc.fontSize(13).fillColor(COLORS.primary).font("Helvetica-Bold").text("Ficha de Produção");
-  doc.fontSize(20).fillColor(COLORS.ink).font("Helvetica-Bold").text(data.externalId, { paragraphGap: 2 });
-  doc.fontSize(10).fillColor(COLORS.muted).font("Helvetica").text(`${data.clienteName} · ${data.produtoName}`);
 
-  // Código de barras alinhado à direita do cabeçalho.
-  const barcodeWidth = 170;
-  const barcodeX = doc.page.width - doc.page.margins.right - barcodeWidth;
-  doc.image(barcodePng, barcodeX, startY, { width: barcodeWidth });
+  // Código de barras alinhado à direita do cabeçalho, dentro de um cartão
+  // com borda arredondada, para se destacar como elemento "de leitura
+  // rápida" separado do resto da identificação. O bloco de texto à
+  // esquerda tem de reservar largura suficiente para não passar por baixo
+  // desta caixa.
+  const barcodeBoxWidth = 178;
+  const barcodeBoxHeight = 82;
+  const barcodeBoxX = doc.page.width - doc.page.margins.right - barcodeBoxWidth;
+  const textWidth = barcodeBoxX - doc.page.margins.left - 16;
 
-  doc.y = Math.max(doc.y, startY + 70);
-  doc.moveDown(0.6);
+  doc
+    .fontSize(9)
+    .fillColor(COLORS.primary)
+    .font("Helvetica-Bold")
+    .text("GESTÃO DE PRODUÇÃO  ·  FICHA DE PRODUÇÃO", { characterSpacing: 0.3, width: textWidth });
+
+  doc
+    .fontSize(23)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text(data.externalId, { paragraphGap: 2, width: textWidth });
+
+  doc
+    .fontSize(10.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text(`${data.clienteName}  ·  ${data.produtoName}`, { width: textWidth, ellipsis: true });
+  doc
+    .roundedRect(barcodeBoxX, startY, barcodeBoxWidth, barcodeBoxHeight, 6)
+    .lineWidth(1)
+    .fillAndStroke("#ffffff", COLORS.border);
+  doc.image(barcodePng, barcodeBoxX + 9, startY + 9, { width: barcodeBoxWidth - 18 });
+
+  doc.y = Math.max(doc.y, startY + barcodeBoxHeight);
+  doc.moveDown(0.9);
   const lineY = doc.y;
   doc
     .moveTo(doc.page.margins.left, lineY)
@@ -149,74 +196,97 @@ function drawHeader(doc: PDFKit.PDFDocument, data: TravelerData, barcodePng: Buf
     .strokeColor(COLORS.border)
     .lineWidth(1)
     .stroke();
-  doc.moveDown(0.6);
+  doc.moveDown(0.9);
+}
+
+interface InfoTileCell {
+  label: string;
+  value: string;
+  pillColor?: string;
 }
 
 function drawInfoGrid(doc: PDFKit.PDFDocument, data: TravelerData) {
   const width = contentWidth(doc);
-  const colWidth = width / 3;
+  const gap = 10;
+  const tileWidth = (width - gap * 2) / 3;
+  const tileHeight = 48;
+  const startX = doc.page.margins.left;
   const rowY = doc.y;
 
-  const cells: { label: string; value: string; color?: string }[] = [
+  const row1: InfoTileCell[] = [
     { label: "ESTADO", value: STATUS_LABELS[data.status] ?? data.status },
     {
       label: "PRIORIDADE",
       value: data.priorityNivel ? PRIORITY_PILL_LABELS[data.priorityNivel] : "—",
-      color: data.priorityNivel ? PRIORITY_COLORS[data.priorityNivel] : undefined,
+      pillColor: data.priorityNivel ? PRIORITY_COLORS[data.priorityNivel] : undefined,
     },
     { label: "DATA-LIMITE", value: formatDate(data.deadlineAt) },
+  ];
+  const row2: InfoTileCell[] = [
     { label: "DATA DE ENTRADA", value: formatDate(data.createdAt) },
     { label: "INÍCIO DA PRODUÇÃO", value: formatDate(data.startedAt) },
   ];
 
-  let x = doc.page.margins.left;
-  let y = rowY;
-  cells.forEach((cell, i) => {
-    if (i > 0 && i % 3 === 0) {
-      y += 42;
-      x = doc.page.margins.left;
-    }
-    doc.fontSize(8).fillColor(COLORS.muted).font("Helvetica-Bold").text(cell.label, x, y, { width: colWidth - 10 });
+  const drawTile = (cell: InfoTileCell, x: number, y: number) => {
+    doc.roundedRect(x, y, tileWidth, tileHeight, 6).lineWidth(1).fillAndStroke(COLORS.cardBg, COLORS.border);
     doc
-      .fontSize(12)
-      .fillColor(cell.color ?? COLORS.ink)
+      .fontSize(7.5)
+      .fillColor(COLORS.muted)
       .font("Helvetica-Bold")
-      .text(cell.value, x, y + 12, { width: colWidth - 10 });
-    x += colWidth;
-  });
+      .text(cell.label, x + 10, y + 10, { width: tileWidth - 20, characterSpacing: 0.2 });
 
-  doc.y = y + 42;
-  doc.moveDown(0.4);
+    if (cell.pillColor) {
+      doc.font("Helvetica-Bold").fontSize(9.5);
+      const pillWidth = Math.min(tileWidth - 20, doc.widthOfString(cell.value) + 16);
+      const pillY = y + 23;
+      doc.roundedRect(x + 10, pillY, pillWidth, 17, 8.5).fill(cell.pillColor);
+      doc
+        .fillColor("#ffffff")
+        .text(cell.value, x + 10, pillY + 4.5, { width: pillWidth, align: "center", lineBreak: false });
+    } else {
+      doc
+        .fontSize(12)
+        .fillColor(COLORS.ink)
+        .font("Helvetica-Bold")
+        .text(cell.value, x + 10, y + 23, { width: tileWidth - 20, height: 18, ellipsis: true });
+    }
+  };
+
+  row1.forEach((cell, i) => drawTile(cell, startX + i * (tileWidth + gap), rowY));
+  const row2Y = rowY + tileHeight + gap;
+  row2.forEach((cell, i) => drawTile(cell, startX + i * (tileWidth + gap), row2Y));
+
+  doc.y = row2Y + tileHeight;
+  doc.moveDown(0.9);
 }
 
 function drawSpecifications(doc: PDFKit.PDFDocument, specifications: string) {
   const width = contentWidth(doc);
   const lines = specifications.split("\n").filter(Boolean);
-  const lineHeight = 16;
+  const lineHeight = 15;
   const padding = 12;
-  const boxHeight = padding * 2 + 14 + lines.length * lineHeight;
+  const boxHeight = padding * 2 + 16 + lines.length * lineHeight;
 
-  ensureSpace(doc, boxHeight + 10);
+  ensureSpace(doc, boxHeight + 14);
 
   const x = doc.page.margins.left;
   const y = doc.y;
-  doc.rect(x, y, width, boxHeight).fill(COLORS.specBg);
-  doc.rect(x, y, 4, boxHeight).fill(COLORS.primary);
+  doc.roundedRect(x, y, width, boxHeight, 6).lineWidth(1).fillAndStroke(COLORS.specBg, COLORS.border);
 
   doc
     .fontSize(9)
-    .fillColor(COLORS.primary)
+    .fillColor(COLORS.primaryDark)
     .font("Helvetica-Bold")
-    .text("CARACTERÍSTICAS DO PRODUTO", x + padding + 6, y + padding);
+    .text("CARACTERÍSTICAS DO PRODUTO", x + padding, y + padding, { characterSpacing: 0.2 });
 
   let ly = y + padding + 16;
   doc.fontSize(11).font("Helvetica-Bold").fillColor(COLORS.ink);
   for (const line of lines) {
-    doc.text(line, x + padding + 6, ly, { width: width - padding * 2 - 6 });
+    doc.text(line, x + padding, ly, { width: width - padding * 2 });
     ly += lineHeight;
   }
 
-  doc.y = y + boxHeight + 12;
+  doc.y = y + boxHeight + 14;
 }
 
 // Os símbolos Unicode de checklist (☑ ▶ ☐ ⊘) não são suportados pelos
@@ -252,27 +322,44 @@ function drawStageIcon(doc: PDFKit.PDFDocument, status: TravelerStageRow["status
 function drawStagesChecklist(doc: PDFKit.PDFDocument, stages: TravelerStageRow[]) {
   const width = contentWidth(doc);
 
-  ensureSpace(doc, 24);
-  doc.fontSize(11).fillColor(COLORS.ink).font("Helvetica-Bold").text("Checklist de Etapas");
-  doc.moveDown(0.3);
+  ensureSpace(doc, 26);
+  drawSectionTitle(doc, "Checklist de Etapas");
+  doc.moveDown(0.7);
+
+  const cardPadding = 12;
+  const headerHeight = 34;
 
   stages.forEach((stage) => {
     const statusLabel = STAGE_STATUS_LABEL[stage.status];
     const isMuted = stage.status === "PENDENTE" || stage.status === "OMITIDA";
+    const isActive = stage.status === "ATIVA";
 
-    const rowHeight = 20;
-    ensureSpace(doc, rowHeight + estimateObservationsHeight(doc, stage.observations, width));
+    const obsWidth = width - cardPadding * 2;
+    const obsHeight = estimateObservationsHeight(doc, stage.observations, obsWidth);
+    const cardHeight = cardPadding * 2 + headerHeight + obsHeight;
+
+    ensureSpace(doc, cardHeight + 10);
 
     const x = doc.page.margins.left;
     const y = doc.y;
 
-    drawStageIcon(doc, stage.status, x, y + 2);
+    doc
+      .roundedRect(x, y, width, cardHeight, 6)
+      .lineWidth(1)
+      .fillAndStroke(isActive ? COLORS.primarySoft : COLORS.cardBg, COLORS.border);
+    if (isActive) {
+      doc.save();
+      doc.roundedRect(x, y, 4, cardHeight, 2).fill(COLORS.primary);
+      doc.restore();
+    }
+
+    drawStageIcon(doc, stage.status, x + cardPadding, y + cardPadding);
 
     doc
       .fontSize(11)
       .fillColor(isMuted ? COLORS.muted : COLORS.ink)
       .font("Helvetica-Bold")
-      .text(stage.stageName, x + 22, y, { width: width - 160, continued: false });
+      .text(stage.stageName, x + cardPadding + 22, y + cardPadding - 1, { width: width - cardPadding * 2 - 22 });
 
     doc
       .fontSize(9)
@@ -280,17 +367,16 @@ function drawStagesChecklist(doc: PDFKit.PDFDocument, stages: TravelerStageRow[]
       .font("Helvetica")
       .text(
         stage.supplierName ? `${statusLabel} · Fornecedor: ${stage.supplierName}` : statusLabel,
-        x + 22,
-        y + 14
+        x + cardPadding + 22,
+        y + cardPadding + 14
       );
 
-    doc.y = y + rowHeight + 4;
-
     if (stage.observations.length) {
-      drawStageObservations(doc, stage.observations, width);
+      doc.y = y + cardPadding + headerHeight;
+      drawStageObservations(doc, stage.observations, x + cardPadding, obsWidth);
     }
 
-    doc.moveDown(0.2);
+    doc.y = y + cardHeight + 10;
   });
 }
 
@@ -300,58 +386,54 @@ function estimateObservationsHeight(
   width: number
 ): number {
   if (!observations.length) return 0;
-  let total = 8;
+  let total = 0;
   doc.fontSize(9).font("Helvetica");
   for (const obs of observations) {
-    total += doc.heightOfString(obs.text, { width: width - 60 }) + 18;
+    total += doc.heightOfString(obs.text, { width: width - 24 }) + 22 + 6;
   }
   return total;
 }
 
-function drawStageObservations(doc: PDFKit.PDFDocument, observations: TravelerStageRow["observations"], width: number) {
-  const x = doc.page.margins.left + 22;
-  const boxWidth = width - 22;
-
+function drawStageObservations(doc: PDFKit.PDFDocument, observations: TravelerStageRow["observations"], x: number, width: number) {
   observations.forEach((obs) => {
     doc.fontSize(9).font("Helvetica");
-    const textHeight = doc.heightOfString(obs.text, { width: boxWidth - 24 });
+    const textHeight = doc.heightOfString(obs.text, { width: width - 24 });
     const boxHeight = textHeight + 22;
 
-    ensureSpace(doc, boxHeight + 4);
     const y = doc.y;
 
-    doc.rect(x, y, boxWidth, boxHeight).fill(COLORS.noteBg);
+    doc.roundedRect(x, y, width, boxHeight, 4).fill(COLORS.noteBg);
     doc
       .fontSize(8)
       .fillColor(COLORS.muted)
       .font("Helvetica-Bold")
-      .text(`Nota de ${obs.userName} · ${formatDate(obs.createdAt)}`, x + 10, y + 6, { width: boxWidth - 20 });
+      .text(`Nota de ${obs.userName} · ${formatDate(obs.createdAt)}`, x + 10, y + 6, { width: width - 20 });
     doc
       .fontSize(9)
       .fillColor(COLORS.ink)
       .font("Helvetica")
-      .text(obs.text, x + 10, y + 17, { width: boxWidth - 20 });
+      .text(obs.text, x + 10, y + 17, { width: width - 20 });
 
-    doc.y = y + boxHeight + 4;
+    doc.y = y + boxHeight + 6;
   });
 }
 
 function drawGeneralObservations(doc: PDFKit.PDFDocument, observations: TravelerObservation[]) {
   const width = contentWidth(doc);
-  ensureSpace(doc, 24);
+  ensureSpace(doc, 26);
   doc.moveDown(0.4);
-  doc.fontSize(11).fillColor(COLORS.ink).font("Helvetica-Bold").text("Observações gerais");
-  doc.moveDown(0.3);
+  drawSectionTitle(doc, "Observações gerais");
+  doc.moveDown(0.7);
 
   observations.forEach((obs) => {
     doc.fontSize(9).font("Helvetica");
     const textHeight = doc.heightOfString(obs.text, { width: width - 20 });
     const boxHeight = textHeight + 22;
-    ensureSpace(doc, boxHeight + 4);
+    ensureSpace(doc, boxHeight + 6);
 
     const x = doc.page.margins.left;
     const y = doc.y;
-    doc.rect(x, y, width, boxHeight).fill(COLORS.noteBg);
+    doc.roundedRect(x, y, width, boxHeight, 4).fill(COLORS.noteBg);
     doc
       .fontSize(8)
       .fillColor(COLORS.muted)
@@ -359,7 +441,7 @@ function drawGeneralObservations(doc: PDFKit.PDFDocument, observations: Traveler
       .text(`${obs.userName} · ${formatDate(obs.createdAt)}`, x + 10, y + 6, { width: width - 20 });
     doc.fontSize(9).fillColor(COLORS.ink).font("Helvetica").text(obs.text, x + 10, y + 17, { width: width - 20 });
 
-    doc.y = y + boxHeight + 4;
+    doc.y = y + boxHeight + 6;
   });
 }
 
@@ -378,6 +460,12 @@ function addPageNumbers(doc: PDFKit.PDFDocument) {
   const range = doc.bufferedPageRange();
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
+    doc
+      .moveTo(doc.page.margins.left, doc.page.height - doc.page.margins.bottom - 16)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.page.height - doc.page.margins.bottom - 16)
+      .strokeColor(COLORS.border)
+      .lineWidth(1)
+      .stroke();
     doc
       .font("Helvetica")
       .fontSize(8)

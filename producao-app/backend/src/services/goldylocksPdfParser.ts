@@ -76,6 +76,10 @@ interface ParsedOrdemServico {
   dimensoes?: string;
   acabamento?: string;
   enchimento?: string;
+  espessura?: string;
+  vidro?: string;
+  quantidade?: string;
+  unidade?: string;
   referencia?: string;
   /** Data no formato DD/MM/AAAA, tal como impressa na linha "Prazo de entrega:". */
   prazoEntrega?: string;
@@ -134,6 +138,8 @@ function parseText(text: string): ParsedOrdemServico {
   }
   const codigoArtigo = artigoMatch[1];
   const descricaoArtigo = artigoMatch[2]?.trim();
+  const quantidade = artigoMatch[3]?.trim();
+  const unidade = artigoMatch[4]?.trim();
 
   return {
     numero,
@@ -147,6 +153,13 @@ function parseText(text: string): ParsedOrdemServico {
     dimensoes: extractAfterLabel(text, "Dimensões:"),
     acabamento: extractAfterLabel(text, "Acabamento:"),
     enchimento: extractAfterLabel(text, "Enchimento:"),
+    // Espessura/Vidro só aparecem em alguns tipos de artigo (ex.: painéis
+    // com vidro) — ver etiqueta do produto em labelPdfService.ts, que usa
+    // estas linhas (quando presentes) para preencher os seus campos.
+    espessura: extractAfterLabel(text, "Espessura:"),
+    vidro: extractAfterLabel(text, "Vidro:"),
+    quantidade,
+    unidade,
     referencia: extractAfterLabel(text, "Referente a:"),
     prazoEntrega: text.match(/Prazo de entrega:?\s*\|?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1],
   };
@@ -155,9 +168,12 @@ function parseText(text: string): ParsedOrdemServico {
 function buildNotes(parsed: ParsedOrdemServico): string | undefined {
   const parts: string[] = [];
   if (parsed.modelo) parts.push(`Modelo: ${parsed.modelo}`);
-  if (parsed.dimensoes) parts.push(`Dimensões: ${parsed.dimensoes}`);
   if (parsed.acabamento) parts.push(`Acabamento: ${parsed.acabamento}`);
   if (parsed.enchimento) parts.push(`Enchimento: ${parsed.enchimento}`);
+  if (parsed.espessura) parts.push(`Espessura: ${parsed.espessura}`);
+  if (parsed.vidro) parts.push(`Vidro: ${parsed.vidro}`);
+  if (parsed.dimensoes) parts.push(`Dimensões: ${parsed.dimensoes}`);
+  if (parsed.quantidade) parts.push(`Quant.: ${parsed.quantidade}${parsed.unidade ? ` ${parsed.unidade}` : ""}`);
   if (parsed.referencia) parts.push(`Referente a: ${parsed.referencia}`);
   return parts.length ? parts.join("\n") : undefined;
 }

@@ -190,17 +190,31 @@ function buildProductLabelFields(data: LabelOrderData): { label: string; value: 
   push("Medida", "medida", "dimensões", "dimensoes");
   push("Quant.", "quant.", "quant", "quantidade");
   // "Referente a" é a referência do cliente para esta encomenda — mostra-se
-  // como "V/Ref." (Vossa Referência), tal como no modelo físico.
+  // como "V/Ref." (Vossa Referência), tal como no modelo físico. Quando a OS
+  // não tem referência, mostra-se um traço (----------), tal como no modelo
+  // físico, em vez de omitir a linha.
   const vRef = specs["referente a"] ?? specs["v/ref"] ?? specs["v/ref."];
-  fields.push({ label: "V/Ref.", value: vRef ?? "—" });
+  fields.push({ label: "V/Ref.", value: vRef ?? "----------" });
   // N.O.S. (Nº da nossa Ordem de Serviço) é sempre o nosso próprio número —
   // não depende do texto de especificações.
   fields.push({ label: "N.O.S.", value: data.externalId });
   return fields;
 }
 
+// Link para a presença online da Minho Ferragens — o segundo código QR da
+// etiqueta, tal como no modelo físico já usado (pedido do utilizador de
+// 2026-08-21: "quero que saia o QR para o gestão e um QR para o que já
+// estava"). Usa-se o link "limpo", sem os parâmetros de rastreio (utm_*,
+// fbclid) que vinham anexados ao link partilhado — esses parâmetros são
+// específicos de um clique/partilha (rede social) e não fazem sentido
+// impressos permanentemente numa etiqueta.
+const SITE_QR_URL = "https://linktr.ee/jpdcmynhoferragens";
+
 export async function streamProductLabelPdf(res: Response, data: LabelOrderData) {
-  const qrPng = await generateQrCode(data.orderUrl);
+  const [orderQrPng, siteQrPng] = await Promise.all([
+    generateQrCode(data.orderUrl),
+    generateQrCode(SITE_QR_URL),
+  ]);
   const fields = buildProductLabelFields(data);
 
   const doc = new PDFDocument({
@@ -253,18 +267,45 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
     y += 16;
   }
 
-  // Código QR + data, alinhados ao fundo da etiqueta, tal como no modelo
-  // físico. Ao ser lido, abre esta Ordem de Serviço na aplicação — mesmo
-  // comportamento da Etiqueta QR.
-  const qrSize = 68;
-  const qrY = PRODUCT_LABEL_HEIGHT - PL_MARGIN - qrSize;
-  doc.image(qrPng, PL_MARGIN, qrY, { width: qrSize, height: qrSize });
+  // Dois códigos QR lado a lado, alinhados ao fundo da etiqueta: um abre
+  // esta Ordem de Serviço na aplicação de gestão (mesmo comportamento da
+  // Etiqueta QR), o outro é o mesmo link que já vinha no modelo físico
+  // (site/redes da empresa) — cada um com uma legenda por baixo para não
+  // haver confusão sobre qual é qual.
+  const qrSize = 62;
+  const qrY = PRODUCT_LABEL_HEIGHT - PL_MARGIN - qrSize - 12;
+  const dateY = qrY - 14;
 
   doc
-    .fontSize(9)
+    .fontSize(8.5)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text(formatDate(data.createdAt), PL_MARGIN, qrY + qrSize - 12, { width, align: "right" });
+    .text(formatDate(data.createdAt), PL_MARGIN, dateY, { width, align: "right" });
+
+  const qr2X = PL_MARGIN + width - qrSize;
+
+  // As legendas usam { height, ellipsis: true } — sem isto, se o texto
+  // fosse largo de mais para a coluna, o pdfkit "flui" o cursor para além
+  // do fundo da página e insere silenciosamente uma segunda página em
+  // branco (mesmo problema já documentado na etiqueta QR, acima).
+  doc.image(orderQrPng, PL_MARGIN, qrY, { width: qrSize, height: qrSize });
+  doc
+    .fontSize(6.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text("Abrir OS", PL_MARGIN, qrY + qrSize + 3, { width: qrSize, height: 9, align: "center", ellipsis: true });
+
+  doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
+  doc
+    .fontSize(6.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text("Minho Ferragens", qr2X, qrY + qrSize + 3, {
+      width: qrSize,
+      height: 9,
+      align: "center",
+      ellipsis: true,
+    });
 
   doc.end();
 }

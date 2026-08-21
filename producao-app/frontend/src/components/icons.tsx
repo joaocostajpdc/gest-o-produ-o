@@ -99,3 +99,21 @@ export function IconLogout(props: SVGProps<SVGSVGElement>) {
     </Icon>
   );
 }
+
+// Usado apenas na barra superior móvel (telemóvel/tablet), para abrir/fechar
+// o menu lateral, que nesses ecrãs fica escondido por omissão.
+export function IconMenu(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon width={20} height={20} {...props}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </Icon>
+  );
+}
+
+export function IconClose(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon width={20} height={20} {...props}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </Icon>
+  );
+}

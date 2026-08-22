@@ -49,6 +49,7 @@ model User {
   historyEvents     HistoryEvent[]
   stageTransitions  ServiceOrderStageInstance[] @relation("StageChangedBy")
   uploadedAttachments Attachment[]
+  materialRequests  MaterialRequest[]
 
   @@map("users")
 }
@@ -111,8 +112,39 @@ model Supplier {
   stageAssociations   ProductionLineStep[] @relation("StageDefaultSupplier")
   stageInstances      ServiceOrderStageInstance[]
   leadTimes           SupplierLeadTime[]
+  materialRequests    MaterialRequest[]
 
   @@map("suppliers")
+}
+
+// ---------------------------------------------------------------------------
+// Material a pedir aos fornecedores (matéria-prima/encomendas, ex.: vidro,
+// alumínio, parafusos) — lista de necessidades simples, independente das
+// Ordens de Serviço, para acompanhar o que falta encomendar/receber.
+// ---------------------------------------------------------------------------
+
+enum MaterialRequestStatus {
+  A_PEDIR
+  PEDIDO
+  RECEBIDO
+}
+
+model MaterialRequest {
+  id            String                @id @default(cuid())
+  description   String
+  quantity      String? // texto livre (ex.: "10 un", "2 rolos"), para não impor uma unidade rígida
+  supplierId    String?
+  supplier      Supplier?             @relation(fields: [supplierId], references: [id])
+  status        MaterialRequestStatus @default(A_PEDIR)
+  notes         String?
+  requestedById String?
+  requestedBy   User?                 @relation(fields: [requestedById], references: [id])
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  orderedAt     DateTime?
+  receivedAt    DateTime?
+
+  @@map("material_requests")
 }
 
 // Prazo de entrega (dias) que este fornecedor pratica para peças de uma

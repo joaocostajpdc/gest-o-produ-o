@@ -11,6 +11,7 @@ import { usersRouter } from "./routes/users";
 import { clientsRouter } from "./routes/clients";
 import { serviceOrdersRouter } from "./routes/serviceOrders";
 import { reportsRouter } from "./routes/reports";
+import { materialRequestsRouter } from "./routes/materialRequests";
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,7 @@ export function createApp() {
   app.use("/api/clients", clientsRouter);
   app.use("/api/service-orders", serviceOrdersRouter);
   app.use("/api/reports", reportsRouter);
+  app.use("/api/material-requests", materialRequestsRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

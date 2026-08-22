@@ -117,6 +117,28 @@ export interface ServiceOrderListItem {
   productionMinutes: number;
 }
 
+export type MaterialRequestStatus = "A_PEDIR" | "PEDIDO" | "RECEBIDO";
+
+export const MATERIAL_REQUEST_STATUS_LABELS: Record<MaterialRequestStatus, string> = {
+  A_PEDIR: "A pedir",
+  PEDIDO: "Pedido",
+  RECEBIDO: "Recebido",
+};
+
+export interface MaterialRequest {
+  id: string;
+  description: string;
+  quantity?: string | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
+  status: MaterialRequestStatus;
+  notes?: string | null;
+  requestedBy?: { id: string; name: string } | null;
+  createdAt: string;
+  orderedAt?: string | null;
+  receivedAt?: string | null;
+}
+
 export interface StageInstance {
   id: string;
   stageId: string;

@@ -28,7 +28,9 @@ export type Permission =
   | "serviceOrders:delete" // eliminação definitiva de uma Ordem de Serviço (apenas Administração)
   | "interruptions:write"
   | "observations:write"
-  | "reports:printable";
+  | "reports:printable"
+  | "materialRequests:read"
+  | "materialRequests:write";
 
 const ALL_PERMISSIONS: Permission[] = [
   "products:read",
@@ -48,6 +50,8 @@ const ALL_PERMISSIONS: Permission[] = [
   "interruptions:write",
   "observations:write",
   "reports:printable",
+  "materialRequests:read",
+  "materialRequests:write",
 ];
 
 export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
@@ -71,6 +75,8 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "interruptions:write",
     "observations:write",
     "reports:printable",
+    "materialRequests:read",
+    "materialRequests:write",
   ],
 
   // Operário - execução e consulta das operações produtivas
@@ -84,6 +90,7 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "interruptions:write",
     "observations:write",
     "reports:printable",
+    "materialRequests:read",
   ],
 };
 

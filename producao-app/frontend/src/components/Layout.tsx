@@ -6,11 +6,13 @@ import {
   IconBox,
   IconClipboard,
   IconClose,
+  IconDroplet,
   IconLayers,
   IconLogout,
   IconMenu,
   IconPrinter,
   IconRoute,
+  IconShoppingCart,
   IconTruck,
   IconUsers,
 } from "./icons";
@@ -73,6 +75,12 @@ export function Layout() {
         <nav>
           <NavLink to="/" end>
             <IconClipboard /> Ordens de Serviço
+          </NavLink>
+          <NavLink to="/material-lacagem">
+            <IconDroplet /> Material em Lacagem
+          </NavLink>
+          <NavLink to="/material-a-pedir">
+            <IconShoppingCart /> Material a Pedir
           </NavLink>
           <NavLink to="/reports">
             <IconPrinter /> Listagens Imprimíveis

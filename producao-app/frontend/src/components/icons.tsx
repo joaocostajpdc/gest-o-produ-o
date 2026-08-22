@@ -117,3 +117,24 @@ export function IconClose(props: SVGProps<SVGSVGElement>) {
     </Icon>
   );
 }
+
+// Usado no menu lateral para "Material em Lacagem" (etapa de acabamento
+// junto de fornecedores externos).
+export function IconDroplet(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3s7 7.4 7 12a7 7 0 0 1-14 0c0-4.6 7-12 7-12Z" />
+    </Icon>
+  );
+}
+
+// Usado no menu lateral para "Material a Pedir aos Fornecedores".
+export function IconShoppingCart(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <circle cx="9" cy="20" r="1.4" />
+      <circle cx="17" cy="20" r="1.4" />
+      <path d="M2.5 3h2.2l2.1 11.4a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L20.5 7H6" />
+    </Icon>
+  );
+}

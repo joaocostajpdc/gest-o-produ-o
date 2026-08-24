@@ -10,6 +10,8 @@ import { ProductionLinesPage } from "./pages/ProductionLinesPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { UsersPage } from "./pages/UsersPage";
 import { PrintableListPage } from "./pages/PrintableListPage";
+import { MaterialLacagemPage } from "./pages/MaterialLacagemPage";
+import { MaterialRequestsPage } from "./pages/MaterialRequestsPage";
 
 function ProtectedArea() {
   const { user, loading } = useAuth();
@@ -25,6 +27,8 @@ export default function App() {
       <Route element={<ProtectedArea />}>
         <Route path="/" element={<ServiceOrdersListPage />} />
         <Route path="/service-orders/:id" element={<ServiceOrderDetailPage />} />
+        <Route path="/material-lacagem" element={<MaterialLacagemPage />} />
+        <Route path="/material-a-pedir" element={<MaterialRequestsPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

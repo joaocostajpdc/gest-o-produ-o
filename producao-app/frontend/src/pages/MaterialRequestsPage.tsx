@@ -16,11 +16,10 @@ import {
 
 const EMPTY = { description: "", quantity: "", supplierId: "", notes: "" };
 
-const STATUS_ORDER: MaterialRequestStatus[] = ["A_PEDIR", "PEDIDO", "RECEBIDO"];
+const STATUS_ORDER: MaterialRequestStatus[] = ["A_PEDIR", "RECEBIDO"];
 
 const STATUS_COLORS: Record<MaterialRequestStatus, string> = {
   A_PEDIR: "#dc2626",
-  PEDIDO: "#f97316",
   RECEBIDO: "#16a34a",
 };
 
@@ -220,7 +219,7 @@ export function MaterialRequestsPage() {
               style={{ marginTop: 12 }}
               onClick={() => setShowReceived((v) => !v)}
             >
-              {showReceived ? "Ocultar recebidos" : `Mostrar recebidos (${received.length})`}
+              {showReceived ? "Ocultar tratados" : `Mostrar tratados (${received.length})`}
             </button>
             {showReceived && (
               <table style={{ marginTop: 12 }}>

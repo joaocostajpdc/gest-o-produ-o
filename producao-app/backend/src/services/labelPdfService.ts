@@ -9,13 +9,14 @@ import { LOGO_MARK_PNG_BASE64 } from "../assets/logoMark";
 //
 // São dois documentos separados, com propósitos distintos:
 //
-//  - Etiqueta de código QR: pequena, para colar na peça, com um código QR
-//    que identifica tanto o produto como a Ordem de Serviço e que, ao ser
-//    lido num telemóvel, abre diretamente a página da OS na aplicação (só é
-//    possível "abrir" algo com um código QR de URL — um código de barras
-//    tradicional (1D) não tem essa capacidade). O código, produto e OS
-//    também ficam identificados em texto legível, para quem não tiver o
-//    telemóvel à mão.
+//  - Etiqueta de código de barras: pequena, para colar na peça, com um
+//    código de barras (Code128) que identifica a Ordem de Serviço (ver
+//    pedido do utilizador de 2026-09-01: trocar o QR por código de barras).
+//    Ao contrário de um QR de URL, um código de barras não tem capacidade
+//    de "abrir" nada sozinho ao ser fotografado — em vez disso, lê-se com o
+//    botão "Ler Código" dentro da aplicação, que localiza e abre a OS
+//    correspondente. O número da OS, produto e cliente também ficam
+//    identificados em texto legível, para quem não tiver o telemóvel à mão.
 //
 //  - Etiqueta do produto: uma ficha mais detalhada com as características
 //    da encomenda (modelo, dimensões, acabamento, enchimento, cliente,
@@ -64,14 +65,29 @@ async function generateQrCode(text: string): Promise<Buffer> {
   return bwipjs.toBuffer({ bcid: "qrcode", text, scale: 4 });
 }
 
+// Código de barras 1D (Code128) com o número da OS impresso por baixo das
+// barras (includetext) — serve de apoio de leitura manual caso o código não
+// seja lido pela câmara à primeira.
+async function generateBarcode(text: string): Promise<Buffer> {
+  return bwipjs.toBuffer({
+    bcid: "code128",
+    text,
+    scale: 3,
+    height: 10,
+    includetext: true,
+    textxalign: "center",
+    textsize: 8,
+  });
+}
+
 // ---------------------------------------------------------------------------
-// Etiqueta de código QR (pequena, tipo autocolante) — 90mm x 55mm.
+// Etiqueta de código de barras (pequena, tipo autocolante) — 90mm x 55mm.
 // ---------------------------------------------------------------------------
 const QR_LABEL_WIDTH = 90 * 2.83465; // mm -> pt
 const QR_LABEL_HEIGHT = 55 * 2.83465;
 
 export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData) {
-  const qrPng = await generateQrCode(data.orderUrl);
+  const barcodePng = await generateBarcode(data.externalId);
 
   const doc = new PDFDocument({
     size: [QR_LABEL_WIDTH, QR_LABEL_HEIGHT],
@@ -81,7 +97,7 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
   res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="etiqueta-qr-${sanitizeFilename(data.externalId)}.pdf"`
+    `attachment; filename="etiqueta-barras-${sanitizeFilename(data.externalId)}.pdf"`
   );
   doc.pipe(res);
 
@@ -90,14 +106,8 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
   // pequena e fixa (etiqueta): se o conteúdo acumulado ultrapassar a altura
   // da página, o pdfkit insere silenciosamente uma segunda página, o que
   // arruinaria uma etiqueta que tem de sair sempre numa única folha.
-  // Deixa sempre espaço reservado por baixo do QR para a nota de rodapé —
-  // caso contrário o QR (alinhado à altura da página) sobrepõe-se ao texto.
-  const footerHeight = 16;
-  const qrSize = QR_LABEL_HEIGHT - 20 - footerHeight;
-  doc.image(qrPng, 10, 10, { width: qrSize, height: qrSize });
-
-  const textX = 10 + qrSize + 10;
-  const textWidth = QR_LABEL_WIDTH - textX - 10;
+  const textX = 10;
+  const textWidth = QR_LABEL_WIDTH - 20;
 
   doc
     .fontSize(7)
@@ -105,39 +115,45 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
     .font("Helvetica-Bold")
     .text("ORDEM DE SERVIÇO", textX, 10, { width: textWidth, height: 9, ellipsis: true });
   doc
-    .fontSize(14)
+    .fontSize(18)
     .fillColor(COLORS.ink)
     .font("Helvetica-Bold")
-    .text(data.externalId, textX, 20, { width: textWidth, height: 17, ellipsis: true });
+    .text(data.externalId, textX, 20, { width: textWidth, height: 22, ellipsis: true });
 
   doc
     .fontSize(7)
     .fillColor(COLORS.muted)
     .font("Helvetica-Bold")
-    .text("PRODUTO", textX, 42, { width: textWidth, height: 9, ellipsis: true });
+    .text("PRODUTO", textX, 46, { width: textWidth, height: 9, ellipsis: true });
   doc
-    .fontSize(12)
+    .fontSize(11)
     .fillColor(COLORS.ink)
     .font("Helvetica-Bold")
-    .text(data.productExternalId, textX, 51, { width: textWidth, height: 15, ellipsis: true });
+    .text(`${data.productExternalId} — ${data.productName}`, textX, 55, {
+      width: textWidth,
+      height: 14,
+      ellipsis: true,
+    });
+
   doc
     .fontSize(8)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text(data.productName, textX, 67, { width: textWidth, height: 20, ellipsis: true });
+    .text(data.clienteName, textX, 72, { width: textWidth, height: 10, ellipsis: true });
 
-  doc
-    .fontSize(7.5)
-    .fillColor(COLORS.muted)
-    .font("Helvetica")
-    .text(data.clienteName, textX, 90, { width: textWidth, height: 10, ellipsis: true });
+  // Código de barras a toda a largura, alinhado ao fundo da etiqueta — usa
+  // "fit" (escala uniforme) em vez de "width"/"height" fixos, para nunca
+  // esticar as barras de forma desigual e arriscar tornar o código ilegível.
+  const footerHeight = 10;
+  const barcodeAreaHeight = QR_LABEL_HEIGHT - 88 - footerHeight - 10;
+  doc.image(barcodePng, textX, 88, { fit: [textWidth, barcodeAreaHeight], align: "center" });
 
   doc
     .fontSize(6)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text("Ler o código para abrir a OS na aplicação", 10, 10 + qrSize + 5, {
-      width: QR_LABEL_WIDTH - 20,
+    .text("Ler o código com o botão \"Ler Código\" na aplicação para abrir esta OS", textX, QR_LABEL_HEIGHT - footerHeight - 4, {
+      width: textWidth,
       height: 9,
       align: "center",
       lineBreak: false,

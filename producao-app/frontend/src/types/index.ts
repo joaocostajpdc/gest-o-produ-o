@@ -115,6 +115,8 @@ export interface ServiceOrderListItem {
     leadDays: number | null;
   } | null;
   productionMinutes: number;
+  // Acabamento da encomenda, quando indicado nas Características do Produto.
+  finish?: string | null;
 }
 
 export type MaterialRequestStatus = "A_PEDIR" | "PEDIDO" | "RECEBIDO";

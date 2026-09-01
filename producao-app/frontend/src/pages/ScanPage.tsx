@@ -20,6 +20,15 @@ import { ServiceOrderListItem } from "../types";
 //
 // Inclui sempre um campo de texto para introduzir o número manualmente,
 // como alternativa quando a câmara não está disponível ou a leitura falha.
+//
+// Nota importante sobre a ordem de arranque: o elemento onde a biblioteca
+// desenha o vídeo da câmara TEM de já estar visível (com dimensões reais)
+// no ecrã antes de se chamar scanner.start() — se estiver escondido
+// (display:none / tamanho zero) nesse momento, a câmara não arranca e não
+// aparece imagem nenhuma, mesmo sem erro visível. Por isso o arranque só
+// acontece num useEffect que corre DEPOIS do React já ter tornado o
+// contentor visível (a seguir a "wantsCamera" passar a true), nunca no
+// próprio clique do botão.
 // ============================================================================
 
 const READER_ELEMENT_ID = "barcode-scanner-viewport";
@@ -27,11 +36,17 @@ const READER_ELEMENT_ID = "barcode-scanner-viewport";
 export function ScanPage() {
   const navigate = useNavigate();
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  // "Pedido" do utilizador (torna o contentor visível) vs. "scanning"
+  // (câmara já efetivamente a correr) — propositadamente dois estados
+  // separados, para garantir a ordem correta descrita acima.
+  const [wantsCamera, setWantsCamera] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [looking, setLooking] = useState(false);
   const [manualCode, setManualCode] = useState("");
+  const lookingRef = useRef(looking);
+  lookingRef.current = looking;
 
   async function goToOrder(code: string) {
     const trimmed = code.trim();
@@ -47,7 +62,7 @@ export function ScanPage() {
         setLookupError(`Não foi encontrada nenhuma Ordem de Serviço com o código "${trimmed}".`);
         return;
       }
-      await stopScanner();
+      setWantsCamera(false);
       navigate(`/service-orders/${match.id}`);
     } catch (err) {
       setLookupError(err instanceof Error ? err.message : "Erro ao procurar a Ordem de Serviço.");
@@ -56,58 +71,98 @@ export function ScanPage() {
     }
   }
 
-  async function stopScanner() {
-    const scanner = scannerRef.current;
-    if (!scanner) return;
-    try {
-      await scanner.stop();
-      await scanner.clear();
-    } catch {
-      // já estava parado — sem problema.
-    }
-    scannerRef.current = null;
-    setScanning(false);
-  }
-
-  async function startScanner() {
+  // Só pede para o contentor ficar visível — o arranque real da câmara
+  // acontece no useEffect abaixo, depois de o React já ter pintado o
+  // contentor no ecrã.
+  function requestCamera() {
     setCameraError(null);
     setLookupError(null);
+    setWantsCamera(true);
+  }
+
+  function stopCamera() {
+    setWantsCamera(false);
+  }
+
+  useEffect(() => {
+    if (!wantsCamera) {
+      const scanner = scannerRef.current;
+      if (scanner) {
+        scanner
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            try {
+              scanner.clear();
+            } catch {
+              // ignora — contentor pode já ter sido desmontado
+            }
+          });
+        scannerRef.current = null;
+      }
+      setScanning(false);
+      return;
+    }
+
+    let cancelled = false;
     const scanner = new Html5Qrcode(READER_ELEMENT_ID, {
       formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.QR_CODE],
       verbose: false,
     });
     scannerRef.current = scanner;
-    try {
-      await scanner.start(
+
+    scanner
+      .start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 260, height: 140 } },
+        { fps: 10, qrbox: { width: 250, height: 130 } },
         (decodedText) => {
           // Evita disparar a mesma leitura várias vezes seguidas enquanto a
           // câmara continua a apontar para o mesmo código.
-          if (!looking) goToOrder(decodedText);
+          if (!lookingRef.current) goToOrder(decodedText);
         },
         () => {
           // erro de leitura de uma frame individual (código fora de foco,
           // etc.) — normal e frequente, ignora-se em silêncio.
         }
-      );
-      setScanning(true);
-    } catch (err) {
-      scannerRef.current = null;
-      setCameraError(
-        err instanceof Error
-          ? `Não foi possível aceder à câmara: ${err.message}`
-          : "Não foi possível aceder à câmara."
-      );
-    }
-  }
+      )
+      .then(() => {
+        if (!cancelled) setScanning(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        scannerRef.current = null;
+        setWantsCamera(false);
+        const message = err instanceof Error ? err.message : String(err);
+        if (/NotAllowedError|Permission/i.test(message)) {
+          setCameraError(
+            "Sem permissão para usar a câmara. Verifica as permissões do browser/site e tenta novamente."
+          );
+        } else if (/NotFoundError|no camera|não.*câmara/i.test(message)) {
+          setCameraError("Não foi encontrada nenhuma câmara neste dispositivo.");
+        } else {
+          setCameraError(`Não foi possível aceder à câmara: ${message}`);
+        }
+      });
 
-  useEffect(() => {
     return () => {
-      stopScanner();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cancelled = true;
+      const s = scannerRef.current;
+      if (s) {
+        s.stop()
+          .catch(() => {})
+          .finally(() => {
+            try {
+              s.clear();
+            } catch {
+              // ignora — contentor pode já ter sido desmontado
+            }
+          });
+        scannerRef.current = null;
+      }
+      setScanning(false);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsCamera]);
 
   async function handleManualSubmit(e: FormEvent) {
     e.preventDefault();
@@ -126,26 +181,35 @@ export function ScanPage() {
           Serviço.
         </p>
 
-        {!scanning && (
-          <button className="btn" onClick={startScanner} disabled={looking}>
+        {!wantsCamera && (
+          <button className="btn" onClick={requestCamera} disabled={looking}>
             Ativar câmara
           </button>
         )}
-        {scanning && (
-          <button className="btn secondary" onClick={stopScanner} style={{ marginBottom: 12 }}>
+        {wantsCamera && (
+          <button className="btn secondary" onClick={stopCamera} style={{ marginBottom: 12 }}>
             Parar câmara
           </button>
         )}
 
+        {/* O contentor fica sempre no DOM (nunca é desmontado condicionalmente)
+            para que o elemento exista quando se cria o Html5Qrcode, mas só
+            ganha altura real quando "wantsCamera" é true — é essa mudança de
+            tamanho, já pintada pelo React, que o useEffect acima espera antes
+            de arrancar a câmara. */}
         <div
           id={READER_ELEMENT_ID}
           style={{
-            marginTop: 12,
+            marginTop: wantsCamera ? 12 : 0,
             maxWidth: 420,
-            display: scanning ? "block" : "none",
+            minHeight: wantsCamera ? 260 : 0,
+            overflow: "hidden",
           }}
         />
 
+        {wantsCamera && !scanning && !cameraError && (
+          <p className="muted">A pedir acesso à câmara — aceita o pedido de permissão do browser...</p>
+        )}
         {cameraError && <p className="error-text">{cameraError}</p>}
         {looking && <p className="muted">A procurar Ordem de Serviço...</p>}
         {lookupError && <p className="error-text">{lookupError}</p>}

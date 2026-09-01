@@ -61,6 +61,22 @@ function computeLacagemExpectedReturn(order: any) {
   return { expectedReturnAt, leadDays: leadTime.leadDays };
 }
 
+// Lê o valor de "Acabamento: ..." do texto livre de especificações da OS
+// (mesmo formato "Rótulo: valor" já usado nas etiquetas — ver
+// labelPdfService.ts). Não há campo estruturado próprio para o acabamento,
+// por isso é lido deste texto tal como os restantes campos da etiqueta.
+function extractFinish(specifications: string | null | undefined): string | null {
+  if (!specifications) return null;
+  for (const rawLine of specifications.split("\n")) {
+    const match = rawLine.match(/^([^:]+):\s*(.+)$/);
+    if (!match) continue;
+    if (match[1].trim().toLowerCase() === "acabamento") {
+      return match[2].trim().replace(/,\s*$/, "");
+    }
+  }
+  return null;
+}
+
 function serializeListItem(order: any, now: Date) {
   const priority = computePriority(order.deadlineAt, order.status, now);
   const { expectedReturnAt, leadDays } = computeLacagemExpectedReturn(order);
@@ -91,6 +107,10 @@ function serializeListItem(order: any, now: Date) {
         }
       : null,
     productionMinutes: getCurrentProductionMinutes(order, now),
+    // Acabamento da encomenda (quando indicado nas Características do
+    // Produto) — usado sobretudo para filtrar a listagem de Material em
+    // Lacagem.
+    finish: extractFinish(order.specifications),
   };
 }
 

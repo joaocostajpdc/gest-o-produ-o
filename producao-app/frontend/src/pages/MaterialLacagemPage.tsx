@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { ServiceOrderListItem, Stage } from "../types";
-import { minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
+import { minutesToDays, PriorityBadge, StatusBadge } from "../components/Badges";
 
 // ============================================================================
 // Material em Lacagem — atalho direto às Ordens de Serviço cuja etapa atual
@@ -10,6 +10,10 @@ import { minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges
 // fornecedor). Reutiliza o mesmo endpoint /service-orders?stageId=... já
 // usado no filtro da listagem principal, apenas apresentado como página
 // própria no menu, para acesso mais rápido no dia a dia.
+//
+// Mostra o nº do cliente (em vez do nome) e o tempo na etapa em dias, e
+// permite filtrar por fornecedor e por acabamento — ver pedido do
+// utilizador de 2026-09-01.
 // ============================================================================
 
 export function MaterialLacagemPage() {
@@ -17,6 +21,8 @@ export function MaterialLacagemPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stageMissing, setStageMissing] = useState(false);
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [finishFilter, setFinishFilter] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -43,6 +49,33 @@ export function MaterialLacagemPage() {
     load();
   }, []);
 
+  // As opções dos filtros vêm apenas dos fornecedores/acabamentos que
+  // existem de facto entre as OS atualmente em Lacagem — evita mostrar
+  // opções que não dariam resultado nenhum.
+  const supplierOptions = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach((o) => {
+      if (o.currentStage?.supplier) set.add(o.currentStage.supplier);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-PT"));
+  }, [orders]);
+
+  const finishOptions = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach((o) => {
+      if (o.finish) set.add(o.finish);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-PT"));
+  }, [orders]);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      if (supplierFilter && o.currentStage?.supplier !== supplierFilter) return false;
+      if (finishFilter && o.finish !== finishFilter) return false;
+      return true;
+    });
+  }, [orders, supplierFilter, finishFilter]);
+
   return (
     <div>
       <div className="page-header">
@@ -60,6 +93,27 @@ export function MaterialLacagemPage() {
       {error && <p className="error-text">{error}</p>}
 
       <div className="card">
+        {!stageMissing && (
+          <div className="filters-bar">
+            <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+              <option value="">Fornecedor (todos)</option>
+              {supplierOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select value={finishFilter} onChange={(e) => setFinishFilter(e.target.value)}>
+              <option value="">Acabamento (todos)</option>
+              {finishOptions.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {loading ? (
           <p className="muted">A carregar...</p>
         ) : (
@@ -68,7 +122,7 @@ export function MaterialLacagemPage() {
               <tr>
                 <th>Prioridade</th>
                 <th>OS</th>
-                <th>Cliente</th>
+                <th>Nº Cliente</th>
                 <th>Produto</th>
                 <th>Estado</th>
                 <th>Na etapa há</th>
@@ -77,7 +131,7 @@ export function MaterialLacagemPage() {
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => (
+              {filteredOrders.map((o) => (
                 <tr key={o.id}>
                   <td>
                     <PriorityBadge priority={o.priority} label={o.priorityLabel} color={o.priorityColor} />
@@ -85,12 +139,12 @@ export function MaterialLacagemPage() {
                   <td>
                     <Link to={`/service-orders/${o.id}`}>{o.externalId}</Link>
                   </td>
-                  <td>{o.client.name}</td>
+                  <td>{o.client.externalId ?? "—"}</td>
                   <td>{o.product.name}</td>
                   <td>
                     <StatusBadge status={o.status} />
                   </td>
-                  <td>{o.currentStage ? minutesToHuman(o.currentStage.residenceMinutes) : "—"}</td>
+                  <td>{o.currentStage ? minutesToDays(o.currentStage.residenceMinutes) : "—"}</td>
                   <td>{o.currentStage?.supplier ?? "—"}</td>
                   <td>
                     {o.currentStage?.expectedReturnAt
@@ -99,10 +153,12 @@ export function MaterialLacagemPage() {
                   </td>
                 </tr>
               ))}
-              {!stageMissing && orders.length === 0 && (
+              {!stageMissing && filteredOrders.length === 0 && (
                 <tr>
                   <td colSpan={8} className="muted">
-                    Nenhuma Ordem de Serviço está atualmente na etapa de Lacagem.
+                    {orders.length === 0
+                      ? "Nenhuma Ordem de Serviço está atualmente na etapa de Lacagem."
+                      : "Nenhuma Ordem de Serviço corresponde aos filtros selecionados."}
                   </td>
                 </tr>
               )}

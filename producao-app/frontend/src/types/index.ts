@@ -119,12 +119,11 @@ export interface ServiceOrderListItem {
   finish?: string | null;
 }
 
-export type MaterialRequestStatus = "A_PEDIR" | "PEDIDO" | "RECEBIDO";
+export type MaterialRequestStatus = "A_PEDIR" | "RECEBIDO";
 
 export const MATERIAL_REQUEST_STATUS_LABELS: Record<MaterialRequestStatus, string> = {
-  A_PEDIR: "A pedir",
-  PEDIDO: "Pedido",
-  RECEBIDO: "Recebido",
+  A_PEDIR: "Por tratar",
+  RECEBIDO: "Tratado",
 };
 
 export interface MaterialRequest {

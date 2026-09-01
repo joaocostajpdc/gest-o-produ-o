@@ -568,7 +568,7 @@ function EtapasTab({
               ) : (
                 si.supplier && <div className="muted">Fornecedor: {si.supplier.name}</div>
               )}
-              <div className="muted">{minutesToHuman(si.residenceMinutes)} de permanência</div>
+              <div className="muted">{minutesToDays(si.residenceMinutes)} de permanência</div>
               {order.currentStage?.id === si.id && order.currentStage.expectedReturnAt && (
                 <div className="lead-time-hint">
                   Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
@@ -705,7 +705,7 @@ function TemposTab({ order }: { order: ServiceOrderDetail }) {
               <td>{si.stage.name}</td>
               <td>{si.enteredAt ? new Date(si.enteredAt).toLocaleString("pt-PT") : "—"}</td>
               <td>{si.exitedAt ? new Date(si.exitedAt).toLocaleString("pt-PT") : "—"}</td>
-              <td>{minutesToHuman(si.residenceMinutes)}</td>
+              <td>{minutesToDays(si.residenceMinutes)}</td>
               <td>{si.status}</td>
             </tr>
           ))}

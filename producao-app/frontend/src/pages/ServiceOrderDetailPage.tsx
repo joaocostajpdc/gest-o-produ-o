@@ -10,7 +10,7 @@ import {
   Stage,
   Supplier,
 } from "../types";
-import { minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
+import { minutesToDays, minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
 import { canChangeFlow, canDeleteServiceOrders, useAuth } from "../contexts/AuthContext";
 
 type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "anexos" | "historico";
@@ -358,7 +358,7 @@ export function ServiceOrderDetailPage() {
         </div>
         <div className="info-tile">
           <div className="info-tile-label">Tempo de produção (total)</div>
-          <div className="info-tile-value">{minutesToHuman(order.productionMinutes)}</div>
+          <div className="info-tile-value">{minutesToDays(order.productionMinutes)}</div>
         </div>
       </div>
 
@@ -712,7 +712,7 @@ function TemposTab({ order }: { order: ServiceOrderDetail }) {
         </tbody>
       </table>
       <p className="muted" style={{ marginTop: 12 }}>
-        Tempo de produção total (exclui suspensões): <strong>{minutesToHuman(order.productionMinutes)}</strong>.
+        Tempo de produção total (exclui suspensões): <strong>{minutesToDays(order.productionMinutes)}</strong>.
         O tempo de permanência por etapa (acima) inclui eventuais períodos de suspensão, pelo que pode ser
         superior ao tempo de produção.
       </p>

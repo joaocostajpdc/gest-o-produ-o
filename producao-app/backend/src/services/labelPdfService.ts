@@ -164,17 +164,11 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 }
 
 // ---------------------------------------------------------------------------
-// Etiqueta do produto (ficha detalhada, tipo tag) — 4" x 14,5cm (101,6 x
-// 145mm) para corresponder exatamente ao rolo físico já usado (rolo
-// contínuo de 4" de largura x 100 pés, sem corte fixo de fábrica) com o
-// comprimento configurado no driver/software da impressora — ver pedido do
-// utilizador de 2026-09-01: a largura 4" veio de uma imagem do software de
-// etiquetas ("a etiqueta tem que ter estas medidas"), mas um primeiro
-// ensaio a 6" de altura não imprimiu ("não imprime por causa do tamanho da
-// etiqueta" — a impressora não reconhecia esse tamanho de página); o
-// comprimento correto, confirmado pelo utilizador a partir do que está
-// configurado na impressora, é 14,5cm. Antes desta alteração a etiqueta
-// tinha 100mm x 150mm.
+// Etiqueta do produto (ficha detalhada, tipo tag) — 103mm x 164mm, o
+// tamanho exato de impressão confirmado pelo utilizador em 2026-09-01 (após
+// duas tentativas anteriores que não imprimiram corretamente: primeiro
+// 100x150mm, depois 4"x6" que a impressora não reconheceu, depois 4"x14,5cm
+// — "103x164 para imprimir" foi a medida final confirmada).
 //
 // Segue o modelo de etiqueta já usado nas caixas físicas (logótipo, campos
 // Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant., código QR e
@@ -203,8 +197,8 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // site/redes da empresa) mantém-se QR, por não estar ligado à aplicação de
 // gestão de produção.
 // ---------------------------------------------------------------------------
-const PRODUCT_LABEL_WIDTH = 4 * 72; // 4" -> pt (72pt/polegada)
-const PRODUCT_LABEL_HEIGHT = 145 * 2.83465; // 14,5cm -> pt
+const PRODUCT_LABEL_WIDTH = 103 * 2.83465; // 103mm -> pt
+const PRODUCT_LABEL_HEIGHT = 164 * 2.83465; // 164mm -> pt
 const PL_MARGIN = 16;
 
 /** Lê linhas "Rótulo: valor" do texto livre de especificações. */

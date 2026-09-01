@@ -12,6 +12,7 @@ import { UsersPage } from "./pages/UsersPage";
 import { PrintableListPage } from "./pages/PrintableListPage";
 import { MaterialLacagemPage } from "./pages/MaterialLacagemPage";
 import { MaterialRequestsPage } from "./pages/MaterialRequestsPage";
+import { ScanPage } from "./pages/ScanPage";
 
 function ProtectedArea() {
   const { user, loading } = useAuth();
@@ -26,6 +27,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedArea />}>
         <Route path="/" element={<ServiceOrdersListPage />} />
+        <Route path="/scan" element={<ScanPage />} />
         <Route path="/service-orders/:id" element={<ServiceOrderDetailPage />} />
         <Route path="/material-lacagem" element={<MaterialLacagemPage />} />
         <Route path="/material-a-pedir" element={<MaterialRequestsPage />} />

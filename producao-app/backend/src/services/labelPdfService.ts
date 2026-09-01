@@ -164,11 +164,14 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 }
 
 // ---------------------------------------------------------------------------
-// Etiqueta do produto (ficha detalhada, tipo tag) — 103mm x 164mm, o
-// tamanho exato de impressão confirmado pelo utilizador em 2026-09-01 (após
-// duas tentativas anteriores que não imprimiram corretamente: primeiro
-// 100x150mm, depois 4"x6" que a impressora não reconheceu, depois 4"x14,5cm
-// — "103x164 para imprimir" foi a medida final confirmada).
+// Etiqueta do produto (ficha detalhada, tipo tag) — 102mm x 164mm. Impressa
+// numa Brother QL-1100 com rolo de papel contínuo Brother DK-22243 (102mm
+// de largura, sem corte fixo de fábrica — ver pedido do utilizador de
+// 2026-09-01, com foto do rolo: "102mmX30.48m" / "4"X100'"). A largura
+// 102mm corresponde exactamente à largura do rolo (impressa no próprio
+// rolo e confirmada pelo diálogo da Brother); a altura 164mm foi a medida
+// de impressão confirmada pelo utilizador (depois de tentativas anteriores
+// com 100x150mm, 4"x6" e 4"x14,5cm que não imprimiram corretamente).
 //
 // Segue o modelo de etiqueta já usado nas caixas físicas (logótipo, campos
 // Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant., código QR e
@@ -197,7 +200,7 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // site/redes da empresa) mantém-se QR, por não estar ligado à aplicação de
 // gestão de produção.
 // ---------------------------------------------------------------------------
-const PRODUCT_LABEL_WIDTH = 103 * 2.83465; // 103mm -> pt
+const PRODUCT_LABEL_WIDTH = 102 * 2.83465; // 102mm -> pt (largura do rolo Brother DK-22243)
 const PRODUCT_LABEL_HEIGHT = 164 * 2.83465; // 164mm -> pt
 const PL_MARGIN = 16;
 

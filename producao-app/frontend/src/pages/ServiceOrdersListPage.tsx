@@ -8,7 +8,7 @@ import {
   Stage,
   Supplier,
 } from "../types";
-import { minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
+import { minutesToDays, minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
 import { useAuth } from "../contexts/AuthContext";
 
 const PRIORITY_OPTIONS = [
@@ -321,7 +321,7 @@ export function ServiceOrdersListPage() {
                   </td>
                   <td>{new Date(o.createdAt).toLocaleDateString("pt-PT")}</td>
                   <td>{o.deadlineAt ? new Date(o.deadlineAt).toLocaleString("pt-PT") : "—"}</td>
-                  <td>{minutesToHuman(o.productionMinutes)}</td>
+                  <td>{minutesToDays(o.productionMinutes)}</td>
                 </tr>
               ))}
               {orders.length === 0 && (

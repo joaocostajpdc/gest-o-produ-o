@@ -41,3 +41,17 @@ export function minutesToHuman(minutes: number): string {
   if (h === 0) return `${m} min`;
   return `${h}h ${m}min`;
 }
+
+// Tal como o "Tempo de produção (dias)" já configurado em cada Produto, os
+// tempos acumulados (produção total, permanência numa etapa) mostram-se em
+// dias — mais fácil de ler numa escala de vários dias do que em horas — em
+// vez de minutos/horas. Arredondado a 1 casa decimal apenas quando não é um
+// número inteiro de dias.
+export function minutesToDays(minutes: number): string {
+  const days = Math.round((minutes / (60 * 24)) * 10) / 10;
+  const formatted = days.toLocaleString("pt-PT", {
+    minimumFractionDigits: Number.isInteger(days) ? 0 : 1,
+    maximumFractionDigits: 1,
+  });
+  return `${formatted} dia${days === 1 ? "" : "s"}`;
+}

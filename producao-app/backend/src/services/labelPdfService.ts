@@ -164,11 +164,17 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 }
 
 // ---------------------------------------------------------------------------
-// Etiqueta do produto (ficha detalhada, tipo tag) — 4" x 6" (101,6 x 152,4mm)
-// para corresponder exatamente ao tamanho da etiqueta física já usada (ver
-// pedido do utilizador de 2026-09-01, com imagem do software de etiquetas
-// atual mostrando a régua em polegadas: "a etiqueta tem que ter estas
-// medidas"). Antes desta alteração a etiqueta tinha 100mm x 150mm.
+// Etiqueta do produto (ficha detalhada, tipo tag) — 4" x 14,5cm (101,6 x
+// 145mm) para corresponder exatamente ao rolo físico já usado (rolo
+// contínuo de 4" de largura x 100 pés, sem corte fixo de fábrica) com o
+// comprimento configurado no driver/software da impressora — ver pedido do
+// utilizador de 2026-09-01: a largura 4" veio de uma imagem do software de
+// etiquetas ("a etiqueta tem que ter estas medidas"), mas um primeiro
+// ensaio a 6" de altura não imprimiu ("não imprime por causa do tamanho da
+// etiqueta" — a impressora não reconhecia esse tamanho de página); o
+// comprimento correto, confirmado pelo utilizador a partir do que está
+// configurado na impressora, é 14,5cm. Antes desta alteração a etiqueta
+// tinha 100mm x 150mm.
 //
 // Segue o modelo de etiqueta já usado nas caixas físicas (logótipo, campos
 // Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant., código QR e
@@ -198,7 +204,7 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // gestão de produção.
 // ---------------------------------------------------------------------------
 const PRODUCT_LABEL_WIDTH = 4 * 72; // 4" -> pt (72pt/polegada)
-const PRODUCT_LABEL_HEIGHT = 6 * 72; // 6" -> pt
+const PRODUCT_LABEL_HEIGHT = 145 * 2.83465; // 14,5cm -> pt
 const PL_MARGIN = 16;
 
 /** Lê linhas "Rótulo: valor" do texto livre de especificações. */

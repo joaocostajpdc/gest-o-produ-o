@@ -164,17 +164,41 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 }
 
 // ---------------------------------------------------------------------------
-// Etiqueta do produto (ficha detalhada, tipo tag) — 100mm x 150mm.
+// Etiqueta do produto (ficha detalhada, tipo tag) — 4" x 6" (101,6 x 152,4mm)
+// para corresponder exatamente ao tamanho da etiqueta física já usada (ver
+// pedido do utilizador de 2026-09-01, com imagem do software de etiquetas
+// atual mostrando a régua em polegadas: "a etiqueta tem que ter estas
+// medidas"). Antes desta alteração a etiqueta tinha 100mm x 150mm.
 //
 // Segue o modelo de etiqueta já usado nas caixas físicas (logótipo, campos
-// Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant./V.Ref./N.O.S.,
-// código QR e data) — ver pedido do utilizador de 2026-08-21. Os valores dos
-// campos são lidos do mesmo texto livre de "Características do Produto" já
-// usado na Ficha de Produção e na página da OS (sem exigir novos campos
-// estruturados na aplicação); os campos ausentes desse texto são omitidos.
+// Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant., código QR e
+// data) — ver pedido do utilizador de 2026-08-21. Os valores dos campos são
+// lidos do mesmo texto livre de "Características do Produto" já usado na
+// Ficha de Produção e na página da OS (sem exigir novos campos estruturados
+// na aplicação); os campos ausentes desse texto são omitidos.
+//
+// Três referências distintas, tal como pedido pelo utilizador em
+// 2026-09-01 ("é importante nas etiquetas destinguir a n/ ref, v/ ref. e
+// ordem de serviço"):
+//  - N/Ref.  — a encomenda do cliente a que este produto diz respeito (vem
+//    do texto "Referente a:" importado do Goldylocks). Mostra-se sempre,
+//    com traço quando não há informação, tal como no modelo físico.
+//  - V/Ref.  — só aparece quando existir essa informação nas Características
+//    do Produto (ao contrário do N/Ref, omite-se por completo quando não há
+//    valor, em vez de mostrar um traço).
+//  - Ordem de Serviço — o nosso próprio número, sempre presente, com o
+//    rótulo por extenso (em vez da antiga abreviatura "N.O.S.") para não ser
+//    confundido visualmente com "N/Ref" acima.
+//
+// O código que abre a OS na aplicação passou de QR para código de barras
+// (Code128), tal como a Etiqueta de Código de Barras — ver pedido do
+// utilizador de 2026-09-01: "tudo que esteja ligado ao programa de
+// produção seja em código de barras". O segundo código (link para o
+// site/redes da empresa) mantém-se QR, por não estar ligado à aplicação de
+// gestão de produção.
 // ---------------------------------------------------------------------------
-const PRODUCT_LABEL_WIDTH = 100 * 2.83465;
-const PRODUCT_LABEL_HEIGHT = 150 * 2.83465;
+const PRODUCT_LABEL_WIDTH = 4 * 72; // 4" -> pt (72pt/polegada)
+const PRODUCT_LABEL_HEIGHT = 6 * 72; // 6" -> pt
 const PL_MARGIN = 16;
 
 /** Lê linhas "Rótulo: valor" do texto livre de especificações. */
@@ -205,15 +229,27 @@ function buildProductLabelFields(data: LabelOrderData): { label: string; value: 
   push("Vidro", "vidro");
   push("Medida", "medida", "dimensões", "dimensoes");
   push("Quant.", "quant.", "quant", "quantidade");
-  // "Referente a" é a referência do cliente para esta encomenda — mostra-se
-  // como "V/Ref." (Vossa Referência), tal como no modelo físico. Quando a OS
-  // não tem referência, mostra-se um traço (----------), tal como no modelo
-  // físico, em vez de omitir a linha.
-  const vRef = specs["referente a"] ?? specs["v/ref"] ?? specs["v/ref."];
-  fields.push({ label: "V/Ref.", value: vRef ?? "----------" });
-  // N.O.S. (Nº da nossa Ordem de Serviço) é sempre o nosso próprio número —
-  // não depende do texto de especificações.
-  fields.push({ label: "N.O.S.", value: data.externalId });
+
+  // N/Ref. (Nossa Referência) = a encomenda do cliente a que este produto
+  // diz respeito — vem do texto "Referente a:" importado do Goldylocks (ver
+  // goldylocksPdfParser.ts). Mostra-se sempre, com traço quando não há
+  // informação, tal como no modelo físico (pedido do utilizador de
+  // 2026-09-01: "n/ ref, é a encomenda do clinete").
+  const nRef =
+    specs["referente a"] ?? specs["n/ref"] ?? specs["n/ref."] ?? specs["nossa ref"] ?? specs["nossa referência"];
+  fields.push({ label: "N/Ref.", value: nRef ?? "----------" });
+
+  // V/Ref. (Vossa Referência) — campo distinto do N/Ref acima, só aparece
+  // quando existir essa informação nas Características do Produto; omite-se
+  // por completo quando não há valor, em vez de mostrar um traço (pedido do
+  // utilizador de 2026-09-01: "v ref, apenas utilizas quando tiver inf. na
+  // ordem de serviço").
+  push("V/Ref.", "v/ref", "v/ref.", "vossa ref", "vossa referência");
+
+  // Ordem de Serviço é sempre o nosso próprio número — não depende do texto
+  // de especificações. Rótulo por extenso (em vez da antiga abreviatura
+  // "N.O.S.") para não ser confundido com o N/Ref acima.
+  fields.push({ label: "Ordem de Serviço", value: data.externalId });
   return fields;
 }
 
@@ -227,8 +263,8 @@ function buildProductLabelFields(data: LabelOrderData): { label: string; value: 
 const SITE_QR_URL = "https://linktr.ee/jpdcmynhoferragens";
 
 export async function streamProductLabelPdf(res: Response, data: LabelOrderData) {
-  const [orderQrPng, siteQrPng] = await Promise.all([
-    generateQrCode(data.orderUrl),
+  const [barcodePng, siteQrPng] = await Promise.all([
+    generateBarcode(data.externalId),
     generateQrCode(SITE_QR_URL),
   ]);
   const fields = buildProductLabelFields(data);
@@ -249,8 +285,10 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 
   // Todo o texto usa coordenadas (x, y) absolutas em vez do cursor "fluido"
   // do pdfkit — mesma razão da etiqueta QR acima: o número de campos aqui é
-  // sempre limitado (no máximo 9), o que torna seguro calcular a posição de
-  // cada linha à partida, sem risco de o pdfkit inserir uma página extra.
+  // sempre limitado (no máximo 10: Modelo/Acabamento/Enchimento/Espessura/
+  // Vidro/Medida/Quant./N.Ref./V.Ref./Ordem de Serviço), o que torna seguro
+  // calcular a posição de cada linha à partida, sem risco de o pdfkit
+  // inserir uma página extra.
   const logoSize = 42;
   const logoX = PL_MARGIN + (width - logoSize) / 2;
   doc.image(LOGO_PNG, logoX, PL_MARGIN, { width: logoSize, height: logoSize });
@@ -283,12 +321,15 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
     y += 16;
   }
 
-  // Dois códigos QR lado a lado, alinhados ao fundo da etiqueta: um abre
-  // esta Ordem de Serviço na aplicação de gestão (mesmo comportamento da
-  // Etiqueta QR), o outro é o mesmo link que já vinha no modelo físico
-  // (site/redes da empresa) — cada um com uma legenda por baixo para não
-  // haver confusão sobre qual é qual.
+  // Código de barras (abre a OS na aplicação, lido pelo botão "Ler Código")
+  // e QR do site, lado a lado, alinhados ao fundo da etiqueta — mesma
+  // disposição que já existia com os dois QR, só que a coluna esquerda
+  // passou a código de barras (pedido do utilizador de 2026-09-01: "tudo
+  // que esteja ligado ao programa de produção seja em código de barras" — o
+  // QR do site, à direita, fica QR por não estar ligado à aplicação).
   const qrSize = 62;
+  const codesGap = 10;
+  const barcodeColWidth = width - qrSize - codesGap;
   const qrY = PRODUCT_LABEL_HEIGHT - PL_MARGIN - qrSize - 12;
   const dateY = qrY - 14;
 
@@ -300,16 +341,24 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 
   const qr2X = PL_MARGIN + width - qrSize;
 
-  // As legendas usam { height, ellipsis: true } — sem isto, se o texto
-  // fosse largo de mais para a coluna, o pdfkit "flui" o cursor para além
-  // do fundo da página e insere silenciosamente uma segunda página em
-  // branco (mesmo problema já documentado na etiqueta QR, acima).
-  doc.image(orderQrPng, PL_MARGIN, qrY, { width: qrSize, height: qrSize });
+  // O código de barras usa "fit" (escala uniforme), nunca width/height
+  // fixos, para nunca esticar as barras de forma desigual e arriscar
+  // tornar o código ilegível (mesma razão documentada na Etiqueta de
+  // Código de Barras, acima). As legendas usam { height, ellipsis: true }
+  // — sem isto, se o texto fosse largo de mais para a coluna, o pdfkit
+  // "flui" o cursor para além do fundo da página e insere silenciosamente
+  // uma segunda página em branco (mesmo problema já documentado ali).
+  doc.image(barcodePng, PL_MARGIN, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
   doc
     .fontSize(6.5)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text("Abrir OS", PL_MARGIN, qrY + qrSize + 3, { width: qrSize, height: 9, align: "center", ellipsis: true });
+    .text("Ler para abrir OS", PL_MARGIN, qrY + qrSize + 3, {
+      width: barcodeColWidth,
+      height: 9,
+      align: "center",
+      ellipsis: true,
+    });
 
   doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
   doc

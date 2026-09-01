@@ -43,8 +43,8 @@ materialRequestsRouter.get(
       include: INCLUDE,
       orderBy: [{ createdAt: "desc" }],
     });
-    // "A pedir" e "Pedido" à frente de "Recebido", que fica arquivado no fim.
-    const order: Record<string, number> = { A_PEDIR: 0, PEDIDO: 1, RECEBIDO: 2 };
+    // "Por tratar" à frente de "Tratado", que fica arquivado no fim.
+    const order: Record<string, number> = { A_PEDIR: 0, RECEBIDO: 1 };
     items.sort((a, b) => order[a.status] - order[b.status]);
     res.json(items);
   })
@@ -73,10 +73,9 @@ materialRequestsRouter.put(
       throw new Error("Pedido de material não encontrado.");
     }
 
-    // Regista automaticamente quando o pedido passou a "Pedido"/"Recebido",
-    // sem apagar a data se o estado for alterado outra vez para trás.
-    const extra: { orderedAt?: Date; receivedAt?: Date } = {};
-    if (data.status === "PEDIDO" && !existing.orderedAt) extra.orderedAt = new Date();
+    // Regista automaticamente quando o pedido passou a "Tratado", sem
+    // apagar a data se o estado for alterado outra vez para trás.
+    const extra: { receivedAt?: Date } = {};
     if (data.status === "RECEBIDO" && !existing.receivedAt) extra.receivedAt = new Date();
 
     const item = await prisma.materialRequest.update({

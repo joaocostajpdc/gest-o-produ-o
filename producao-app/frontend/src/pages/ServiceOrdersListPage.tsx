@@ -8,7 +8,7 @@ import {
   Stage,
   Supplier,
 } from "../types";
-import { minutesToDays, minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
+import { minutesToDays, PriorityBadge, StatusBadge } from "../components/Badges";
 import { useAuth } from "../contexts/AuthContext";
 
 const PRIORITY_OPTIONS = [
@@ -304,7 +304,7 @@ export function ServiceOrdersListPage() {
                     {o.currentStage ? (
                       <div className="current-stage">
                         <div className="current-stage-name">{o.currentStage.name}</div>
-                        <div className="muted">{minutesToHuman(o.currentStage.residenceMinutes)} na etapa</div>
+                        <div className="muted">{minutesToDays(o.currentStage.residenceMinutes)} na etapa</div>
                         {o.currentStage.supplier && (
                           <div className="muted">Fornecedor: {o.currentStage.supplier}</div>
                         )}

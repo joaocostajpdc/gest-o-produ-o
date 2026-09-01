@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { SVGProps, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import logoMark from "../assets/logo-mark.png";
@@ -16,6 +16,27 @@ import {
   IconTruck,
   IconUsers,
 } from "./icons";
+
+// Ícone do "Ler Código" definido aqui em vez de em icons.tsx, para não ser
+// preciso mexer em mais um ficheiro só para um ícone novo.
+function IconScan(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3" />
+      <path d="M7 12h10" />
+    </svg>
+  );
+}
 
 function initials(name?: string) {
   if (!name) return "?";
@@ -75,6 +96,9 @@ export function Layout() {
         <nav>
           <NavLink to="/" end>
             <IconClipboard /> Ordens de Serviço
+          </NavLink>
+          <NavLink to="/scan">
+            <IconScan /> Ler Código
           </NavLink>
           <NavLink to="/material-lacagem">
             <IconDroplet /> Material em Lacagem

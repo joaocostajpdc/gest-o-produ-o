@@ -65,6 +65,22 @@ function extractAfterLabel(text: string, label: string): string | undefined {
 }
 
 /**
+ * Algumas linhas de artigo (ex.: mosquiteiras) não têm um rótulo
+ * "Dimensões:" — em vez disso, a largura e a altura vêm impressas sem
+ * rótulo, no formato "Larg. 1370 * Alt. 1000" (ver OS 2026/432 real,
+ * mosquiteiras, pedido do utilizador de 2026-09-02: "cria etiqueta para
+ * mosquiteira"). Normaliza para o mesmo formato usado nas restantes
+ * "Dimensões:" (com "x" em vez de "*"), para que o resto da aplicação
+ * (Características do Produto, Etiqueta do Produto) trate este campo da
+ * mesma forma independentemente da categoria do produto.
+ */
+function extractLargAlt(text: string): string | undefined {
+  const match = text.match(/Larg\.\s*([\d.,]+)\s*\*\s*Alt\.\s*([\d.,]+)/i);
+  if (!match) return undefined;
+  return `Larg. ${match[1]} x Alt. ${match[2]}`;
+}
+
+/**
  * Uma linha de artigo da Ordem Serviço (uma OS pode ter mais do que uma —
  * ver ParsedOrdemServico.artigos abaixo).
  */
@@ -172,7 +188,7 @@ function parseText(text: string): ParsedOrdemServico {
       quantidade: m[3]?.trim(),
       unidade: m[4]?.trim(),
       modelo: extractAfterLabel(blockText, "Modelo:"),
-      dimensoes: extractAfterLabel(blockText, "Dimensões:"),
+      dimensoes: extractAfterLabel(blockText, "Dimensões:") ?? extractLargAlt(blockText),
       acabamento: extractAfterLabel(blockText, "Acabamento:"),
       enchimento: extractAfterLabel(blockText, "Enchimento:"),
       // Espessura/Vidro só aparecem em alguns tipos de artigo (ex.: painéis

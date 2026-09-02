@@ -114,7 +114,7 @@ export function ServiceOrderDetailPage() {
   const [deadlineInput, setDeadlineInput] = useState("");
   const [deadlineReason, setDeadlineReason] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [downloadingLabel, setDownloadingLabel] = useState<"barcode" | "product" | null>(null);
+  const [downloadingLabel, setDownloadingLabel] = useState<"barcode" | "product" | "mosquiteira" | null>(null);
 
   async function downloadTravelerPdf() {
     if (!id) return;
@@ -130,13 +130,14 @@ export function ServiceOrderDetailPage() {
     }
   }
 
-  async function downloadLabel(kind: "barcode" | "product") {
+  async function downloadLabel(kind: "barcode" | "product" | "mosquiteira") {
     if (!id) return;
     setDownloadingLabel(kind);
     setActionError(null);
     try {
       const blob = await api.getBlob(`/service-orders/${id}/label-${kind}`);
-      const suffix = kind === "barcode" ? "etiqueta-barras" : "etiqueta-produto";
+      const suffix =
+        kind === "barcode" ? "etiqueta-barras" : kind === "product" ? "etiqueta-produto" : "etiqueta-mosquiteira";
       downloadBlob(blob, `${suffix}-${order?.externalId ?? id}.pdf`);
     } catch (err) {
       setActionError(
@@ -281,6 +282,16 @@ export function ServiceOrderDetailPage() {
                   {downloadingLabel === "product" ? "A gerar..." : "Etiqueta do Produto"}
                 </button>
               </>
+            )}
+            {order.product.category === "Mosquiteiras" && (
+              <button
+                className="btn secondary"
+                disabled={downloadingLabel !== null}
+                onClick={() => downloadLabel("mosquiteira")}
+                title="Etiqueta de mosquiteira — uma por unidade física"
+              >
+                {downloadingLabel === "mosquiteira" ? "A gerar..." : "Etiqueta de Mosquiteira"}
+              </button>
             )}
           </div>
 

@@ -64,12 +64,11 @@ function extractAfterLabel(text: string, label: string): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
-interface ParsedOrdemServico {
-  numero: string;
-  dataHora?: string;
-  clienteNumero: string;
-  clienteNome?: string;
-  clienteContribuinte?: string;
+/**
+ * Uma linha de artigo da Ordem Serviço (uma OS pode ter mais do que uma —
+ * ver ParsedOrdemServico.artigos abaixo).
+ */
+interface ParsedArtigo {
   codigoArtigo: string;
   descricaoArtigo?: string;
   modelo?: string;
@@ -80,6 +79,24 @@ interface ParsedOrdemServico {
   vidro?: string;
   quantidade?: string;
   unidade?: string;
+  /**
+   * "v/ ref.:" impressa a seguir aos campos deste artigo — ao contrário de
+   * "Referente a:" (que é uma só para toda a OS), esta pode ser diferente
+   * por artigo (ex.: cada linha da encomenda do cliente com a sua própria
+   * referência) — ver pedido do utilizador de 2026-09-02.
+   */
+  vRefArtigo?: string;
+}
+
+interface ParsedOrdemServico {
+  numero: string;
+  dataHora?: string;
+  clienteNumero: string;
+  clienteNome?: string;
+  clienteContribuinte?: string;
+  /** Uma OS pode ter mais do que uma linha de artigo — ver pedido do utilizador de 2026-09-02: "esta ordem de serviço tem dois artigos tem que ler os dois". */
+  artigos: ParsedArtigo[];
+  /** "Referente a:" (Encomenda Cliente) — impressa uma só vez, aplica-se a toda a OS mesmo quando há vários artigos. */
   referencia?: string;
   /** Data no formato DD/MM/AAAA, tal como impressa na linha "Prazo de entrega:". */
   prazoEntrega?: string;
@@ -128,18 +145,44 @@ function parseText(text: string): ParsedOrdemServico {
 
   const clienteContribuinte = extractDigitsAfterLabel(text, "V/Contribuinte:");
 
-  // Linha do artigo: "CODIGO | Descrição livre | Quantidade Unidade" — a
-  // primeira linha com este formato de 3 colunas a seguir ao cabeçalho
-  // "Cod. | Descrição | Quant. ...".
+  // Linhas de artigo: "CODIGO | Descrição livre | Quantidade Unidade" — uma
+  // OS pode ter uma ou várias, todas com este formato de 3 colunas, a
+  // seguir ao cabeçalho "Cod. | Descrição | Quant. ...". Para cada uma,
+  // os campos indentados por baixo (Modelo/Dimensões/Acabamento/etc.)
+  // pertencem só a essa linha — por isso são extraídos apenas do trecho de
+  // texto entre esta linha de artigo e a seguinte (ou o fim do documento),
+  // nunca do texto completo, para não misturar os campos de artigos
+  // diferentes quando há mais do que um (ver pedido do utilizador de
+  // 2026-09-02, com a OS 2026/430 real: dois artigos com o mesmo Modelo
+  // mas Dimensões e v/ref diferentes).
   const afterHeader = text.slice(text.indexOf("Cod."));
-  const artigoMatch = afterHeader.match(/^(\S+)\s*\|\s*([^|]+?)\s*\|\s*([\d.,]+)\s*(\S+)\s*$/m);
-  if (!artigoMatch) {
+  const artigoLineRe = /^(\S+)\s*\|\s*([^|]+?)\s*\|\s*([\d.,]+)\s*(\S+)\s*$/gm;
+  const artigoMatches = [...afterHeader.matchAll(artigoLineRe)];
+  if (artigoMatches.length === 0) {
     throw new Error("Não foi possível encontrar a linha do artigo (Código / Descrição / Quantidade) no PDF.");
   }
-  const codigoArtigo = artigoMatch[1];
-  const descricaoArtigo = artigoMatch[2]?.trim();
-  const quantidade = artigoMatch[3]?.trim();
-  const unidade = artigoMatch[4]?.trim();
+
+  const artigos: ParsedArtigo[] = artigoMatches.map((m, i) => {
+    const blockStart = m.index! + m[0].length;
+    const blockEnd = i + 1 < artigoMatches.length ? artigoMatches[i + 1].index! : afterHeader.length;
+    const blockText = afterHeader.slice(blockStart, blockEnd);
+    return {
+      codigoArtigo: m[1],
+      descricaoArtigo: m[2]?.trim(),
+      quantidade: m[3]?.trim(),
+      unidade: m[4]?.trim(),
+      modelo: extractAfterLabel(blockText, "Modelo:"),
+      dimensoes: extractAfterLabel(blockText, "Dimensões:"),
+      acabamento: extractAfterLabel(blockText, "Acabamento:"),
+      enchimento: extractAfterLabel(blockText, "Enchimento:"),
+      // Espessura/Vidro só aparecem em alguns tipos de artigo (ex.: painéis
+      // com vidro) — ver etiqueta do produto em labelPdfService.ts, que usa
+      // estas linhas (quando presentes) para preencher os seus campos.
+      espessura: extractAfterLabel(blockText, "Espessura:"),
+      vidro: extractAfterLabel(blockText, "Vidro:"),
+      vRefArtigo: extractAfterLabel(blockText, "v/ ref.:") ?? extractAfterLabel(blockText, "v/ref.:"),
+    };
+  });
 
   return {
     numero,
@@ -147,35 +190,54 @@ function parseText(text: string): ParsedOrdemServico {
     clienteNumero,
     clienteNome,
     clienteContribuinte,
-    codigoArtigo,
-    descricaoArtigo,
-    modelo: extractAfterLabel(text, "Modelo:"),
-    dimensoes: extractAfterLabel(text, "Dimensões:"),
-    acabamento: extractAfterLabel(text, "Acabamento:"),
-    enchimento: extractAfterLabel(text, "Enchimento:"),
-    // Espessura/Vidro só aparecem em alguns tipos de artigo (ex.: painéis
-    // com vidro) — ver etiqueta do produto em labelPdfService.ts, que usa
-    // estas linhas (quando presentes) para preencher os seus campos.
-    espessura: extractAfterLabel(text, "Espessura:"),
-    vidro: extractAfterLabel(text, "Vidro:"),
-    quantidade,
-    unidade,
+    artigos,
+    // Impressa uma só vez no documento (não por artigo), mesmo quando há
+    // vários artigos — por isso extraída do texto completo, não do bloco de
+    // um artigo em particular.
     referencia: extractAfterLabel(text, "Referente a:"),
     prazoEntrega: text.match(/Prazo de entrega:?\s*\|?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1],
   };
 }
 
-function buildNotes(parsed: ParsedOrdemServico): string | undefined {
+/** As linhas de campos (Modelo/Acabamento/.../Quant./V.Ref.) de um único artigo, sem o cabeçalho "Artigo N —". */
+function buildArtigoParts(a: ParsedArtigo): string[] {
   const parts: string[] = [];
-  if (parsed.modelo) parts.push(`Modelo: ${parsed.modelo}`);
-  if (parsed.acabamento) parts.push(`Acabamento: ${parsed.acabamento}`);
-  if (parsed.enchimento) parts.push(`Enchimento: ${parsed.enchimento}`);
-  if (parsed.espessura) parts.push(`Espessura: ${parsed.espessura}`);
-  if (parsed.vidro) parts.push(`Vidro: ${parsed.vidro}`);
-  if (parsed.dimensoes) parts.push(`Dimensões: ${parsed.dimensoes}`);
-  if (parsed.quantidade) parts.push(`Quant.: ${parsed.quantidade}${parsed.unidade ? ` ${parsed.unidade}` : ""}`);
-  if (parsed.referencia) parts.push(`Referente a: ${parsed.referencia}`);
-  return parts.length ? parts.join("\n") : undefined;
+  if (a.modelo) parts.push(`Modelo: ${a.modelo}`);
+  if (a.acabamento) parts.push(`Acabamento: ${a.acabamento}`);
+  if (a.enchimento) parts.push(`Enchimento: ${a.enchimento}`);
+  if (a.espessura) parts.push(`Espessura: ${a.espessura}`);
+  if (a.vidro) parts.push(`Vidro: ${a.vidro}`);
+  if (a.dimensoes) parts.push(`Dimensões: ${a.dimensoes}`);
+  if (a.quantidade) parts.push(`Quant.: ${a.quantidade}${a.unidade ? ` ${a.unidade}` : ""}`);
+  if (a.vRefArtigo) parts.push(`V/Ref.: ${a.vRefArtigo}`);
+  return parts;
+}
+
+function buildNotes(parsed: ParsedOrdemServico): string | undefined {
+  // Uma só linha de artigo: mantém exatamente o formato anterior (sem
+  // cabeçalhos "Artigo N —"), para não alterar o texto de "Características
+  // do Produto" das Ordens de Serviço já existentes/normais (a grande
+  // maioria) que só têm um artigo.
+  if (parsed.artigos.length <= 1) {
+    const parts = parsed.artigos[0] ? buildArtigoParts(parsed.artigos[0]) : [];
+    if (parsed.referencia) parts.push(`Referente a: ${parsed.referencia}`);
+    return parts.length ? parts.join("\n") : undefined;
+  }
+
+  // Vários artigos na mesma OS — cada um fica num bloco próprio,
+  // identificado por título ("Artigo 1 — ...", "Artigo 2 — ..."), separado
+  // por uma linha em branco. A Etiqueta do Produto (labelPdfService.ts)
+  // reconhece estes títulos e imprime uma etiqueta por artigo, todas com o
+  // mesmo número de Ordem de Serviço (ver pedido do utilizador de
+  // 2026-09-02: "esta ordem de serviço tem dois artigos tem que ler os
+  // dois" / "como nas etiquetas uma para cada produto").
+  const blocks = parsed.artigos.map((a, i) => {
+    const title = `Artigo ${i + 1} — ${a.codigoArtigo}${a.descricaoArtigo ? ` ${a.descricaoArtigo}` : ""}`;
+    const body = buildArtigoParts(a).join("\n");
+    return body ? `${title}\n${body}` : title;
+  });
+  if (parsed.referencia) blocks.push(`Referente a: ${parsed.referencia}`);
+  return blocks.join("\n\n");
 }
 
 /**
@@ -186,6 +248,14 @@ function buildNotes(parsed: ParsedOrdemServico): string | undefined {
 export async function parseOrdemServicoPdf(pdfBuffer: Buffer): Promise<GoldylocksServiceOrder> {
   const data = await pdfParse(pdfBuffer, { pagerender: renderPageWithColumns });
   const parsed = parseText(data.text);
+  // A aplicação continua a acompanhar um único "produto" por Ordem de
+  // Serviço (etapas, tempos, etc.) — quando a OS tem vários artigos, é o
+  // primeiro que fica associado a esse acompanhamento; os restantes ficam
+  // registados no texto de especificações (ver buildNotes acima) e geram
+  // as suas próprias etiquetas, mas partilham a mesma OS (pedido do
+  // utilizador de 2026-09-02: "uma OS só, mas com uma etiqueta por
+  // artigo").
+  const primeiroArtigo = parsed.artigos[0];
 
   return {
     externalId: parsed.numero,
@@ -195,8 +265,8 @@ export async function parseOrdemServicoPdf(pdfBuffer: Buffer): Promise<Goldylock
       taxNumber: parsed.clienteContribuinte,
     },
     product: {
-      externalId: parsed.codigoArtigo,
-      name: parsed.descricaoArtigo ?? parsed.codigoArtigo,
+      externalId: primeiroArtigo.codigoArtigo,
+      name: primeiroArtigo.descricaoArtigo ?? primeiroArtigo.codigoArtigo,
     },
     createdAt: parsed.dataHora ? parsed.dataHora.replace(" ", "T") : new Date().toISOString(),
     notes: buildNotes(parsed),

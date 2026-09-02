@@ -33,6 +33,61 @@ async function uploadAttachment(orderId: string, file: File, observationId?: str
   );
 }
 
+// Renderiza o texto livre de "Características do Produto". Quando a OS tem
+// um só artigo (o caso normal), mostra-se exatamente como sempre — linha a
+// linha, sem tratamento especial. Quando tem vários artigos (ver
+// goldylocksPdfParser.ts no backend, que os separa em blocos "Artigo N —
+// ..."), sem isto sairia tudo seguido, difícil de separar visualmente —
+// por isso cada artigo passa a ter o seu próprio título destacado e espaço
+// entre blocos, e a linha "Referente a:" (partilhada por toda a OS) sai à
+// parte, no fim, em vez de misturada com os campos do último artigo (pedido
+// do utilizador de 2026-09-02: "melhora isto", a propósito da OS 2026/430
+// com 2 artigos).
+function SpecificationsBody({ specifications }: { specifications: string }) {
+  const headerRe = /^Artigo \d+\s*—.*$/gm;
+  const headers = [...specifications.matchAll(headerRe)];
+
+  if (headers.length === 0) {
+    return (
+      <div className="spec-card-body">
+        {specifications.split("\n").map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+      </div>
+    );
+  }
+
+  const referenciaMatch = specifications.match(/^Referente a:\s*(.+)$/m);
+  const referencia = referenciaMatch ? referenciaMatch[1].trim().replace(/,\s*$/, "") : null;
+  const bodyText = referenciaMatch ? specifications.slice(0, referenciaMatch.index).trimEnd() : specifications;
+
+  const blocks = headers.map((h, i) => {
+    const start = h.index! + h[0].length;
+    const end = i + 1 < headers.length ? headers[i + 1].index! : bodyText.length;
+    return {
+      title: h[0].trim(),
+      lines: bodyText
+        .slice(start, end)
+        .split("\n")
+        .filter((line) => line.trim().length > 0),
+    };
+  });
+
+  return (
+    <div className="spec-card-body">
+      {blocks.map((block, i) => (
+        <div key={i} className="spec-article-block">
+          <div className="spec-article-title">{block.title}</div>
+          {block.lines.map((line, j) => (
+            <div key={j}>{line}</div>
+          ))}
+        </div>
+      ))}
+      {referencia && <div className="spec-referencia">Referente a: {referencia}</div>}
+    </div>
+  );
+}
+
 // Converte um ISO string para o formato aceite por <input type="datetime-local">.
 function toDatetimeLocalValue(iso: string | null): string {
   if (!iso) return "";
@@ -262,11 +317,7 @@ export function ServiceOrderDetailPage() {
       {order.specifications && (
         <div className="card spec-card">
           <div className="spec-card-label">Características do Produto</div>
-          <div className="spec-card-body">
-            {order.specifications.split("\n").map((line, i) => (
-              <div key={i}>{line}</div>
-            ))}
-          </div>
+          <SpecificationsBody specifications={order.specifications} />
         </div>
       )}
 

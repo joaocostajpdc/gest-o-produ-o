@@ -760,6 +760,39 @@ label {
   color: var(--color-text);
 }
 
+/* Quando "Características do Produto" tem vários artigos (ver
+   SpecificationsBody em ServiceOrderDetailPage.tsx) — separa cada bloco
+   visualmente, em vez de tudo seguido. */
+.spec-article-block {
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.spec-article-block:last-of-type {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.spec-article-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-dark);
+  margin-bottom: 4px;
+}
+
+.spec-referencia {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
 .report-sheet {
   padding: 0;
   overflow: hidden;

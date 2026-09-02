@@ -183,22 +183,24 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // Três referências distintas, tal como pedido pelo utilizador em
 // 2026-09-01 ("é importante nas etiquetas destinguir a n/ ref, v/ ref. e
 // ordem de serviço"):
-//  - N/Ref.  — a encomenda do cliente a que este produto diz respeito (vem
-//    do texto "Referente a:" importado do Goldylocks). Mostra-se sempre,
-//    com traço quando não há informação, tal como no modelo físico.
+//  - a encomenda do cliente a que este produto diz respeito (vem do texto
+//    "Referente a:" importado do Goldylocks). Mostra-se sempre, com traço
+//    quando não há informação, tal como no modelo físico. Sai sem rótulo
+//    "N/Ref." à frente — só o texto da encomenda (pedido do utilizador de
+//    2026-09-02: "apaga a N/ ref. deixado apenas a encomenda cliente").
 //  - V/Ref.  — só aparece quando existir essa informação nas Características
-//    do Produto (ao contrário do N/Ref, omite-se por completo quando não há
-//    valor, em vez de mostrar um traço).
+//    do Produto (ao contrário da linha acima, omite-se por completo quando
+//    não há valor, em vez de mostrar um traço).
 //  - Ordem de Serviço — o nosso próprio número, sempre presente, com o
-//    rótulo por extenso (em vez da antiga abreviatura "N.O.S.") para não ser
-//    confundido visualmente com "N/Ref" acima.
+//    rótulo por extenso (em vez da antiga abreviatura "N.O.S.").
 //
 // O código que abre a OS na aplicação passou de QR para código de barras
 // (Code128), tal como a Etiqueta de Código de Barras — ver pedido do
 // utilizador de 2026-09-01: "tudo que esteja ligado ao programa de
 // produção seja em código de barras". O segundo código (link para o
 // site/redes da empresa) mantém-se QR, por não estar ligado à aplicação de
-// gestão de produção.
+// gestão de produção. A legenda "Ler para abrir OS" por baixo do código de
+// barras foi removida (pedido do utilizador de 2026-09-02).
 //
 // Uma Ordem de Serviço pode ter mais do que um artigo (ver
 // goldylocksPdfParser.ts) — nesse caso o texto de especificações vem
@@ -266,8 +268,8 @@ function buildProductLabelFieldsForBlock(
   specs: Record<string, string>,
   referencia: string | undefined,
   externalId: string
-): { label: string; value: string }[] {
-  const fields: { label: string; value: string }[] = [];
+): { label: string | null; value: string }[] {
+  const fields: { label: string | null; value: string }[] = [];
   const push = (label: string, ...keys: string[]) => {
     const value = keys.map((k) => specs[k]).find((v) => !!v);
     if (value) fields.push({ label, value });
@@ -280,13 +282,15 @@ function buildProductLabelFieldsForBlock(
   push("Medida", "medida", "dimensões", "dimensoes");
   push("Quant.", "quant.", "quant", "quantidade");
 
-  // N/Ref. (Nossa Referência) = a encomenda do cliente a que este produto
-  // diz respeito — vem do texto "Referente a:" importado do Goldylocks (ver
-  // goldylocksPdfParser.ts). Mostra-se sempre, com traço quando não há
-  // informação, tal como no modelo físico (pedido do utilizador de
-  // 2026-09-01: "n/ ref, é a encomenda do clinete"). É partilhada por toda a
-  // OS (ver extractSharedReferencia), com o mapa deste bloco como reserva
-  // para especificações escritas manualmente com uma destas chaves.
+  // A encomenda do cliente a que este produto diz respeito — vem do texto
+  // "Referente a:" importado do Goldylocks (ver goldylocksPdfParser.ts).
+  // Mostra-se sempre, com traço quando não há informação, tal como no
+  // modelo físico (pedido do utilizador de 2026-09-01: "n/ ref, é a
+  // encomenda do clinete"). Sai sem rótulo "N/Ref." à frente — só o valor
+  // (pedido do utilizador de 2026-09-02: "apaga a N/ ref. deixado apenas a
+  // encomenda cliente"). É partilhada por toda a OS (ver
+  // extractSharedReferencia), com o mapa deste bloco como reserva para
+  // especificações escritas manualmente com uma destas chaves.
   const nRef =
     referencia ??
     specs["referente a"] ??
@@ -294,7 +298,7 @@ function buildProductLabelFieldsForBlock(
     specs["n/ref."] ??
     specs["nossa ref"] ??
     specs["nossa referência"];
-  fields.push({ label: "N/Ref.", value: nRef ?? "----------" });
+  fields.push({ label: null, value: nRef ?? "----------" });
 
   // V/Ref. (Vossa Referência) — campo distinto do N/Ref acima, só aparece
   // quando existir essa informação nas Características do Produto; omite-se
@@ -332,7 +336,7 @@ const SITE_QR_URL = "https://linktr.ee/jpdcmynhoferragens";
  */
 function renderProductLabelPage(
   doc: PDFKit.PDFDocument,
-  fields: { label: string; value: string }[],
+  fields: { label: string | null; value: string }[],
   barcodePng: Buffer,
   siteQrPng: Buffer,
   createdAt: string,
@@ -386,20 +390,24 @@ function renderProductLabelPage(
 
   doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.ink);
   for (const f of fields) {
-    doc.text(`${f.label}: ${f.value}`, PL_MARGIN, y, { width, height: 15, ellipsis: true });
+    const text = f.label ? `${f.label}: ${f.value}` : f.value;
+    doc.text(text, PL_MARGIN, y, { width, height: 15, ellipsis: true });
     y += 16;
   }
 
   // Código de barras (abre a OS na aplicação, lido pelo botão "Ler Código")
-  // e QR do site, lado a lado, alinhados ao fundo da etiqueta — mesma
-  // disposição que já existia com os dois QR, só que a coluna esquerda
-  // passou a código de barras (pedido do utilizador de 2026-09-01: "tudo
-  // que esteja ligado ao programa de produção seja em código de barras" — o
-  // QR do site, à direita, fica QR por não estar ligado à aplicação).
+  // e QR do site, lado a lado — logo a seguir ao último campo (em vez de
+  // fixos junto ao fundo da etiqueta), para não deixar um espaço em branco
+  // grande entre o texto e os códigos quando há poucos campos (pedido do
+  // utilizador de 2026-09-02: "retira o espaço em branco abaixo entre
+  // texto e codigos"). A coluna esquerda passou de QR a código de barras
+  // (pedido do utilizador de 2026-09-01: "tudo que esteja ligado ao
+  // programa de produção seja em código de barras" — o QR do site, à
+  // direita, fica QR por não estar ligado à aplicação).
   const qrSize = 62;
   const codesGap = 10;
   const barcodeColWidth = width - qrSize - codesGap;
-  const qrY = PRODUCT_LABEL_HEIGHT - PL_MARGIN - qrSize - 12;
+  const qrY = y + 16;
   const dateY = qrY - 14;
 
   doc
@@ -418,16 +426,6 @@ function renderProductLabelPage(
   // "flui" o cursor para além do fundo da página e insere silenciosamente
   // uma segunda página em branco (mesmo problema já documentado ali).
   doc.image(barcodePng, PL_MARGIN, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
-  doc
-    .fontSize(6.5)
-    .fillColor(COLORS.muted)
-    .font("Helvetica")
-    .text("Ler para abrir OS", PL_MARGIN, qrY + qrSize + 3, {
-      width: barcodeColWidth,
-      height: 9,
-      align: "center",
-      ellipsis: true,
-    });
 
   doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
   doc

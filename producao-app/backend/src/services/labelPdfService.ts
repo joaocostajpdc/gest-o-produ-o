@@ -520,3 +520,307 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 
   doc.end();
 }
+
+// ---------------------------------------------------------------------------
+// Etiqueta de mosquiteira — categoria "Mosquiteiras" (pedido do utilizador de
+// 2026-09-02: "cria etiqueta para mosquiteira", com foto de referência da
+// etiqueta em papel já usada nas caixas: logótipo, COD., descrição do
+// produto com a medida, QUANT. e um código QR — e confirmado por ele: "1
+// para cada unidade tem que ter [só] uma altura").
+//
+// Ao contrário da Etiqueta do Produto (Modelo/Acabamento/Enchimento/
+// Espessura/Vidro/Medida), a Ordem Serviço de uma mosquiteira não tem um
+// campo "Modelo:" nem "Dimensões:" — a largura/altura vêm impressas sem
+// rótulo, no formato "Larg. 1370 * Alt. 1000" (ver OS 2026/432 real,
+// enviada pelo utilizador como exemplo). goldylocksPdfParser.ts foi
+// alargado para reconhecer este formato como "Dimensões:", por isso chega
+// aqui já normalizado.
+//
+// Reutiliza a mesma renderProductLabelPage/productLabelPageHeight da
+// Etiqueta do Produto (o desenho é genérico — só depende da lista de
+// campos), com uma lista de campos própria (COD./Descrição/Dimensões/
+// Acabamento/Quant./Ordem de Serviço) e sem o indicador "Artigo X de Y"
+// (aqui não faz sentido: o pedido do utilizador foi "sem indicador, igual
+// ao modelo em papel", que só mostra sempre "QUANT.: 1").
+//
+// "1 para cada unidade": uma linha de artigo com Quant. 3, por exemplo, sai
+// em três páginas de etiqueta separadas (uma por unidade física), todas
+// idênticas e todas a mostrar "Quant.: 1" — nunca o total da linha. E,
+// porque o utilizador confirmou que todas as etiquetas da mesma Ordem de
+// Serviço devem sair com a mesma altura entre si, a altura é calculada uma
+// só vez (a partir do bloco com mais campos) e aplicada a todas as páginas,
+// em vez de variar por bloco como acontece na Etiqueta do Produto.
+//
+// Mantém-se o mesmo par de códigos da Etiqueta do Produto — código de
+// barras da Ordem de Serviço (abre a OS na aplicação) e QR do site — em vez
+// de replicar exatamente o único QR do modelo em papel (que é uma etiqueta
+// antiga, anterior à aplicação, e cujo conteúdo não é rastreável); mantém
+// também o formato de data já usado no resto da aplicação (DD/MM/AAAA), em
+// vez do "08.01.26" do modelo em papel. Ambas as escolhas ficam fáceis de
+// reverter se não for isto que o utilizador quer.
+// ---------------------------------------------------------------------------
+
+// A etiqueta de mosquiteira usa o seu próprio conjunto de tamanhos, mais
+// pequeno do que a Etiqueta do Produto (Painéis) — pedido do utilizador de
+// 2026-09-02: "apenas tenta que não seja tão comprida, a letra mais
+// pequena, logo e códigos" — em vez de mexer nas constantes PL_* partilhadas
+// com a Etiqueta do Produto (que já está aprovada e em produção), para não
+// arriscar alterar sem querer o visual daquela.
+const ML_MARGIN = 10;
+const ML_LOGO_SIZE = 24;
+const ML_LOGO_GAP = 6;
+const ML_TITLE_FONT_SIZE = 11;
+const ML_TITLE_LINE_HEIGHT = 14;
+const ML_SUBTITLE_FONT_SIZE = 7;
+const ML_SUBTITLE_LINE_HEIGHT = 10;
+const ML_DIVIDER_GAP = 8;
+const ML_FIELD_FONT_SIZE = 9;
+const ML_FIELD_LINE_HEIGHT = 12;
+const ML_DATE_HEIGHT = 9;
+const ML_DATE_TO_CODES_GAP = 4;
+const ML_QR_SIZE = 42;
+const ML_CODES_GAP = 8;
+const ML_CAPTION_FONT_SIZE = 5.5;
+const ML_CAPTION_GAP = 2;
+const ML_CAPTION_HEIGHT = 8;
+
+/** Altura total da etiqueta de mosquiteira para um dado número de campos — mesma lógica/objetivo de productLabelPageHeight, mas com os tamanhos ML_* mais compactos. */
+function mosquiteiraLabelPageHeight(fieldsCount: number): number {
+  let y = ML_MARGIN + ML_LOGO_SIZE + ML_LOGO_GAP;
+  y += ML_TITLE_LINE_HEIGHT;
+  y += ML_SUBTITLE_LINE_HEIGHT;
+  y += ML_DIVIDER_GAP;
+  y += fieldsCount * ML_FIELD_LINE_HEIGHT;
+  y += ML_DATE_HEIGHT;
+  y += ML_DATE_TO_CODES_GAP;
+  const codesBottom = ML_QR_SIZE + ML_CAPTION_GAP + ML_CAPTION_HEIGHT;
+  return y + codesBottom + ML_MARGIN;
+}
+
+/** Desenha uma página da etiqueta de mosquiteira — mesma estrutura da Etiqueta do Produto (logótipo, campos, código de barras + QR), mas com os tamanhos ML_* mais compactos e sem o indicador "Artigo X de Y" (que a etiqueta de mosquiteira nunca mostra). */
+function renderMosquiteiraLabelPage(
+  doc: PDFKit.PDFDocument,
+  fields: { label: string | null; value: string }[],
+  barcodePng: Buffer,
+  siteQrPng: Buffer,
+  createdAt: string
+) {
+  const width = PRODUCT_LABEL_WIDTH - ML_MARGIN * 2;
+
+  const logoX = ML_MARGIN + (width - ML_LOGO_SIZE) / 2;
+  doc.image(LOGO_PNG, logoX, ML_MARGIN, { width: ML_LOGO_SIZE, height: ML_LOGO_SIZE });
+
+  let y = ML_MARGIN + ML_LOGO_SIZE + ML_LOGO_GAP;
+  doc
+    .fontSize(ML_TITLE_FONT_SIZE)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text("MINHO FERRAGENS", ML_MARGIN, y, { width, align: "center" });
+  y += ML_TITLE_LINE_HEIGHT;
+  doc
+    .fontSize(ML_SUBTITLE_FONT_SIZE)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Oblique")
+    .text("JPDC - MYNHOFERRAGENS, LDA", ML_MARGIN, y, { width, align: "center" });
+  y += ML_SUBTITLE_LINE_HEIGHT;
+
+  doc
+    .moveTo(ML_MARGIN, y)
+    .lineTo(PRODUCT_LABEL_WIDTH - ML_MARGIN, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(1)
+    .stroke();
+  y += ML_DIVIDER_GAP;
+
+  doc.font("Helvetica-Bold").fontSize(ML_FIELD_FONT_SIZE).fillColor(COLORS.ink);
+  for (const f of fields) {
+    const text = f.label ? `${f.label}: ${f.value}` : f.value;
+    doc.text(text, ML_MARGIN, y, { width, height: ML_FIELD_LINE_HEIGHT - 1, ellipsis: true });
+    y += ML_FIELD_LINE_HEIGHT;
+  }
+
+  doc
+    .fontSize(7)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text(formatDate(createdAt), ML_MARGIN, y, { width, align: "right", height: ML_DATE_HEIGHT, lineBreak: false });
+  y += ML_DATE_HEIGHT + ML_DATE_TO_CODES_GAP;
+
+  const qrSize = ML_QR_SIZE;
+  const barcodeColWidth = width - qrSize - ML_CODES_GAP;
+  const qr2X = ML_MARGIN + width - qrSize;
+
+  doc.image(barcodePng, ML_MARGIN, y, { fit: [barcodeColWidth, qrSize], align: "center" });
+  doc.image(siteQrPng, qr2X, y, { width: qrSize, height: qrSize });
+  doc
+    .fontSize(ML_CAPTION_FONT_SIZE)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text("Minho Ferragens", qr2X, y + qrSize + ML_CAPTION_GAP, {
+      width: qrSize,
+      height: ML_CAPTION_HEIGHT,
+      align: "center",
+      ellipsis: true,
+    });
+}
+
+interface MosquiteiraBlock {
+  codigoArtigo: string;
+  descricaoArtigo: string;
+  specs: Record<string, string>;
+}
+
+/**
+ * Tal como splitArticleBlocks, mas guardando também o código e a descrição
+ * do artigo (lidos do título "Artigo N — CODIGO Descrição") — a Etiqueta do
+ * Produto não precisa disto (usa antes o "Modelo:" do corpo), mas a
+ * Etiqueta de Mosquiteira mostra sempre um campo "COD." e "Descrição"
+ * próprios. Quando a OS só tem um artigo (sem esses títulos, o caso mais
+ * comum), usa antes o produto associado à própria Ordem de Serviço.
+ */
+function splitMosquiteiraBlocks(
+  specifications: string | null | undefined,
+  fallbackCode: string,
+  fallbackName: string
+): MosquiteiraBlock[] {
+  if (!specifications) {
+    return [{ codigoArtigo: fallbackCode, descricaoArtigo: fallbackName, specs: {} }];
+  }
+  const headerRe = /^Artigo \d+\s*—\s*(\S+)(?:\s+(.*))?$/gm;
+  const headers = [...specifications.matchAll(headerRe)];
+  if (headers.length === 0) {
+    return [{ codigoArtigo: fallbackCode, descricaoArtigo: fallbackName, specs: parseSpecLines(specifications) }];
+  }
+
+  const blocks: MosquiteiraBlock[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const start = headers[i].index! + headers[i][0].length;
+    const end = i + 1 < headers.length ? headers[i + 1].index! : specifications.length;
+    blocks.push({
+      codigoArtigo: headers[i][1],
+      descricaoArtigo: headers[i][2]?.trim() || fallbackName,
+      specs: parseSpecLines(specifications.slice(start, end)),
+    });
+  }
+  return blocks;
+}
+
+/**
+ * A descrição do artigo (ex.: "Mosquiteria de enrolar Vertical Lacado
+ * Standard") é normalmente demasiado comprida para caber numa só linha da
+ * etiqueta — em vez de cortar o texto com "…" (perdendo informação que
+ * identifica o produto), quebra-se em duas linhas quando não cabe: a
+ * primeira com o rótulo "Descrição:", a segunda só com a continuação do
+ * texto (label null, tal como a linha do N/Ref.). Se nem duas linhas
+ * chegarem, a segunda linha é cortada com "…" pelo pdfkit (ver render).
+ */
+function wrapLabelValue(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  text: string,
+  width: number,
+  fontSize: number
+): { label: string | null; value: string }[] {
+  doc.font("Helvetica-Bold").fontSize(fontSize);
+  if (doc.widthOfString(`${label}: ${text}`) <= width) return [{ label, value: text }];
+
+  const prefix = `${label}: `;
+  const words = text.split(" ");
+  let line1 = "";
+  let i = 0;
+  for (; i < words.length; i++) {
+    const candidate = line1 ? `${line1} ${words[i]}` : words[i];
+    if (doc.widthOfString(prefix + candidate) > width) break;
+    line1 = candidate;
+  }
+  if (!line1 && words.length) {
+    // Nem a primeira palavra cabe — mostra-a na 1ª linha na mesma (o pdfkit
+    // corta-a com "…"), em vez de ficar com o rótulo sozinho.
+    line1 = words[0];
+    i = 1;
+  }
+  const line2 = words.slice(i).join(" ");
+  const result: { label: string | null; value: string }[] = [{ label, value: line1 }];
+  if (line2) result.push({ label: null, value: line2 });
+  return result;
+}
+
+function buildMosquiteiraFieldsForBlock(
+  doc: PDFKit.PDFDocument,
+  block: MosquiteiraBlock
+): { label: string | null; value: string }[] {
+  const width = PRODUCT_LABEL_WIDTH - ML_MARGIN * 2;
+  const fields: { label: string | null; value: string }[] = [];
+  fields.push({ label: "COD.", value: block.codigoArtigo });
+  fields.push(...wrapLabelValue(doc, "Descrição", block.descricaoArtigo, width, ML_FIELD_FONT_SIZE));
+
+  // "Dim." em vez de "Dimensões" — palavra mais curta, deixa mais espaço
+  // para o valor (ex.: "Larg. 1370 x Alt. 1000") na mesma linha (pedido do
+  // utilizador de 2026-09-02: "a palavra dimensão... tenta por mais
+  // pequeno").
+  const dimensoes = block.specs["dimensões"] ?? block.specs["dimensoes"] ?? block.specs["medida"];
+  if (dimensoes) fields.push({ label: "Dim.", value: dimensoes });
+
+  if (block.specs["acabamento"]) fields.push({ label: "Acabamento", value: block.specs["acabamento"] });
+
+  // Sempre "1" — cada unidade física tem a sua própria etiqueta (ver
+  // mosquiteiraUnitCount). Sem linha "Ordem de Serviço" (pedido do
+  // utilizador de 2026-09-02: "apaga a linha da ordem de serviço") — o
+  // código de barras por baixo já identifica a OS.
+  fields.push({ label: "Quant.", value: "1" });
+  return fields;
+}
+
+/** Quantas etiquetas (unidades físicas) uma linha de artigo representa, a partir do seu campo "Quant." (ex.: "3,00 uni" -> 3). Sem esse campo, ou se não for um número válido, assume-se 1. */
+function mosquiteiraUnitCount(specs: Record<string, string>): number {
+  const raw = specs["quant."] ?? specs["quant"] ?? specs["quantidade"];
+  if (!raw) return 1;
+  const match = raw.match(/(\d+)/);
+  const n = match ? parseInt(match[1], 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderData) {
+  const [barcodePng, siteQrPng] = await Promise.all([
+    generateBarcode(data.externalId),
+    generateQrCode(SITE_QR_URL),
+  ]);
+
+  // Criado antes de calcular os campos (em vez de só depois, como nas
+  // outras etiquetas) porque buildMosquiteiraFieldsForBlock precisa do doc
+  // para medir o texto da Descrição e decidir se quebra em duas linhas.
+  const doc = new PDFDocument({ margin: ML_MARGIN, autoFirstPage: false });
+
+  const blocks = splitMosquiteiraBlocks(data.specifications, data.productExternalId, data.productName);
+
+  // Uma etiqueta por unidade física — uma linha de artigo com Quant. 3 sai
+  // em três páginas idênticas (pedido do utilizador de 2026-09-02: "1 para
+  // cada unidade").
+  const pages = blocks.flatMap((block) => {
+    const fields = buildMosquiteiraFieldsForBlock(doc, block);
+    const count = mosquiteiraUnitCount(block.specs);
+    return Array.from({ length: count }, () => fields);
+  });
+
+  // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
+  // si — calculada uma só vez a partir do bloco com mais campos — em vez de
+  // variar por página como na Etiqueta do Produto (pedido do utilizador de
+  // 2026-09-02: "tem que ter [só] uma altura").
+  const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
+  const pageHeight = mosquiteiraLabelPageHeight(maxFieldsCount);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="etiqueta-mosquiteira-${sanitizeFilename(data.externalId)}.pdf"`
+  );
+  doc.pipe(res);
+
+  pages.forEach((fields) => {
+    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
+    renderMosquiteiraLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt);
+  });
+
+  doc.end();
+}

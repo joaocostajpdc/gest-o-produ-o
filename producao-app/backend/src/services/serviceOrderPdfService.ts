@@ -260,17 +260,83 @@ function drawInfoGrid(doc: PDFKit.PDFDocument, data: TravelerData) {
   doc.moveDown(0.9);
 }
 
+const SPEC_LINE_HEIGHT = 15;
+const SPEC_TITLE_LINE_HEIGHT = 14;
+const SPEC_HEADER_HEIGHT = 16;
+const SPEC_DIVIDER_GAP_BEFORE = 4;
+const SPEC_DIVIDER_GAP_AFTER = 8;
+const SPEC_REF_GAP_BEFORE = 6;
+const SPEC_REF_GAP_AFTER = 8;
+
+interface SpecificationBlock {
+  title: string | null;
+  lines: string[];
+}
+
+/**
+ * Divide o texto de "Características do Produto" num bloco por artigo,
+ * quando a Ordem de Serviço tiver mais do que um (ver goldylocksPdfParser.ts
+ * no backend, que os separa em "Artigo N — ..."). No caso normal (um só
+ * artigo, sem esses títulos), devolve um único bloco sem título — mesmo
+ * comportamento de sempre.
+ */
+function parseSpecificationBlocks(specifications: string): { blocks: SpecificationBlock[]; referencia: string | null } {
+  const headerRe = /^Artigo \d+\s*—.*$/gm;
+  const headers = [...specifications.matchAll(headerRe)];
+
+  if (headers.length === 0) {
+    return { blocks: [{ title: null, lines: specifications.split("\n").filter(Boolean) }], referencia: null };
+  }
+
+  const referenciaMatch = specifications.match(/^Referente a:\s*(.+)$/m);
+  const referencia = referenciaMatch ? referenciaMatch[1].trim().replace(/,\s*$/, "") : null;
+  const bodyText = referenciaMatch ? specifications.slice(0, referenciaMatch.index).trimEnd() : specifications;
+
+  const blocks = headers.map((h, i) => {
+    const start = h.index! + h[0].length;
+    const end = i + 1 < headers.length ? headers[i + 1].index! : bodyText.length;
+    return {
+      title: h[0].trim(),
+      lines: bodyText
+        .slice(start, end)
+        .split("\n")
+        .filter((line) => line.trim().length > 0),
+    };
+  });
+  return { blocks, referencia };
+}
+
+/** Altura total do conteúdo (sem os "padding" de cima/baixo do cartão) — usada tanto para calcular boxHeight como para desenhar, para as duas nunca divergirem. */
+function specificationsContentHeight(blocks: SpecificationBlock[], referencia: string | null): number {
+  let h = SPEC_HEADER_HEIGHT;
+  blocks.forEach((block, i) => {
+    h += SPEC_TITLE_LINE_HEIGHT + block.lines.length * SPEC_LINE_HEIGHT;
+    if (i < blocks.length - 1) h += SPEC_DIVIDER_GAP_BEFORE + SPEC_DIVIDER_GAP_AFTER;
+  });
+  if (referencia) h += SPEC_REF_GAP_BEFORE + SPEC_REF_GAP_AFTER + SPEC_LINE_HEIGHT;
+  return h;
+}
+
+// Quando a OS tem um só artigo (o caso normal), cada bloco não tem título
+// (title: null) e sai exatamente como sempre — linha a linha. Quando tem
+// vários artigos, sem tratamento especial isto saía tudo seguido, difícil
+// de separar visualmente — por isso cada artigo passa a ter o seu próprio
+// título destacado, um traço tracejado entre blocos, e a linha "Referente
+// a:" (partilhada por toda a OS) sai à parte, no fim, com um traço contínuo
+// a separá-la e um estilo mais discreto (pedido do utilizador de
+// 2026-09-02: "melhora isto" / aplicar a mesma melhoria já feita na página
+// da OS também à Ficha de Produção).
 function drawSpecifications(doc: PDFKit.PDFDocument, specifications: string) {
   const width = contentWidth(doc);
-  const lines = specifications.split("\n").filter(Boolean);
-  const lineHeight = 15;
   const padding = 12;
-  const boxHeight = padding * 2 + 16 + lines.length * lineHeight;
+  const { blocks, referencia } = parseSpecificationBlocks(specifications);
+  const boxHeight = padding * 2 + specificationsContentHeight(blocks, referencia);
 
   ensureSpace(doc, boxHeight + 14);
 
   const x = doc.page.margins.left;
   const y = doc.y;
+  const innerWidth = width - padding * 2;
   doc.roundedRect(x, y, width, boxHeight, 6).lineWidth(1).fillAndStroke(COLORS.specBg, COLORS.border);
 
   doc
@@ -279,11 +345,49 @@ function drawSpecifications(doc: PDFKit.PDFDocument, specifications: string) {
     .font("Helvetica-Bold")
     .text("CARACTERÍSTICAS DO PRODUTO", x + padding, y + padding, { characterSpacing: 0.2 });
 
-  let ly = y + padding + 16;
-  doc.fontSize(11).font("Helvetica-Bold").fillColor(COLORS.ink);
-  for (const line of lines) {
-    doc.text(line, x + padding, ly, { width: width - padding * 2 });
-    ly += lineHeight;
+  let ly = y + padding + SPEC_HEADER_HEIGHT;
+  blocks.forEach((block, i) => {
+    if (block.title) {
+      doc
+        .fontSize(8.5)
+        .fillColor(COLORS.primaryDark)
+        .font("Helvetica-Bold")
+        .text(block.title.toUpperCase(), x + padding, ly, { width: innerWidth, characterSpacing: 0.1 });
+      ly += SPEC_TITLE_LINE_HEIGHT;
+    }
+    doc.fontSize(11).font("Helvetica-Bold").fillColor(COLORS.ink);
+    for (const line of block.lines) {
+      doc.text(line, x + padding, ly, { width: innerWidth });
+      ly += SPEC_LINE_HEIGHT;
+    }
+    if (i < blocks.length - 1) {
+      ly += SPEC_DIVIDER_GAP_BEFORE;
+      doc
+        .moveTo(x + padding, ly)
+        .lineTo(x + width - padding, ly)
+        .dash(2, { space: 2 })
+        .strokeColor(COLORS.border)
+        .lineWidth(1)
+        .stroke();
+      doc.undash();
+      ly += SPEC_DIVIDER_GAP_AFTER;
+    }
+  });
+
+  if (referencia) {
+    ly += SPEC_REF_GAP_BEFORE;
+    doc
+      .moveTo(x + padding, ly)
+      .lineTo(x + width - padding, ly)
+      .strokeColor(COLORS.border)
+      .lineWidth(1)
+      .stroke();
+    ly += SPEC_REF_GAP_AFTER;
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor(COLORS.muted)
+      .text(`Referente a: ${referencia}`, x + padding, ly, { width: innerWidth });
   }
 
   doc.y = y + boxHeight + 14;

@@ -539,9 +539,9 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 // Reutiliza a mesma renderProductLabelPage/productLabelPageHeight da
 // Etiqueta do Produto (o desenho é genérico — só depende da lista de
 // campos), com uma lista de campos própria (COD./Descrição/Dimensões/
-// Acabamento/Quant./Ordem de Serviço) e sem o indicador "Artigo X de Y"
-// (aqui não faz sentido: o pedido do utilizador foi "sem indicador, igual
-// ao modelo em papel", que só mostra sempre "QUANT.: 1").
+// Acabamento/Quant.) e sem o indicador "Artigo X de Y" (aqui não faz
+// sentido: o pedido do utilizador foi "sem indicador, igual ao modelo em
+// papel", que só mostra sempre "QUANT.: 1").
 //
 // "1 para cada unidade": uma linha de artigo com Quant. 3, por exemplo, sai
 // em três páginas de etiqueta separadas (uma por unidade física), todas
@@ -558,111 +558,23 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 // também o formato de data já usado no resto da aplicação (DD/MM/AAAA), em
 // vez do "08.01.26" do modelo em papel. Ambas as escolhas ficam fáceis de
 // reverter se não for isto que o utilizador quer.
+//
+// Nota sobre um conjunto de tamanhos ML_* mais compacto que chegou a
+// existir aqui (fonte menor, logótipo menor, códigos menores — pedido do
+// utilizador de 2026-09-02: "apenas tenta que não seja tão comprida"), com
+// altura de página à volta de 73mm: foi revertido no mesmo dia depois de o
+// utilizador reportar que a impressora Brother QL-1100 recusava imprimir
+// essa etiqueta ("o rolo de etiquetas ou a fita dentro da máquina não
+// corresponde ao selecionado na aplicação"), enquanto a Etiqueta do Produto
+// (Painéis, mais alta, tipicamente 100-160mm) imprime sem problema na
+// mesma impressora ("o painel sai, mosquiteiras não"). E, como o
+// utilizador não vai imprimir sempre na mesma impressora ("nem sempre vou
+// imprimir apenas naquela impressora"), corrigir isto do lado do driver de
+// só uma máquina não seria uma solução geral — por isso a etiqueta de
+// mosquiteira volta a usar exatamente o mesmo desenho/tamanhos já
+// comprovados a imprimir bem na Etiqueta do Produto, em vez de um conjunto
+// de tamanhos próprio.
 // ---------------------------------------------------------------------------
-
-// A etiqueta de mosquiteira usa o seu próprio conjunto de tamanhos, mais
-// pequeno do que a Etiqueta do Produto (Painéis) — pedido do utilizador de
-// 2026-09-02: "apenas tenta que não seja tão comprida, a letra mais
-// pequena, logo e códigos" — em vez de mexer nas constantes PL_* partilhadas
-// com a Etiqueta do Produto (que já está aprovada e em produção), para não
-// arriscar alterar sem querer o visual daquela.
-const ML_MARGIN = 10;
-const ML_LOGO_SIZE = 24;
-const ML_LOGO_GAP = 6;
-const ML_TITLE_FONT_SIZE = 11;
-const ML_TITLE_LINE_HEIGHT = 14;
-const ML_SUBTITLE_FONT_SIZE = 7;
-const ML_SUBTITLE_LINE_HEIGHT = 10;
-const ML_DIVIDER_GAP = 8;
-const ML_FIELD_FONT_SIZE = 9;
-const ML_FIELD_LINE_HEIGHT = 12;
-const ML_DATE_HEIGHT = 9;
-const ML_DATE_TO_CODES_GAP = 4;
-const ML_QR_SIZE = 42;
-const ML_CODES_GAP = 8;
-const ML_CAPTION_FONT_SIZE = 5.5;
-const ML_CAPTION_GAP = 2;
-const ML_CAPTION_HEIGHT = 8;
-
-/** Altura total da etiqueta de mosquiteira para um dado número de campos — mesma lógica/objetivo de productLabelPageHeight, mas com os tamanhos ML_* mais compactos. */
-function mosquiteiraLabelPageHeight(fieldsCount: number): number {
-  let y = ML_MARGIN + ML_LOGO_SIZE + ML_LOGO_GAP;
-  y += ML_TITLE_LINE_HEIGHT;
-  y += ML_SUBTITLE_LINE_HEIGHT;
-  y += ML_DIVIDER_GAP;
-  y += fieldsCount * ML_FIELD_LINE_HEIGHT;
-  y += ML_DATE_HEIGHT;
-  y += ML_DATE_TO_CODES_GAP;
-  const codesBottom = ML_QR_SIZE + ML_CAPTION_GAP + ML_CAPTION_HEIGHT;
-  return y + codesBottom + ML_MARGIN;
-}
-
-/** Desenha uma página da etiqueta de mosquiteira — mesma estrutura da Etiqueta do Produto (logótipo, campos, código de barras + QR), mas com os tamanhos ML_* mais compactos e sem o indicador "Artigo X de Y" (que a etiqueta de mosquiteira nunca mostra). */
-function renderMosquiteiraLabelPage(
-  doc: PDFKit.PDFDocument,
-  fields: { label: string | null; value: string }[],
-  barcodePng: Buffer,
-  siteQrPng: Buffer,
-  createdAt: string
-) {
-  const width = PRODUCT_LABEL_WIDTH - ML_MARGIN * 2;
-
-  const logoX = ML_MARGIN + (width - ML_LOGO_SIZE) / 2;
-  doc.image(LOGO_PNG, logoX, ML_MARGIN, { width: ML_LOGO_SIZE, height: ML_LOGO_SIZE });
-
-  let y = ML_MARGIN + ML_LOGO_SIZE + ML_LOGO_GAP;
-  doc
-    .fontSize(ML_TITLE_FONT_SIZE)
-    .fillColor(COLORS.ink)
-    .font("Helvetica-Bold")
-    .text("MINHO FERRAGENS", ML_MARGIN, y, { width, align: "center" });
-  y += ML_TITLE_LINE_HEIGHT;
-  doc
-    .fontSize(ML_SUBTITLE_FONT_SIZE)
-    .fillColor(COLORS.muted)
-    .font("Helvetica-Oblique")
-    .text("JPDC - MYNHOFERRAGENS, LDA", ML_MARGIN, y, { width, align: "center" });
-  y += ML_SUBTITLE_LINE_HEIGHT;
-
-  doc
-    .moveTo(ML_MARGIN, y)
-    .lineTo(PRODUCT_LABEL_WIDTH - ML_MARGIN, y)
-    .strokeColor(COLORS.border)
-    .lineWidth(1)
-    .stroke();
-  y += ML_DIVIDER_GAP;
-
-  doc.font("Helvetica-Bold").fontSize(ML_FIELD_FONT_SIZE).fillColor(COLORS.ink);
-  for (const f of fields) {
-    const text = f.label ? `${f.label}: ${f.value}` : f.value;
-    doc.text(text, ML_MARGIN, y, { width, height: ML_FIELD_LINE_HEIGHT - 1, ellipsis: true });
-    y += ML_FIELD_LINE_HEIGHT;
-  }
-
-  doc
-    .fontSize(7)
-    .fillColor(COLORS.muted)
-    .font("Helvetica")
-    .text(formatDate(createdAt), ML_MARGIN, y, { width, align: "right", height: ML_DATE_HEIGHT, lineBreak: false });
-  y += ML_DATE_HEIGHT + ML_DATE_TO_CODES_GAP;
-
-  const qrSize = ML_QR_SIZE;
-  const barcodeColWidth = width - qrSize - ML_CODES_GAP;
-  const qr2X = ML_MARGIN + width - qrSize;
-
-  doc.image(barcodePng, ML_MARGIN, y, { fit: [barcodeColWidth, qrSize], align: "center" });
-  doc.image(siteQrPng, qr2X, y, { width: qrSize, height: qrSize });
-  doc
-    .fontSize(ML_CAPTION_FONT_SIZE)
-    .fillColor(COLORS.muted)
-    .font("Helvetica")
-    .text("Minho Ferragens", qr2X, y + qrSize + ML_CAPTION_GAP, {
-      width: qrSize,
-      height: ML_CAPTION_HEIGHT,
-      align: "center",
-      ellipsis: true,
-    });
-}
 
 interface MosquiteiraBlock {
   codigoArtigo: string;
@@ -749,10 +661,12 @@ function buildMosquiteiraFieldsForBlock(
   doc: PDFKit.PDFDocument,
   block: MosquiteiraBlock
 ): { label: string | null; value: string }[] {
-  const width = PRODUCT_LABEL_WIDTH - ML_MARGIN * 2;
+  // Mesma largura/tamanho de letra da Etiqueta do Produto (PL_MARGIN, fonte
+  // 11) — ver nota acima sobre a reversão do conjunto de tamanhos ML_*.
+  const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
   const fields: { label: string | null; value: string }[] = [];
   fields.push({ label: "COD.", value: block.codigoArtigo });
-  fields.push(...wrapLabelValue(doc, "Descrição", block.descricaoArtigo, width, ML_FIELD_FONT_SIZE));
+  fields.push(...wrapLabelValue(doc, "Descrição", block.descricaoArtigo, width, 11));
 
   // "Dim." em vez de "Dimensões" — palavra mais curta, deixa mais espaço
   // para o valor (ex.: "Larg. 1370 x Alt. 1000") na mesma linha (pedido do
@@ -789,7 +703,7 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
   // Criado antes de calcular os campos (em vez de só depois, como nas
   // outras etiquetas) porque buildMosquiteiraFieldsForBlock precisa do doc
   // para medir o texto da Descrição e decidir se quebra em duas linhas.
-  const doc = new PDFDocument({ margin: ML_MARGIN, autoFirstPage: false });
+  const doc = new PDFDocument({ margin: PL_MARGIN, autoFirstPage: false });
 
   const blocks = splitMosquiteiraBlocks(data.specifications, data.productExternalId, data.productName);
 
@@ -805,9 +719,12 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
   // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
   // si — calculada uma só vez a partir do bloco com mais campos — em vez de
   // variar por página como na Etiqueta do Produto (pedido do utilizador de
-  // 2026-09-02: "tem que ter [só] uma altura").
+  // 2026-09-02: "tem que ter [só] uma altura"). Reutiliza
+  // productLabelPageHeight (sem indicador "Artigo X de Y") — ver nota acima
+  // sobre a reversão do conjunto de tamanhos ML_* por incompatibilidade de
+  // impressão.
   const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
-  const pageHeight = mosquiteiraLabelPageHeight(maxFieldsCount);
+  const pageHeight = productLabelPageHeight(maxFieldsCount, false);
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Cache-Control", "no-store");
@@ -819,7 +736,7 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
 
   pages.forEach((fields) => {
     doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
-    renderMosquiteiraLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt);
+    renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, null);
   });
 
   doc.end();

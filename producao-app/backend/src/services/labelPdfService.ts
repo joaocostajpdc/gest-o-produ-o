@@ -199,6 +199,16 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // produção seja em código de barras". O segundo código (link para o
 // site/redes da empresa) mantém-se QR, por não estar ligado à aplicação de
 // gestão de produção.
+//
+// Uma Ordem de Serviço pode ter mais do que um artigo (ver
+// goldylocksPdfParser.ts) — nesse caso o texto de especificações vem
+// dividido em blocos "Artigo N — ..." e esta etiqueta sai com uma página
+// por artigo (mesmo código de barras/QR e mesmo Nº de Ordem de Serviço em
+// todas, só os campos do produto mudam) — a aplicação continua a ter uma
+// única Ordem de Serviço (ver pedido do utilizador de 2026-09-02: "esta
+// ordem de serviço tem dois artigos tem que ler os dois" / "como nas
+// etiquetas uma para cada produto", e decisão confirmada: "uma OS só, mas
+// com uma etiqueta por artigo").
 // ---------------------------------------------------------------------------
 const PRODUCT_LABEL_WIDTH = 102 * 2.83465; // 102mm -> pt (largura do rolo Brother DK-22243)
 const PRODUCT_LABEL_HEIGHT = 164 * 2.83465; // 164mm -> pt
@@ -218,8 +228,45 @@ function parseSpecLines(specifications?: string | null): Record<string, string> 
   return map;
 }
 
-function buildProductLabelFields(data: LabelOrderData): { label: string; value: string }[] {
-  const specs = parseSpecLines(data.specifications);
+/**
+ * Divide o texto de especificações num bloco por artigo, quando a Ordem de
+ * Serviço tiver mais do que um (goldylocksPdfParser.ts identifica cada um
+ * com um título "Artigo N — ..."). Quando não há esses títulos (o caso
+ * normal, um só artigo), devolve o texto completo como um único bloco —
+ * comportamento idêntico ao de antes de existir esta divisão.
+ */
+function splitArticleBlocks(specifications?: string | null): Record<string, string>[] {
+  if (!specifications) return [{}];
+  const headerRe = /^Artigo \d+\s*—.*$/gm;
+  const headers = [...specifications.matchAll(headerRe)];
+  if (headers.length === 0) return [parseSpecLines(specifications)];
+
+  const blocks: Record<string, string>[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const start = headers[i].index! + headers[i][0].length;
+    const end = i + 1 < headers.length ? headers[i + 1].index! : specifications.length;
+    blocks.push(parseSpecLines(specifications.slice(start, end)));
+  }
+  return blocks;
+}
+
+/**
+ * "Referente a:" (a encomenda do cliente) é impressa uma só vez no
+ * documento do Goldylocks e aplica-se a toda a Ordem de Serviço, mesmo
+ * quando há vários artigos — por isso é lida do texto completo (nunca de um
+ * bloco de artigo em particular) e usada como N/Ref em todas as páginas.
+ */
+function extractSharedReferencia(specifications?: string | null): string | undefined {
+  if (!specifications) return undefined;
+  const match = specifications.match(/^Referente a:\s*(.+)$/m);
+  return match?.[1]?.trim().replace(/,\s*$/, "") || undefined;
+}
+
+function buildProductLabelFieldsForBlock(
+  specs: Record<string, string>,
+  referencia: string | undefined,
+  externalId: string
+): { label: string; value: string }[] {
   const fields: { label: string; value: string }[] = [];
   const push = (label: string, ...keys: string[]) => {
     const value = keys.map((k) => specs[k]).find((v) => !!v);
@@ -237,22 +284,33 @@ function buildProductLabelFields(data: LabelOrderData): { label: string; value: 
   // diz respeito — vem do texto "Referente a:" importado do Goldylocks (ver
   // goldylocksPdfParser.ts). Mostra-se sempre, com traço quando não há
   // informação, tal como no modelo físico (pedido do utilizador de
-  // 2026-09-01: "n/ ref, é a encomenda do clinete").
+  // 2026-09-01: "n/ ref, é a encomenda do clinete"). É partilhada por toda a
+  // OS (ver extractSharedReferencia), com o mapa deste bloco como reserva
+  // para especificações escritas manualmente com uma destas chaves.
   const nRef =
-    specs["referente a"] ?? specs["n/ref"] ?? specs["n/ref."] ?? specs["nossa ref"] ?? specs["nossa referência"];
+    referencia ??
+    specs["referente a"] ??
+    specs["n/ref"] ??
+    specs["n/ref."] ??
+    specs["nossa ref"] ??
+    specs["nossa referência"];
   fields.push({ label: "N/Ref.", value: nRef ?? "----------" });
 
   // V/Ref. (Vossa Referência) — campo distinto do N/Ref acima, só aparece
   // quando existir essa informação nas Características do Produto; omite-se
   // por completo quando não há valor, em vez de mostrar um traço (pedido do
   // utilizador de 2026-09-01: "v ref, apenas utilizas quando tiver inf. na
-  // ordem de serviço").
+  // ordem de serviço"). Ao contrário do N/Ref, é lida deste bloco (por
+  // artigo), porque a "v/ ref." do Goldylocks pode ser diferente em cada
+  // linha da mesma OS (ver pedido do utilizador de 2026-09-02, com a OS
+  // 2026/430 real).
   push("V/Ref.", "v/ref", "v/ref.", "vossa ref", "vossa referência");
 
   // Ordem de Serviço é sempre o nosso próprio número — não depende do texto
-  // de especificações. Rótulo por extenso (em vez da antiga abreviatura
-  // "N.O.S.") para não ser confundido com o N/Ref acima.
-  fields.push({ label: "Ordem de Serviço", value: data.externalId });
+  // de especificações, e é igual em todas as páginas/artigos. Rótulo por
+  // extenso (em vez da antiga abreviatura "N.O.S.") para não ser confundido
+  // com o N/Ref acima.
+  fields.push({ label: "Ordem de Serviço", value: externalId });
   return fields;
 }
 
@@ -265,25 +323,21 @@ function buildProductLabelFields(data: LabelOrderData): { label: string; value: 
 // impressos permanentemente numa etiqueta.
 const SITE_QR_URL = "https://linktr.ee/jpdcmynhoferragens";
 
-export async function streamProductLabelPdf(res: Response, data: LabelOrderData) {
-  const [barcodePng, siteQrPng] = await Promise.all([
-    generateBarcode(data.externalId),
-    generateQrCode(SITE_QR_URL),
-  ]);
-  const fields = buildProductLabelFields(data);
-
-  const doc = new PDFDocument({
-    size: [PRODUCT_LABEL_WIDTH, PRODUCT_LABEL_HEIGHT],
-    margin: PL_MARGIN,
-  });
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Cache-Control", "no-store");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="etiqueta-produto-${sanitizeFilename(data.externalId)}.pdf"`
-  );
-  doc.pipe(res);
-
+/**
+ * Desenha uma página da etiqueta do produto (logótipo, campos, código de
+ * barras + QR) no documento já criado. Extraído para função à parte porque,
+ * quando a Ordem de Serviço tem vários artigos, o mesmo desenho repete-se
+ * uma vez por página (ver cabeçalho acima) — evita duplicar ~80 linhas de
+ * layout por página.
+ */
+function renderProductLabelPage(
+  doc: PDFKit.PDFDocument,
+  fields: { label: string; value: string }[],
+  barcodePng: Buffer,
+  siteQrPng: Buffer,
+  createdAt: string,
+  pageLabel: string | null
+) {
   const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
 
   // Todo o texto usa coordenadas (x, y) absolutas em vez do cursor "fluido"
@@ -309,6 +363,18 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
     .font("Helvetica-Oblique")
     .text("JPDC - MYNHOFERRAGENS, LDA", PL_MARGIN, y, { width, align: "center" });
   y += 16;
+
+  // Indicador "Artigo X de Y" — só aparece quando a OS tem mais do que um
+  // artigo (pageLabel vem null no caso normal de um único artigo, mantendo a
+  // etiqueta idêntica à de antes desta funcionalidade).
+  if (pageLabel) {
+    doc
+      .fontSize(8)
+      .fillColor(COLORS.primary)
+      .font("Helvetica-Bold")
+      .text(pageLabel, PL_MARGIN, y, { width, align: "center" });
+    y += 13;
+  }
 
   doc
     .moveTo(PL_MARGIN, y)
@@ -340,7 +406,7 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
     .fontSize(8.5)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text(formatDate(data.createdAt), PL_MARGIN, dateY, { width, align: "right" });
+    .text(formatDate(createdAt), PL_MARGIN, dateY, { width, align: "right" });
 
   const qr2X = PL_MARGIN + width - qrSize;
 
@@ -374,6 +440,40 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
       align: "center",
       ellipsis: true,
     });
+}
+
+export async function streamProductLabelPdf(res: Response, data: LabelOrderData) {
+  const [barcodePng, siteQrPng] = await Promise.all([
+    generateBarcode(data.externalId),
+    generateQrCode(SITE_QR_URL),
+  ]);
+
+  // Uma página por artigo (ver cabeçalho acima) — no caso normal de um só
+  // artigo, splitArticleBlocks devolve um único bloco e o comportamento é
+  // idêntico ao de antes desta funcionalidade (uma única página, sem
+  // indicador "Artigo X de Y").
+  const blocks = splitArticleBlocks(data.specifications);
+  const referencia = extractSharedReferencia(data.specifications);
+
+  const doc = new PDFDocument({
+    size: [PRODUCT_LABEL_WIDTH, PRODUCT_LABEL_HEIGHT],
+    margin: PL_MARGIN,
+    autoFirstPage: false,
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="etiqueta-produto-${sanitizeFilename(data.externalId)}.pdf"`
+  );
+  doc.pipe(res);
+
+  blocks.forEach((block, i) => {
+    const fields = buildProductLabelFieldsForBlock(block, referencia, data.externalId);
+    const pageLabel = blocks.length > 1 ? `Artigo ${i + 1} de ${blocks.length}` : null;
+    doc.addPage();
+    renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, pageLabel);
+  });
 
   doc.end();
 }

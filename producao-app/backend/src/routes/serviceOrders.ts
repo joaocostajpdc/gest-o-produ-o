@@ -24,7 +24,12 @@ import {
 } from "../services/serviceOrderService";
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
 import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
-import { streamBarcodeLabelPdf, streamProductLabelPdf, LabelOrderData } from "../services/labelPdfService";
+import {
+  streamBarcodeLabelPdf,
+  streamProductLabelPdf,
+  streamMosquiteiraLabelPdf,
+  LabelOrderData,
+} from "../services/labelPdfService";
 import { PUBLIC_APP_URL } from "../config/publicUrl";
 import { getServiceOrderHistory, logHistoryEvent } from "../services/historyService";
 
@@ -285,11 +290,14 @@ serviceOrdersRouter.get(
 );
 
 // ---------------------------------------------------------------------------
-// Etiquetas para colar no produto — por agora disponíveis apenas para a
-// categoria "Painéis" (pedido do utilizador de 2026-08-20; alargar a mais
-// categorias no futuro é apenas remover esta condição).
+// Etiquetas para colar no produto — por agora disponíveis apenas para as
+// categorias "Painéis" (pedido do utilizador de 2026-08-20) e "Mosquiteiras"
+// (pedido do utilizador de 2026-09-02: "cria etiqueta para mosquiteira" —
+// só a Etiqueta de Mosquiteira está disponível para esta categoria, ver
+// rota /label-mosquiteira abaixo; alargar a mais categorias no futuro é
+// apenas acrescentar aqui).
 // ---------------------------------------------------------------------------
-const LABEL_CATEGORIES = ["Painéis"];
+const LABEL_CATEGORIES = ["Painéis", "Mosquiteiras"];
 
 async function loadLabelOrderData(orderId: string): Promise<LabelOrderData | { error: string; status: number }> {
   const order = await prisma.serviceOrder.findUnique({
@@ -334,6 +342,16 @@ serviceOrdersRouter.get(
     const data = await loadLabelOrderData(req.params.id);
     if ("error" in data) return res.status(data.status).json({ error: data.error });
     await streamProductLabelPdf(res, data);
+  })
+);
+
+serviceOrdersRouter.get(
+  "/:id/label-mosquiteira",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const data = await loadLabelOrderData(req.params.id);
+    if ("error" in data) return res.status(data.status).json({ error: data.error });
+    await streamMosquiteiraLabelPdf(res, data);
   })
 );
 

@@ -180,6 +180,16 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // Ficha de Produção e na página da OS (sem exigir novos campos estruturados
 // na aplicação); os campos ausentes desse texto são omitidos.
 //
+// A altura da etiqueta era fixa (164mm), medida confirmada pelo utilizador
+// (ver nota acima). Passou a ser calculada por página, à medida do
+// conteúdo de cada artigo (ver productLabelPageHeight, mais abaixo) — o
+// rolo DK-22243 é contínuo e sem corte fixo de fábrica, por isso uma
+// etiqueta com menos campos não precisa da mesma altura que uma com mais, e
+// a versão de altura fixa deixava sempre um espaço em branco por baixo dos
+// códigos quando havia poucos campos (pedido do utilizador de 2026-09-02:
+// "anula o espaço em branco"). A largura mantém-se sempre fixa em 102mm
+// (largura do rolo).
+//
 // Três referências distintas, tal como pedido pelo utilizador em
 // 2026-09-01 ("é importante nas etiquetas destinguir a n/ ref, v/ ref. e
 // ordem de serviço"):
@@ -213,8 +223,43 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // com uma etiqueta por artigo").
 // ---------------------------------------------------------------------------
 const PRODUCT_LABEL_WIDTH = 102 * 2.83465; // 102mm -> pt (largura do rolo Brother DK-22243)
-const PRODUCT_LABEL_HEIGHT = 164 * 2.83465; // 164mm -> pt
 const PL_MARGIN = 16;
+
+// Incrementos de layout partilhados entre renderProductLabelPage (que
+// desenha a página) e productLabelPageHeight (que calcula a altura da
+// página antes de a criar) — têm de ser exatamente os mesmos incrementos
+// nos dois sítios, para a altura calculada nunca divergir do que é
+// realmente desenhado (mesmo padrão já usado em serviceOrderPdfService.ts
+// para specificationsContentHeight/drawSpecifications).
+const PL_LOGO_SIZE = 42;
+const PL_TITLE_LINE_HEIGHT = 17;
+const PL_SUBTITLE_LINE_HEIGHT = 16;
+const PL_PAGE_LABEL_HEIGHT = 13;
+const PL_DIVIDER_GAP = 12;
+const PL_FIELD_LINE_HEIGHT = 16;
+const PL_CODES_TOP_GAP = 16;
+const PL_QR_SIZE = 62;
+const PL_CAPTION_GAP = 3;
+const PL_CAPTION_HEIGHT = 9;
+
+/**
+ * Altura total da página da etiqueta do produto, calculada a partir do
+ * número de campos e de ter ou não o indicador "Artigo X de Y" — cada
+ * página/artigo pode assim sair com uma altura diferente, exatamente à
+ * medida do seu conteúdo, sem sobrar espaço em branco por baixo dos
+ * códigos.
+ */
+function productLabelPageHeight(fieldsCount: number, hasPageLabel: boolean): number {
+  let y = PL_MARGIN + PL_LOGO_SIZE + 8;
+  y += PL_TITLE_LINE_HEIGHT;
+  y += PL_SUBTITLE_LINE_HEIGHT;
+  if (hasPageLabel) y += PL_PAGE_LABEL_HEIGHT;
+  y += PL_DIVIDER_GAP;
+  y += fieldsCount * PL_FIELD_LINE_HEIGHT;
+  const qrY = y + PL_CODES_TOP_GAP;
+  const contentBottom = qrY + PL_QR_SIZE + PL_CAPTION_GAP + PL_CAPTION_HEIGHT;
+  return contentBottom + PL_MARGIN;
+}
 
 /** Lê linhas "Rótulo: valor" do texto livre de especificações. */
 function parseSpecLines(specifications?: string | null): Record<string, string> {
@@ -350,7 +395,7 @@ function renderProductLabelPage(
   // Vidro/Medida/Quant./N.Ref./V.Ref./Ordem de Serviço), o que torna seguro
   // calcular a posição de cada linha à partida, sem risco de o pdfkit
   // inserir uma página extra.
-  const logoSize = 42;
+  const logoSize = PL_LOGO_SIZE;
   const logoX = PL_MARGIN + (width - logoSize) / 2;
   doc.image(LOGO_PNG, logoX, PL_MARGIN, { width: logoSize, height: logoSize });
 
@@ -360,13 +405,13 @@ function renderProductLabelPage(
     .fillColor(COLORS.ink)
     .font("Helvetica-Bold")
     .text("MINHO FERRAGENS", PL_MARGIN, y, { width, align: "center" });
-  y += 17;
+  y += PL_TITLE_LINE_HEIGHT;
   doc
     .fontSize(8)
     .fillColor(COLORS.muted)
     .font("Helvetica-Oblique")
     .text("JPDC - MYNHOFERRAGENS, LDA", PL_MARGIN, y, { width, align: "center" });
-  y += 16;
+  y += PL_SUBTITLE_LINE_HEIGHT;
 
   // Indicador "Artigo X de Y" — só aparece quando a OS tem mais do que um
   // artigo (pageLabel vem null no caso normal de um único artigo, mantendo a
@@ -377,7 +422,7 @@ function renderProductLabelPage(
       .fillColor(COLORS.primary)
       .font("Helvetica-Bold")
       .text(pageLabel, PL_MARGIN, y, { width, align: "center" });
-    y += 13;
+    y += PL_PAGE_LABEL_HEIGHT;
   }
 
   doc
@@ -386,13 +431,13 @@ function renderProductLabelPage(
     .strokeColor(COLORS.border)
     .lineWidth(1)
     .stroke();
-  y += 12;
+  y += PL_DIVIDER_GAP;
 
   doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.ink);
   for (const f of fields) {
     const text = f.label ? `${f.label}: ${f.value}` : f.value;
     doc.text(text, PL_MARGIN, y, { width, height: 15, ellipsis: true });
-    y += 16;
+    y += PL_FIELD_LINE_HEIGHT;
   }
 
   // Código de barras (abre a OS na aplicação, lido pelo botão "Ler Código")
@@ -404,10 +449,10 @@ function renderProductLabelPage(
   // (pedido do utilizador de 2026-09-01: "tudo que esteja ligado ao
   // programa de produção seja em código de barras" — o QR do site, à
   // direita, fica QR por não estar ligado à aplicação).
-  const qrSize = 62;
+  const qrSize = PL_QR_SIZE;
   const codesGap = 10;
   const barcodeColWidth = width - qrSize - codesGap;
-  const qrY = y + 16;
+  const qrY = y + PL_CODES_TOP_GAP;
   const dateY = qrY - 14;
 
   doc
@@ -432,9 +477,9 @@ function renderProductLabelPage(
     .fontSize(6.5)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text("Minho Ferragens", qr2X, qrY + qrSize + 3, {
+    .text("Minho Ferragens", qr2X, qrY + qrSize + PL_CAPTION_GAP, {
       width: qrSize,
-      height: 9,
+      height: PL_CAPTION_HEIGHT,
       align: "center",
       ellipsis: true,
     });
@@ -454,7 +499,6 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
   const referencia = extractSharedReferencia(data.specifications);
 
   const doc = new PDFDocument({
-    size: [PRODUCT_LABEL_WIDTH, PRODUCT_LABEL_HEIGHT],
     margin: PL_MARGIN,
     autoFirstPage: false,
   });
@@ -469,7 +513,8 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
   blocks.forEach((block, i) => {
     const fields = buildProductLabelFieldsForBlock(block, referencia, data.externalId);
     const pageLabel = blocks.length > 1 ? `Artigo ${i + 1} de ${blocks.length}` : null;
-    doc.addPage();
+    const pageHeight = productLabelPageHeight(fields.length, !!pageLabel);
+    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
     renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, pageLabel);
   });
 

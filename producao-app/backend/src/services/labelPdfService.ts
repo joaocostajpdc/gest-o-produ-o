@@ -190,9 +190,9 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 // "anula o espaço em branco"). A largura mantém-se sempre fixa em 102mm
 // (largura do rolo).
 //
-// Três referências distintas, tal como pedido pelo utilizador em
-// 2026-09-01 ("é importante nas etiquetas destinguir a n/ ref, v/ ref. e
-// ordem de serviço"):
+// Duas referências distintas nos campos de texto, tal como pedido pelo
+// utilizador em 2026-09-01 ("é importante nas etiquetas destinguir a n/
+// ref, v/ ref. e ordem de serviço"):
 //  - a encomenda do cliente a que este produto diz respeito (vem do texto
 //    "Referente a:" importado do Goldylocks). Mostra-se sempre, com traço
 //    quando não há informação, tal como no modelo físico. Sai sem rótulo
@@ -201,8 +201,12 @@ export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData)
 //  - V/Ref.  — só aparece quando existir essa informação nas Características
 //    do Produto (ao contrário da linha acima, omite-se por completo quando
 //    não há valor, em vez de mostrar um traço).
-//  - Ordem de Serviço — o nosso próprio número, sempre presente, com o
-//    rótulo por extenso (em vez da antiga abreviatura "N.O.S.").
+// A terceira referência — Ordem de Serviço, o nosso próprio número — já não
+// tem linha de texto própria (removida a pedido do utilizador de 2026-09-08:
+// "ate podemos apagar a ordem se serviço pois o numero ja aparce por baixo
+// do codigo de barras"): o código de barras já a mostra em texto legível por
+// baixo das barras (ver generateBarcode, includetext), tal como já
+// acontecia na Etiqueta de Mosquiteira (ver mais abaixo).
 //
 // O código que abre a OS na aplicação passou de QR para código de barras
 // (Code128), tal como a Etiqueta de Código de Barras — ver pedido do
@@ -309,6 +313,26 @@ function extractSharedReferencia(specifications?: string | null): string | undef
   return match?.[1]?.trim().replace(/,\s*$/, "") || undefined;
 }
 
+/**
+ * Quantas etiquetas (unidades físicas) uma linha de artigo representa, a
+ * partir do seu campo "Quant." (ex.: "3,00 uni" -> 3). Sem esse campo, ou se
+ * não for um número válido, assume-se 1.
+ *
+ * Partilhada pela Etiqueta do Produto (Painéis) e pela Etiqueta de
+ * Mosquiteira — nasceu só para a mosquiteira (pedido do utilizador de
+ * 2026-09-02: "1 para cada unidade") e foi promovida a função genérica em
+ * 2026-09-08, quando o mesmo comportamento foi pedido para os Painéis (OS
+ * 2026/998, Artigo 2 — DCPL000 Painel Liso, Quant.: 3,00 uni: "é importante
+ * que onde tem 3 unidades saem 3 etiquetas").
+ */
+function unitCountFromSpecs(specs: Record<string, string>): number {
+  const raw = specs["quant."] ?? specs["quant"] ?? specs["quantidade"];
+  if (!raw) return 1;
+  const match = raw.match(/(\d+)/);
+  const n = match ? parseInt(match[1], 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 function buildProductLabelFieldsForBlock(
   specs: Record<string, string>,
   referencia: string | undefined,
@@ -325,7 +349,15 @@ function buildProductLabelFieldsForBlock(
   push("Espessura", "espessura");
   push("Vidro", "vidro");
   push("Medida", "medida", "dimensões", "dimensoes");
-  push("Quant.", "quant.", "quant", "quantidade");
+
+  // Sempre "1" — cada unidade física tem a sua própria etiqueta, tal como já
+  // acontecia na Etiqueta de Mosquiteira (ver unitCountFromSpecs e o pedido
+  // do utilizador de 2026-09-08 com a OS 2026/998, Artigo 2, Quant.: 3,00
+  // uni -> 3 páginas). Omite-se o campo quando não há Quant. nas
+  // especificações, tal como antes.
+  if (specs["quant."] ?? specs["quant"] ?? specs["quantidade"]) {
+    fields.push({ label: "Quant.", value: "1" });
+  }
 
   // A encomenda do cliente a que este produto diz respeito — vem do texto
   // "Referente a:" importado do Goldylocks (ver goldylocksPdfParser.ts).
@@ -355,11 +387,12 @@ function buildProductLabelFieldsForBlock(
   // 2026/430 real).
   push("V/Ref.", "v/ref", "v/ref.", "vossa ref", "vossa referência");
 
-  // Ordem de Serviço é sempre o nosso próprio número — não depende do texto
-  // de especificações, e é igual em todas as páginas/artigos. Rótulo por
-  // extenso (em vez da antiga abreviatura "N.O.S.") para não ser confundido
-  // com o N/Ref acima.
-  fields.push({ label: "Ordem de Serviço", value: externalId });
+  // Sem linha de texto "Ordem de Serviço" — removida a pedido do utilizador
+  // de 2026-09-08 (ver nota no cabeçalho do ficheiro): o código de barras,
+  // desenhado logo a seguir a estes campos, já mostra o número da OS em
+  // texto legível por baixo das barras. externalId deixou de ser usado
+  // aqui, mas mantém-se como parâmetro da função para não obrigar a mudar
+  // a chamada em streamProductLabelPdf.
   return fields;
 }
 
@@ -391,10 +424,10 @@ function renderProductLabelPage(
 
   // Todo o texto usa coordenadas (x, y) absolutas em vez do cursor "fluido"
   // do pdfkit — mesma razão da etiqueta QR acima: o número de campos aqui é
-  // sempre limitado (no máximo 10: Modelo/Acabamento/Enchimento/Espessura/
-  // Vidro/Medida/Quant./N.Ref./V.Ref./Ordem de Serviço), o que torna seguro
-  // calcular a posição de cada linha à partida, sem risco de o pdfkit
-  // inserir uma página extra.
+  // sempre limitado (no máximo 9: Modelo/Acabamento/Enchimento/Espessura/
+  // Vidro/Medida/Quant./N.Ref./V.Ref.), o que torna seguro calcular a
+  // posição de cada linha à partida, sem risco de o pdfkit inserir uma
+  // página extra.
   const logoSize = PL_LOGO_SIZE;
   const logoX = PL_MARGIN + (width - logoSize) / 2;
   doc.image(LOGO_PNG, logoX, PL_MARGIN, { width: logoSize, height: logoSize });
@@ -510,12 +543,21 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
   );
   doc.pipe(res);
 
+  // Uma etiqueta por unidade física — uma linha de artigo com Quant. 3 sai em
+  // três páginas idênticas, tal como já acontecia na Etiqueta de Mosquiteira
+  // (pedido do utilizador de 2026-09-08, com a OS 2026/998: "é importante que
+  // onde tem 3 unidades saem 3 etiquetas"). O indicador "Artigo X de Y"
+  // conta artigos (blocos), não páginas/unidades — por isso mantém-se igual
+  // em todas as páginas de um mesmo artigo.
   blocks.forEach((block, i) => {
     const fields = buildProductLabelFieldsForBlock(block, referencia, data.externalId);
     const pageLabel = blocks.length > 1 ? `Artigo ${i + 1} de ${blocks.length}` : null;
     const pageHeight = productLabelPageHeight(fields.length, !!pageLabel);
-    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
-    renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, pageLabel);
+    const count = unitCountFromSpecs(block);
+    for (let u = 0; u < count; u++) {
+      doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
+      renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, pageLabel);
+    }
   });
 
   doc.end();
@@ -678,20 +720,11 @@ function buildMosquiteiraFieldsForBlock(
   if (block.specs["acabamento"]) fields.push({ label: "Acabamento", value: block.specs["acabamento"] });
 
   // Sempre "1" — cada unidade física tem a sua própria etiqueta (ver
-  // mosquiteiraUnitCount). Sem linha "Ordem de Serviço" (pedido do
+  // unitCountFromSpecs). Sem linha "Ordem de Serviço" (pedido do
   // utilizador de 2026-09-02: "apaga a linha da ordem de serviço") — o
   // código de barras por baixo já identifica a OS.
   fields.push({ label: "Quant.", value: "1" });
   return fields;
-}
-
-/** Quantas etiquetas (unidades físicas) uma linha de artigo representa, a partir do seu campo "Quant." (ex.: "3,00 uni" -> 3). Sem esse campo, ou se não for um número válido, assume-se 1. */
-function mosquiteiraUnitCount(specs: Record<string, string>): number {
-  const raw = specs["quant."] ?? specs["quant"] ?? specs["quantidade"];
-  if (!raw) return 1;
-  const match = raw.match(/(\d+)/);
-  const n = match ? parseInt(match[1], 10) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
 export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderData) {
@@ -712,7 +745,7 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
   // cada unidade").
   const pages = blocks.flatMap((block) => {
     const fields = buildMosquiteiraFieldsForBlock(doc, block);
-    const count = mosquiteiraUnitCount(block.specs);
+    const count = unitCountFromSpecs(block.specs);
     return Array.from({ length: count }, () => fields);
   });
 

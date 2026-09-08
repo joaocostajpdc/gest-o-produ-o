@@ -65,6 +65,33 @@ function extractAfterLabel(text: string, label: string): string | undefined {
 }
 
 /**
+ * Referência do cliente por artigo — sai do Goldylocks com rótulos
+ * diferentes consoante a Ordem de Serviço (confirmado pelo utilizador de
+ * 2026-09-08, com a OS 2026/433 real, cujo PDF tem "V/Enc. Nº 202603160" em
+ * vez do "V/Ref.:" que aparecia na OS 2026/430 usada antes para desenhar
+ * este extrator: "tanto aparece como v enc ou v/ ref.:"). O antigo
+ * extractAfterLabel(text, "v/ ref.:") só apanhava esse formato exato — por
+ * isso o campo saía sempre em branco nas Ordens de Serviço que usam
+ * "V/Enc." em vez de "V/Ref.:", incluindo na Etiqueta do Produto (que lê
+ * este mesmo texto de especificações).
+ *
+ * Um único regex tolerante substitui as comparações exatas: aceita
+ * maiúsculas/minúsculas, espaço opcional à volta da barra, "Ref" ou "Enc",
+ * um "Nº"/"N.º"/"N°" opcional antes do valor, e dois-pontos ou "|" (o
+ * separador de colunas inserido por renderPageWithColumns) opcionais a
+ * seguir. Cobre tanto "V/Ref.: CLI-998-A" como "V/Enc. Nº 202603160".
+ */
+function extractVRefArtigo(blockText: string): string | undefined {
+  const match = blockText.match(/V\s*\/\s*(?:Ref|Enc)\.?\s*(?:N[ºo°]\.?)?\s*:?\s*\|?\s*([^\n]+)/i);
+  if (!match) return undefined;
+  // Limpa um eventual "Nº"/"N.º" que ainda sobre à frente do valor, para o
+  // caso de aparecer depois de um "|" de coluna (fora do alcance do grupo
+  // opcional acima) — ex.: "V/Enc. | Nº 202603160" -> "202603160".
+  const value = match[1].replace(/^[\s|]*N[ºo°]\.?[\s|:]*/i, "").trim();
+  return value || undefined;
+}
+
+/**
  * Algumas linhas de artigo (ex.: mosquiteiras) não têm um rótulo
  * "Dimensões:" — em vez disso, a largura e a altura vêm impressas sem
  * rótulo, no formato "Larg. 1370 * Alt. 1000" (ver OS 2026/432 real,
@@ -96,10 +123,12 @@ interface ParsedArtigo {
   quantidade?: string;
   unidade?: string;
   /**
-   * "v/ ref.:" impressa a seguir aos campos deste artigo — ao contrário de
-   * "Referente a:" (que é uma só para toda a OS), esta pode ser diferente
-   * por artigo (ex.: cada linha da encomenda do cliente com a sua própria
-   * referência) — ver pedido do utilizador de 2026-09-02.
+   * "V/Ref." ou "V/Enc." (o Goldylocks usa um ou outro consoante a Ordem de
+   * Serviço — ver extractVRefArtigo) impressa a seguir aos campos deste
+   * artigo — ao contrário de "Referente a:" (que é uma só para toda a OS),
+   * esta pode ser diferente por artigo (ex.: cada linha da encomenda do
+   * cliente com a sua própria referência) — ver pedido do utilizador de
+   * 2026-09-02.
    */
   vRefArtigo?: string;
 }
@@ -196,7 +225,7 @@ function parseText(text: string): ParsedOrdemServico {
       // estas linhas (quando presentes) para preencher os seus campos.
       espessura: extractAfterLabel(blockText, "Espessura:"),
       vidro: extractAfterLabel(blockText, "Vidro:"),
-      vRefArtigo: extractAfterLabel(blockText, "v/ ref.:") ?? extractAfterLabel(blockText, "v/ref.:"),
+      vRefArtigo: extractVRefArtigo(blockText),
     };
   });
 

@@ -1,320 +1,818 @@
-import pdfParse from "pdf-parse";
-import { GoldylocksServiceOrder } from "../integrations/goldylocks/types";
+import PDFDocument from "pdfkit";
+import bwipjs from "bwip-js";
+import { Response } from "express";
+import { LOGO_MARK_PNG_BASE64 } from "../assets/logoMark";
 
 // ============================================================================
-// Leitura de PDFs de "Ordem Serviço" exportados do Goldylocks.
+// Etiquetas para colar no produto físico (inicialmente apenas para a
+// categoria "Painéis" — ver pedido do utilizador de 2026-08-20).
 //
-// Em vez de (ou além de) ligar diretamente à API do Goldylocks, este serviço
-// permite carregar o PDF da Ordem Serviço (o mesmo documento que o Goldylocks
-// gera e que pode ser impresso/exportado) e extrair automaticamente os dados
-// necessários para criar a Ordem de Serviço na aplicação de produção.
+// São dois documentos separados, com propósitos distintos:
 //
-// A extração de texto de um PDF perde a disposição visual em colunas; para
-// recuperar isso (nº documento / data / via na mesma linha, código / descrição
-// / quantidade do artigo na mesma linha, etc.), usamos uma função de
-// renderização própria que insere um separador " | " sempre que dois textos
-// na mesma linha (mesma coordenada Y) têm um espaço horizontal maior que o
-// normal entre si — ou seja, sempre que pertencem a colunas diferentes.
+//  - Etiqueta de código de barras: pequena, para colar na peça, com um
+//    código de barras (Code128) que identifica a Ordem de Serviço (ver
+//    pedido do utilizador de 2026-09-01: trocar o QR por código de barras).
+//    Ao contrário de um QR de URL, um código de barras não tem capacidade
+//    de "abrir" nada sozinho ao ser fotografado — em vez disso, lê-se com o
+//    botão "Ler Código" dentro da aplicação, que localiza e abre a OS
+//    correspondente. O número da OS, produto e cliente também ficam
+//    identificados em texto legível, para quem não tiver o telemóvel à mão.
+//
+//  - Etiqueta do produto: uma ficha mais detalhada com as características
+//    da encomenda (modelo, dimensões, acabamento, enchimento, cliente,
+//    datas), para acompanhar o produto sem necessidade de o escanear.
 // ============================================================================
 
-interface TextItem {
-  str: string;
-  transform: number[];
-  width: number;
+export interface LabelOrderData {
+  externalId: string;
+  clienteName: string;
+  clienteExternalId?: string | null;
+  productExternalId: string;
+  productName: string;
+  category?: string | null;
+  createdAt: string;
+  deadlineAt: string | null;
+  specifications?: string | null;
+  /** URL completo da página da OS na aplicação — o que o código QR abre ao ser lido. */
+  orderUrl: string;
 }
 
-function renderPageWithColumns(pageData: any): Promise<string> {
-  return pageData.getTextContent().then((textContent: { items: TextItem[] }) => {
-    let lastY: number | null = null;
-    let lastX: number | null = null;
-    let lastWidth = 0;
-    let text = "";
+const COLORS = {
+  ink: "#161b2c",
+  muted: "#667085",
+  border: "#e2e4e9",
+  primary: "#1f3fe0",
+  specBg: "#eef1ff",
+};
 
-    for (const item of textContent.items) {
-      const x = item.transform[4];
-      const y = item.transform[5];
+const LOGO_PNG = Buffer.from(LOGO_MARK_PNG_BASE64, "base64");
 
-      if (lastY !== null && Math.abs(y - lastY) > 2) {
-        text += "\n";
-      } else if (lastX !== null) {
-        const gap = x - (lastX + lastWidth);
-        if (gap > 5) text += " | ";
-      }
+function sanitizeFilename(value: string): string {
+  return value.replace(/[^a-z0-9-_]+/gi, "-");
+}
 
-      text += item.str;
-      lastY = y;
-      lastX = x;
-      lastWidth = item.width;
+function formatDate(iso: string | null, withTime = false): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("pt-PT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+  });
+}
+
+async function generateQrCode(text: string): Promise<Buffer> {
+  return bwipjs.toBuffer({ bcid: "qrcode", text, scale: 4 });
+}
+
+// Código de barras 1D (Code128) com o número da OS impresso por baixo das
+// barras (includetext) — serve de apoio de leitura manual caso o código não
+// seja lido pela câmara à primeira.
+async function generateBarcode(text: string): Promise<Buffer> {
+  return bwipjs.toBuffer({
+    bcid: "code128",
+    text,
+    scale: 3,
+    height: 10,
+    includetext: true,
+    textxalign: "center",
+    textsize: 8,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Etiqueta de código de barras (pequena, tipo autocolante) — 90mm x 55mm.
+// ---------------------------------------------------------------------------
+const QR_LABEL_WIDTH = 90 * 2.83465; // mm -> pt
+const QR_LABEL_HEIGHT = 55 * 2.83465;
+
+/**
+ * Desenha uma página da Etiqueta de Código de Barras — extraído para função
+ * à parte porque, tal como as outras duas etiquetas, esta passou a sair uma
+ * página por unidade física (e por artigo, quando a OS tem mais do que um) —
+ * ver streamBarcodeLabelPdf.
+ */
+function renderBarcodeLabelPage(
+  doc: PDFKit.PDFDocument,
+  data: LabelOrderData,
+  barcodePng: Buffer,
+  medida: string | undefined,
+  acabamento: string | undefined
+) {
+  // Todo o texto usa coordenadas (x, y) absolutas — em vez de deixar o
+  // pdfkit "fluir" o cursor doc.y entre chamadas — porque esta é uma página
+  // pequena e fixa (etiqueta): se o conteúdo acumulado ultrapassar a altura
+  // da página, o pdfkit insere silenciosamente uma segunda página, o que
+  // arruinaria uma etiqueta que tem de sair sempre numa única folha.
+  const textX = 10;
+  const textWidth = QR_LABEL_WIDTH - 20;
+  let y = 8;
+
+  doc
+    .fontSize(7)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Bold")
+    .text("ORDEM DE SERVIÇO", textX, y, { width: textWidth, height: 9, ellipsis: true });
+  y += 10;
+
+  doc
+    .fontSize(16)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text(data.externalId, textX, y, { width: textWidth, height: 19, ellipsis: true });
+  y += 21;
+
+  // Sem nome do cliente — chegou a estar aqui (pedido anterior de
+  // 2026-09-08 mal-entendido), mas o utilizador pediu para o remover por
+  // completo depois de ver o preview anotado a vermelho ("apa o que ta a
+  // vermelho").
+  //
+  // "PRODUTO" (código + descrição) — pequeno (pedido do utilizador de
+  // 2026-09-08, com o preview anotado a verde: "verde mais pequeno").
+  doc
+    .fontSize(6)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Bold")
+    .text("PRODUTO", textX, y, { width: textWidth, height: 7, ellipsis: true });
+  y += 8;
+
+  doc
+    .fontSize(7)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text(`${data.productExternalId} — ${data.productName}`, textX, y, {
+      width: textWidth,
+      height: 9,
+      ellipsis: true,
+    });
+  y += 10;
+
+  // Medida e Acabamento — em destaque (pedido do utilizador de 2026-09-08,
+  // com o preview anotado a roxo: "rojo poem maior"), lidos das
+  // especificações deste artigo, tal como na Etiqueta do Produto. Uma única
+  // linha compacta (não há espaço para duas linhas nesta etiqueta pequena,
+  // 90x55mm); omitida por completo quando nenhum dos dois está presente.
+  const details = [medida, acabamento].filter(Boolean).join("   ·   ");
+  if (details) {
+    doc
+      .fontSize(11)
+      .fillColor(COLORS.ink)
+      .font("Helvetica-Bold")
+      .text(details, textX, y, { width: textWidth, height: 14, ellipsis: true });
+    y += 16;
+  }
+
+  // Código de barras — pequeno (pedido do utilizador de 2026-09-08, com o
+  // preview anotado a verde: "verde mais pequeno"), com uma altura máxima
+  // fixa em vez de esticar até ao fundo da etiqueta. Usa "fit" (escala
+  // uniforme) em vez de "width"/"height" fixos, para nunca esticar as
+  // barras de forma desigual e arriscar tornar o código ilegível. A
+  // legenda "Ler o código com o botão..." foi removida (pedido anterior do
+  // utilizador de 2026-09-08: "tirar a frase ler o codigo com botao").
+  const MAX_BARCODE_HEIGHT = 34;
+  const barcodeAreaHeight = Math.min(QR_LABEL_HEIGHT - y - 10, MAX_BARCODE_HEIGHT);
+  doc.image(barcodePng, textX, y, { fit: [textWidth, barcodeAreaHeight], align: "center" });
+}
+
+export async function streamBarcodeLabelPdf(res: Response, data: LabelOrderData) {
+  const barcodePng = await generateBarcode(data.externalId);
+
+  // Uma etiqueta por unidade física, e uma por artigo quando a OS tem mais
+  // do que um (mesmo comportamento já usado na Etiqueta do Produto e na
+  // Etiqueta de Mosquiteira) — pedido do utilizador de 2026-09-08: "nesta
+  // etiqueta é importante ter uma por unidade".
+  const blocks = splitArticleBlocks(data.specifications);
+
+  const doc = new PDFDocument({ margin: 10, autoFirstPage: false });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="etiqueta-barras-${sanitizeFilename(data.externalId)}.pdf"`
+  );
+  doc.pipe(res);
+
+  blocks.forEach((block) => {
+    const medida = block["medida"] ?? block["dimensões"] ?? block["dimensoes"];
+    const acabamento = block["acabamento"];
+    const count = unitCountFromSpecs(block);
+    for (let u = 0; u < count; u++) {
+      doc.addPage({ size: [QR_LABEL_WIDTH, QR_LABEL_HEIGHT] });
+      renderBarcodeLabelPage(doc, data, barcodePng, medida, acabamento);
     }
-
-    return text;
   });
+
+  doc.end();
 }
 
-/** Extrai um valor numérico com 6 ou mais dígitos após um rótulo, ignorando o que vier a seguir na mesma linha. */
-function extractDigitsAfterLabel(text: string, label: string): string | undefined {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = text.match(new RegExp(`${escaped}[^\\n]*?(\\d{6,})`));
-  return match?.[1];
+// ---------------------------------------------------------------------------
+// Etiqueta do produto (ficha detalhada, tipo tag) — 102mm x 164mm. Impressa
+// numa Brother QL-1100 com rolo de papel contínuo Brother DK-22243 (102mm
+// de largura, sem corte fixo de fábrica — ver pedido do utilizador de
+// 2026-09-01, com foto do rolo: "102mmX30.48m" / "4"X100'"). A largura
+// 102mm corresponde exactamente à largura do rolo (impressa no próprio
+// rolo e confirmada pelo diálogo da Brother); a altura 164mm foi a medida
+// de impressão confirmada pelo utilizador (depois de tentativas anteriores
+// com 100x150mm, 4"x6" e 4"x14,5cm que não imprimiram corretamente).
+//
+// Segue o modelo de etiqueta já usado nas caixas físicas (logótipo, campos
+// Modelo/Acabamento/Enchimento/Espessura/Vidro/Medida/Quant., código QR e
+// data) — ver pedido do utilizador de 2026-08-21. Os valores dos campos são
+// lidos do mesmo texto livre de "Características do Produto" já usado na
+// Ficha de Produção e na página da OS (sem exigir novos campos estruturados
+// na aplicação); os campos ausentes desse texto são omitidos.
+//
+// A altura da etiqueta era fixa (164mm), medida confirmada pelo utilizador
+// (ver nota acima). Passou a ser calculada por página, à medida do
+// conteúdo de cada artigo (ver productLabelPageHeight, mais abaixo) — o
+// rolo DK-22243 é contínuo e sem corte fixo de fábrica, por isso uma
+// etiqueta com menos campos não precisa da mesma altura que uma com mais, e
+// a versão de altura fixa deixava sempre um espaço em branco por baixo dos
+// códigos quando havia poucos campos (pedido do utilizador de 2026-09-02:
+// "anula o espaço em branco"). A largura mantém-se sempre fixa em 102mm
+// (largura do rolo).
+//
+// Duas referências distintas nos campos de texto, tal como pedido pelo
+// utilizador em 2026-09-01 ("é importante nas etiquetas destinguir a n/
+// ref, v/ ref. e ordem de serviço"):
+//  - a encomenda do cliente a que este produto diz respeito (vem do texto
+//    "Referente a:" importado do Goldylocks). Mostra-se sempre, com traço
+//    quando não há informação, tal como no modelo físico. Sai sem rótulo
+//    "N/Ref." à frente — só o texto da encomenda (pedido do utilizador de
+//    2026-09-02: "apaga a N/ ref. deixado apenas a encomenda cliente").
+//  - V/Ref.  — só aparece quando existir essa informação nas Características
+//    do Produto (ao contrário da linha acima, omite-se por completo quando
+//    não há valor, em vez de mostrar um traço).
+// A terceira referência — Ordem de Serviço, o nosso próprio número — já não
+// tem linha de texto própria (removida a pedido do utilizador de 2026-09-08:
+// "ate podemos apagar a ordem se serviço pois o numero ja aparce por baixo
+// do codigo de barras"): o código de barras já a mostra em texto legível por
+// baixo das barras (ver generateBarcode, includetext), tal como já
+// acontecia na Etiqueta de Mosquiteira (ver mais abaixo).
+//
+// O código que abre a OS na aplicação passou de QR para código de barras
+// (Code128), tal como a Etiqueta de Código de Barras — ver pedido do
+// utilizador de 2026-09-01: "tudo que esteja ligado ao programa de
+// produção seja em código de barras". O segundo código (link para o
+// site/redes da empresa) mantém-se QR, por não estar ligado à aplicação de
+// gestão de produção. A legenda "Ler para abrir OS" por baixo do código de
+// barras foi removida (pedido do utilizador de 2026-09-02).
+//
+// Uma Ordem de Serviço pode ter mais do que um artigo (ver
+// goldylocksPdfParser.ts) — nesse caso o texto de especificações vem
+// dividido em blocos "Artigo N — ..." e esta etiqueta sai com uma página
+// por artigo (mesmo código de barras/QR e mesmo Nº de Ordem de Serviço em
+// todas, só os campos do produto mudam) — a aplicação continua a ter uma
+// única Ordem de Serviço (ver pedido do utilizador de 2026-09-02: "esta
+// ordem de serviço tem dois artigos tem que ler os dois" / "como nas
+// etiquetas uma para cada produto", e decisão confirmada: "uma OS só, mas
+// com uma etiqueta por artigo").
+// ---------------------------------------------------------------------------
+const PRODUCT_LABEL_WIDTH = 102 * 2.83465; // 102mm -> pt (largura do rolo Brother DK-22243)
+const PL_MARGIN = 16;
+
+// Incrementos de layout partilhados entre renderProductLabelPage (que
+// desenha a página) e productLabelPageHeight (que calcula a altura da
+// página antes de a criar) — têm de ser exatamente os mesmos incrementos
+// nos dois sítios, para a altura calculada nunca divergir do que é
+// realmente desenhado (mesmo padrão já usado em serviceOrderPdfService.ts
+// para specificationsContentHeight/drawSpecifications).
+const PL_LOGO_SIZE = 42;
+const PL_TITLE_LINE_HEIGHT = 17;
+const PL_SUBTITLE_LINE_HEIGHT = 16;
+const PL_PAGE_LABEL_HEIGHT = 13;
+const PL_DIVIDER_GAP = 12;
+const PL_FIELD_LINE_HEIGHT = 16;
+const PL_CODES_TOP_GAP = 16;
+const PL_QR_SIZE = 62;
+const PL_CAPTION_GAP = 3;
+const PL_CAPTION_HEIGHT = 9;
+
+/**
+ * Altura total da página da etiqueta do produto, calculada a partir do
+ * número de campos e de ter ou não o indicador "Artigo X de Y" — cada
+ * página/artigo pode assim sair com uma altura diferente, exatamente à
+ * medida do seu conteúdo, sem sobrar espaço em branco por baixo dos
+ * códigos.
+ */
+function productLabelPageHeight(fieldsCount: number, hasPageLabel: boolean): number {
+  let y = PL_MARGIN + PL_LOGO_SIZE + 8;
+  y += PL_TITLE_LINE_HEIGHT;
+  y += PL_SUBTITLE_LINE_HEIGHT;
+  if (hasPageLabel) y += PL_PAGE_LABEL_HEIGHT;
+  y += PL_DIVIDER_GAP;
+  y += fieldsCount * PL_FIELD_LINE_HEIGHT;
+  const qrY = y + PL_CODES_TOP_GAP;
+  const contentBottom = qrY + PL_QR_SIZE + PL_CAPTION_GAP + PL_CAPTION_HEIGHT;
+  return contentBottom + PL_MARGIN;
 }
 
-function extractAfterLabel(text: string, label: string): string | undefined {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = text.match(new RegExp(`${escaped}\\s*\\|?\\s*([^\\n]+)`));
-  return match?.[1]?.trim() || undefined;
+/** Lê linhas "Rótulo: valor" do texto livre de especificações. */
+function parseSpecLines(specifications?: string | null): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (!specifications) return map;
+  for (const rawLine of specifications.split("\n")) {
+    const match = rawLine.match(/^([^:]+):\s*(.+)$/);
+    if (!match) continue;
+    const key = match[1].trim().toLowerCase();
+    const value = match[2].trim().replace(/,\s*$/, "");
+    if (value) map[key] = value;
+  }
+  return map;
 }
 
 /**
- * Referência do cliente por artigo — sai do Goldylocks com rótulos
- * diferentes consoante a Ordem de Serviço (confirmado pelo utilizador de
- * 2026-09-08, com a OS 2026/433 real, cujo PDF tem "V/Enc. Nº 202603160" em
- * vez do "V/Ref.:" que aparecia na OS 2026/430 usada antes para desenhar
- * este extrator: "tanto aparece como v enc ou v/ ref.:"). O antigo
- * extractAfterLabel(text, "v/ ref.:") só apanhava esse formato exato — por
- * isso o campo saía sempre em branco nas Ordens de Serviço que usam
- * "V/Enc." em vez de "V/Ref.:", incluindo na Etiqueta do Produto (que lê
- * este mesmo texto de especificações).
+ * Divide o texto de especificações num bloco por artigo, quando a Ordem de
+ * Serviço tiver mais do que um (goldylocksPdfParser.ts identifica cada um
+ * com um título "Artigo N — ..."). Quando não há esses títulos (o caso
+ * normal, um só artigo), devolve o texto completo como um único bloco —
+ * comportamento idêntico ao de antes de existir esta divisão.
+ */
+function splitArticleBlocks(specifications?: string | null): Record<string, string>[] {
+  if (!specifications) return [{}];
+  const headerRe = /^Artigo \d+\s*—.*$/gm;
+  const headers = [...specifications.matchAll(headerRe)];
+  if (headers.length === 0) return [parseSpecLines(specifications)];
+
+  const blocks: Record<string, string>[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const start = headers[i].index! + headers[i][0].length;
+    const end = i + 1 < headers.length ? headers[i + 1].index! : specifications.length;
+    blocks.push(parseSpecLines(specifications.slice(start, end)));
+  }
+  return blocks;
+}
+
+/**
+ * "Referente a:" (a encomenda do cliente) é impressa uma só vez no
+ * documento do Goldylocks e aplica-se a toda a Ordem de Serviço, mesmo
+ * quando há vários artigos — por isso é lida do texto completo (nunca de um
+ * bloco de artigo em particular) e usada como N/Ref em todas as páginas.
+ */
+function extractSharedReferencia(specifications?: string | null): string | undefined {
+  if (!specifications) return undefined;
+  const match = specifications.match(/^Referente a:\s*(.+)$/m);
+  return match?.[1]?.trim().replace(/,\s*$/, "") || undefined;
+}
+
+/**
+ * Quantas etiquetas (unidades físicas) uma linha de artigo representa, a
+ * partir do seu campo "Quant." (ex.: "3,00 uni" -> 3). Sem esse campo, ou se
+ * não for um número válido, assume-se 1.
  *
- * Um único regex tolerante substitui as comparações exatas: aceita
- * maiúsculas/minúsculas, espaço opcional à volta da barra, "Ref" ou "Enc",
- * um "Nº"/"N.º"/"N°" opcional antes do valor, e dois-pontos ou "|" (o
- * separador de colunas inserido por renderPageWithColumns) opcionais a
- * seguir. Cobre tanto "V/Ref.: CLI-998-A" como "V/Enc. Nº 202603160".
+ * Partilhada pela Etiqueta do Produto (Painéis) e pela Etiqueta de
+ * Mosquiteira — nasceu só para a mosquiteira (pedido do utilizador de
+ * 2026-09-02: "1 para cada unidade") e foi promovida a função genérica em
+ * 2026-09-08, quando o mesmo comportamento foi pedido para os Painéis (OS
+ * 2026/998, Artigo 2 — DCPL000 Painel Liso, Quant.: 3,00 uni: "é importante
+ * que onde tem 3 unidades saem 3 etiquetas").
  */
-function extractVRefArtigo(blockText: string): string | undefined {
-  const match = blockText.match(/V\s*\/\s*(?:Ref|Enc)\.?\s*(?:N[ºo°]\.?)?\s*:?\s*\|?\s*([^\n]+)/i);
-  if (!match) return undefined;
-  // Limpa um eventual "Nº"/"N.º" que ainda sobre à frente do valor, para o
-  // caso de aparecer depois de um "|" de coluna (fora do alcance do grupo
-  // opcional acima) — ex.: "V/Enc. | Nº 202603160" -> "202603160".
-  const value = match[1].replace(/^[\s|]*N[ºo°]\.?[\s|:]*/i, "").trim();
-  return value || undefined;
+function unitCountFromSpecs(specs: Record<string, string>): number {
+  const raw = specs["quant."] ?? specs["quant"] ?? specs["quantidade"];
+  if (!raw) return 1;
+  const match = raw.match(/(\d+)/);
+  const n = match ? parseInt(match[1], 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-/**
- * Algumas linhas de artigo (ex.: mosquiteiras) não têm um rótulo
- * "Dimensões:" — em vez disso, a largura e a altura vêm impressas sem
- * rótulo, no formato "Larg. 1370 * Alt. 1000" (ver OS 2026/432 real,
- * mosquiteiras, pedido do utilizador de 2026-09-02: "cria etiqueta para
- * mosquiteira"). Normaliza para o mesmo formato usado nas restantes
- * "Dimensões:" (com "x" em vez de "*"), para que o resto da aplicação
- * (Características do Produto, Etiqueta do Produto) trate este campo da
- * mesma forma independentemente da categoria do produto.
- */
-function extractLargAlt(text: string): string | undefined {
-  const match = text.match(/Larg\.\s*([\d.,]+)\s*\*\s*Alt\.\s*([\d.,]+)/i);
-  if (!match) return undefined;
-  return `Larg. ${match[1]} x Alt. ${match[2]}`;
+function buildProductLabelFieldsForBlock(
+  specs: Record<string, string>,
+  referencia: string | undefined,
+  externalId: string
+): { label: string | null; value: string }[] {
+  const fields: { label: string | null; value: string }[] = [];
+  const push = (label: string, ...keys: string[]) => {
+    const value = keys.map((k) => specs[k]).find((v) => !!v);
+    if (value) fields.push({ label, value });
+  };
+  push("Modelo", "modelo");
+  push("Acabamento", "acabamento");
+  push("Enchimento", "enchimento");
+  push("Espessura", "espessura");
+  push("Vidro", "vidro");
+  push("Medida", "medida", "dimensões", "dimensoes");
+
+  // Sempre "1" — cada unidade física tem a sua própria etiqueta, tal como já
+  // acontecia na Etiqueta de Mosquiteira (ver unitCountFromSpecs e o pedido
+  // do utilizador de 2026-09-08 com a OS 2026/998, Artigo 2, Quant.: 3,00
+  // uni -> 3 páginas). Omite-se o campo quando não há Quant. nas
+  // especificações, tal como antes.
+  if (specs["quant."] ?? specs["quant"] ?? specs["quantidade"]) {
+    fields.push({ label: "Quant.", value: "1" });
+  }
+
+  // A encomenda do cliente a que este produto diz respeito — vem do texto
+  // "Referente a:" importado do Goldylocks (ver goldylocksPdfParser.ts).
+  // Mostra-se sempre, com traço quando não há informação, tal como no
+  // modelo físico (pedido do utilizador de 2026-09-01: "n/ ref, é a
+  // encomenda do clinete"). Sai sem rótulo "N/Ref." à frente — só o valor
+  // (pedido do utilizador de 2026-09-02: "apaga a N/ ref. deixado apenas a
+  // encomenda cliente"). É partilhada por toda a OS (ver
+  // extractSharedReferencia), com o mapa deste bloco como reserva para
+  // especificações escritas manualmente com uma destas chaves.
+  const nRef =
+    referencia ??
+    specs["referente a"] ??
+    specs["n/ref"] ??
+    specs["n/ref."] ??
+    specs["nossa ref"] ??
+    specs["nossa referência"];
+  fields.push({ label: null, value: nRef ?? "----------" });
+
+  // V/Ref. (Vossa Referência) — campo distinto do N/Ref acima, só aparece
+  // quando existir essa informação nas Características do Produto; omite-se
+  // por completo quando não há valor, em vez de mostrar um traço (pedido do
+  // utilizador de 2026-09-01: "v ref, apenas utilizas quando tiver inf. na
+  // ordem de serviço"). Ao contrário do N/Ref, é lida deste bloco (por
+  // artigo), porque a "v/ ref." do Goldylocks pode ser diferente em cada
+  // linha da mesma OS (ver pedido do utilizador de 2026-09-02, com a OS
+  // 2026/430 real).
+  push("V/Ref.", "v/ref", "v/ref.", "vossa ref", "vossa referência");
+
+  // Sem linha de texto "Ordem de Serviço" — removida a pedido do utilizador
+  // de 2026-09-08 (ver nota no cabeçalho do ficheiro): o código de barras,
+  // desenhado logo a seguir a estes campos, já mostra o número da OS em
+  // texto legível por baixo das barras. externalId deixou de ser usado
+  // aqui, mas mantém-se como parâmetro da função para não obrigar a mudar
+  // a chamada em streamProductLabelPdf.
+  return fields;
 }
 
+// Link para a presença online da Minho Ferragens — o segundo código QR da
+// etiqueta, tal como no modelo físico já usado (pedido do utilizador de
+// 2026-08-21: "quero que saia o QR para o gestão e um QR para o que já
+// estava"). Usa-se o link "limpo", sem os parâmetros de rastreio (utm_*,
+// fbclid) que vinham anexados ao link partilhado — esses parâmetros são
+// específicos de um clique/partilha (rede social) e não fazem sentido
+// impressos permanentemente numa etiqueta.
+const SITE_QR_URL = "https://linktr.ee/jpdcmynhoferragens";
+
 /**
- * Uma linha de artigo da Ordem Serviço (uma OS pode ter mais do que uma —
- * ver ParsedOrdemServico.artigos abaixo).
+ * Desenha uma página da etiqueta do produto (logótipo, campos, código de
+ * barras + QR) no documento já criado. Extraído para função à parte porque,
+ * quando a Ordem de Serviço tem vários artigos, o mesmo desenho repete-se
+ * uma vez por página (ver cabeçalho acima) — evita duplicar ~80 linhas de
+ * layout por página.
  */
-interface ParsedArtigo {
+function renderProductLabelPage(
+  doc: PDFKit.PDFDocument,
+  fields: { label: string | null; value: string }[],
+  barcodePng: Buffer,
+  siteQrPng: Buffer,
+  createdAt: string,
+  pageLabel: string | null
+) {
+  const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
+
+  // Todo o texto usa coordenadas (x, y) absolutas em vez do cursor "fluido"
+  // do pdfkit — mesma razão da etiqueta QR acima: o número de campos aqui é
+  // sempre limitado (no máximo 9: Modelo/Acabamento/Enchimento/Espessura/
+  // Vidro/Medida/Quant./N.Ref./V.Ref.), o que torna seguro calcular a
+  // posição de cada linha à partida, sem risco de o pdfkit inserir uma
+  // página extra.
+  const logoSize = PL_LOGO_SIZE;
+  const logoX = PL_MARGIN + (width - logoSize) / 2;
+  doc.image(LOGO_PNG, logoX, PL_MARGIN, { width: logoSize, height: logoSize });
+
+  let y = PL_MARGIN + logoSize + 8;
+  doc
+    .fontSize(13)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text("MINHO FERRAGENS", PL_MARGIN, y, { width, align: "center" });
+  y += PL_TITLE_LINE_HEIGHT;
+  doc
+    .fontSize(8)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Oblique")
+    .text("JPDC - MYNHOFERRAGENS, LDA", PL_MARGIN, y, { width, align: "center" });
+  y += PL_SUBTITLE_LINE_HEIGHT;
+
+  // Indicador "Artigo X de Y" — só aparece quando a OS tem mais do que um
+  // artigo (pageLabel vem null no caso normal de um único artigo, mantendo a
+  // etiqueta idêntica à de antes desta funcionalidade).
+  if (pageLabel) {
+    doc
+      .fontSize(8)
+      .fillColor(COLORS.primary)
+      .font("Helvetica-Bold")
+      .text(pageLabel, PL_MARGIN, y, { width, align: "center" });
+    y += PL_PAGE_LABEL_HEIGHT;
+  }
+
+  doc
+    .moveTo(PL_MARGIN, y)
+    .lineTo(PRODUCT_LABEL_WIDTH - PL_MARGIN, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(1)
+    .stroke();
+  y += PL_DIVIDER_GAP;
+
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.ink);
+  for (const f of fields) {
+    const text = f.label ? `${f.label}: ${f.value}` : f.value;
+    doc.text(text, PL_MARGIN, y, { width, height: 15, ellipsis: true });
+    y += PL_FIELD_LINE_HEIGHT;
+  }
+
+  // Código de barras (abre a OS na aplicação, lido pelo botão "Ler Código")
+  // e QR do site, lado a lado — logo a seguir ao último campo (em vez de
+  // fixos junto ao fundo da etiqueta), para não deixar um espaço em branco
+  // grande entre o texto e os códigos quando há poucos campos (pedido do
+  // utilizador de 2026-09-02: "retira o espaço em branco abaixo entre
+  // texto e codigos"). A coluna esquerda passou de QR a código de barras
+  // (pedido do utilizador de 2026-09-01: "tudo que esteja ligado ao
+  // programa de produção seja em código de barras" — o QR do site, à
+  // direita, fica QR por não estar ligado à aplicação).
+  const qrSize = PL_QR_SIZE;
+  const codesGap = 10;
+  const barcodeColWidth = width - qrSize - codesGap;
+  const qrY = y + PL_CODES_TOP_GAP;
+  const dateY = qrY - 14;
+
+  doc
+    .fontSize(8.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text(formatDate(createdAt), PL_MARGIN, dateY, { width, align: "right" });
+
+  const qr2X = PL_MARGIN + width - qrSize;
+
+  // O código de barras usa "fit" (escala uniforme), nunca width/height
+  // fixos, para nunca esticar as barras de forma desigual e arriscar
+  // tornar o código ilegível (mesma razão documentada na Etiqueta de
+  // Código de Barras, acima). As legendas usam { height, ellipsis: true }
+  // — sem isto, se o texto fosse largo de mais para a coluna, o pdfkit
+  // "flui" o cursor para além do fundo da página e insere silenciosamente
+  // uma segunda página em branco (mesmo problema já documentado ali).
+  doc.image(barcodePng, PL_MARGIN, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
+
+  doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
+  doc
+    .fontSize(6.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text("Minho Ferragens", qr2X, qrY + qrSize + PL_CAPTION_GAP, {
+      width: qrSize,
+      height: PL_CAPTION_HEIGHT,
+      align: "center",
+      ellipsis: true,
+    });
+}
+
+export async function streamProductLabelPdf(res: Response, data: LabelOrderData) {
+  const [barcodePng, siteQrPng] = await Promise.all([
+    generateBarcode(data.externalId),
+    generateQrCode(SITE_QR_URL),
+  ]);
+
+  // Uma página por artigo (ver cabeçalho acima) — no caso normal de um só
+  // artigo, splitArticleBlocks devolve um único bloco e o comportamento é
+  // idêntico ao de antes desta funcionalidade (uma única página, sem
+  // indicador "Artigo X de Y").
+  const blocks = splitArticleBlocks(data.specifications);
+  const referencia = extractSharedReferencia(data.specifications);
+
+  const doc = new PDFDocument({
+    margin: PL_MARGIN,
+    autoFirstPage: false,
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="etiqueta-produto-${sanitizeFilename(data.externalId)}.pdf"`
+  );
+  doc.pipe(res);
+
+  // Uma etiqueta por unidade física — uma linha de artigo com Quant. 3 sai em
+  // três páginas idênticas, tal como já acontecia na Etiqueta de Mosquiteira
+  // (pedido do utilizador de 2026-09-08, com a OS 2026/998: "é importante que
+  // onde tem 3 unidades saem 3 etiquetas"). O indicador "Artigo X de Y"
+  // conta artigos (blocos), não páginas/unidades — por isso mantém-se igual
+  // em todas as páginas de um mesmo artigo.
+  blocks.forEach((block, i) => {
+    const fields = buildProductLabelFieldsForBlock(block, referencia, data.externalId);
+    const pageLabel = blocks.length > 1 ? `Artigo ${i + 1} de ${blocks.length}` : null;
+    const pageHeight = productLabelPageHeight(fields.length, !!pageLabel);
+    const count = unitCountFromSpecs(block);
+    for (let u = 0; u < count; u++) {
+      doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
+      renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, pageLabel);
+    }
+  });
+
+  doc.end();
+}
+
+// ---------------------------------------------------------------------------
+// Etiqueta de mosquiteira — categoria "Mosquiteiras" (pedido do utilizador de
+// 2026-09-02: "cria etiqueta para mosquiteira", com foto de referência da
+// etiqueta em papel já usada nas caixas: logótipo, COD., descrição do
+// produto com a medida, QUANT. e um código QR — e confirmado por ele: "1
+// para cada unidade tem que ter [só] uma altura").
+//
+// Ao contrário da Etiqueta do Produto (Modelo/Acabamento/Enchimento/
+// Espessura/Vidro/Medida), a Ordem Serviço de uma mosquiteira não tem um
+// campo "Modelo:" nem "Dimensões:" — a largura/altura vêm impressas sem
+// rótulo, no formato "Larg. 1370 * Alt. 1000" (ver OS 2026/432 real,
+// enviada pelo utilizador como exemplo). goldylocksPdfParser.ts foi
+// alargado para reconhecer este formato como "Dimensões:", por isso chega
+// aqui já normalizado.
+//
+// Reutiliza a mesma renderProductLabelPage/productLabelPageHeight da
+// Etiqueta do Produto (o desenho é genérico — só depende da lista de
+// campos), com uma lista de campos própria (COD./Descrição/Dimensões/
+// Acabamento/Quant.) e sem o indicador "Artigo X de Y" (aqui não faz
+// sentido: o pedido do utilizador foi "sem indicador, igual ao modelo em
+// papel", que só mostra sempre "QUANT.: 1").
+//
+// "1 para cada unidade": uma linha de artigo com Quant. 3, por exemplo, sai
+// em três páginas de etiqueta separadas (uma por unidade física), todas
+// idênticas e todas a mostrar "Quant.: 1" — nunca o total da linha. E,
+// porque o utilizador confirmou que todas as etiquetas da mesma Ordem de
+// Serviço devem sair com a mesma altura entre si, a altura é calculada uma
+// só vez (a partir do bloco com mais campos) e aplicada a todas as páginas,
+// em vez de variar por bloco como acontece na Etiqueta do Produto.
+//
+// Mantém-se o mesmo par de códigos da Etiqueta do Produto — código de
+// barras da Ordem de Serviço (abre a OS na aplicação) e QR do site — em vez
+// de replicar exatamente o único QR do modelo em papel (que é uma etiqueta
+// antiga, anterior à aplicação, e cujo conteúdo não é rastreável); mantém
+// também o formato de data já usado no resto da aplicação (DD/MM/AAAA), em
+// vez do "08.01.26" do modelo em papel. Ambas as escolhas ficam fáceis de
+// reverter se não for isto que o utilizador quer.
+//
+// Nota sobre um conjunto de tamanhos ML_* mais compacto que chegou a
+// existir aqui (fonte menor, logótipo menor, códigos menores — pedido do
+// utilizador de 2026-09-02: "apenas tenta que não seja tão comprida"), com
+// altura de página à volta de 73mm: foi revertido no mesmo dia depois de o
+// utilizador reportar que a impressora Brother QL-1100 recusava imprimir
+// essa etiqueta ("o rolo de etiquetas ou a fita dentro da máquina não
+// corresponde ao selecionado na aplicação"), enquanto a Etiqueta do Produto
+// (Painéis, mais alta, tipicamente 100-160mm) imprime sem problema na
+// mesma impressora ("o painel sai, mosquiteiras não"). E, como o
+// utilizador não vai imprimir sempre na mesma impressora ("nem sempre vou
+// imprimir apenas naquela impressora"), corrigir isto do lado do driver de
+// só uma máquina não seria uma solução geral — por isso a etiqueta de
+// mosquiteira volta a usar exatamente o mesmo desenho/tamanhos já
+// comprovados a imprimir bem na Etiqueta do Produto, em vez de um conjunto
+// de tamanhos próprio.
+// ---------------------------------------------------------------------------
+
+interface MosquiteiraBlock {
   codigoArtigo: string;
-  descricaoArtigo?: string;
-  modelo?: string;
-  dimensoes?: string;
-  acabamento?: string;
-  enchimento?: string;
-  espessura?: string;
-  vidro?: string;
-  quantidade?: string;
-  unidade?: string;
-  /**
-   * "V/Ref." ou "V/Enc." (o Goldylocks usa um ou outro consoante a Ordem de
-   * Serviço — ver extractVRefArtigo) impressa a seguir aos campos deste
-   * artigo — ao contrário de "Referente a:" (que é uma só para toda a OS),
-   * esta pode ser diferente por artigo (ex.: cada linha da encomenda do
-   * cliente com a sua própria referência) — ver pedido do utilizador de
-   * 2026-09-02.
-   */
-  vRefArtigo?: string;
-}
-
-interface ParsedOrdemServico {
-  numero: string;
-  dataHora?: string;
-  clienteNumero: string;
-  clienteNome?: string;
-  clienteContribuinte?: string;
-  /** Uma OS pode ter mais do que uma linha de artigo — ver pedido do utilizador de 2026-09-02: "esta ordem de serviço tem dois artigos tem que ler os dois". */
-  artigos: ParsedArtigo[];
-  /** "Referente a:" (Encomenda Cliente) — impressa uma só vez, aplica-se a toda a OS mesmo quando há vários artigos. */
-  referencia?: string;
-  /** Data no formato DD/MM/AAAA, tal como impressa na linha "Prazo de entrega:". */
-  prazoEntrega?: string;
+  descricaoArtigo: string;
+  specs: Record<string, string>;
 }
 
 /**
- * Converte uma data no formato português "DD/MM/AAAA" (tal como impressa na
- * Ordem Serviço) para uma data ISO, à 23:59 desse dia (a encomenda deve estar
- * pronta/entregue até ao fim desse dia).
+ * Tal como splitArticleBlocks, mas guardando também o código e a descrição
+ * do artigo (lidos do título "Artigo N — CODIGO Descrição") — a Etiqueta do
+ * Produto não precisa disto (usa antes o "Modelo:" do corpo), mas a
+ * Etiqueta de Mosquiteira mostra sempre um campo "COD." e "Descrição"
+ * próprios. Quando a OS só tem um artigo (sem esses títulos, o caso mais
+ * comum), usa antes o produto associado à própria Ordem de Serviço.
  */
-function parsePrazoEntregaDate(value: string): string | undefined {
-  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) return undefined;
-  const [, day, month, year] = match;
-  const date = new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    23,
-    59,
-    0
-  );
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toISOString();
-}
-
-function parseText(text: string): ParsedOrdemServico {
-  const headerMatch = text.match(
-    /(\d{4}\/\d+)\s*\|\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*\|\s*(\S+)/
-  );
-  if (!headerMatch) {
-    throw new Error(
-      'Não foi possível encontrar o número/data da "Ordem Serviço" no PDF. ' +
-        "Confirme que é um PDF de Ordem Serviço exportado do Goldylocks."
-    );
+function splitMosquiteiraBlocks(
+  specifications: string | null | undefined,
+  fallbackCode: string,
+  fallbackName: string
+): MosquiteiraBlock[] {
+  if (!specifications) {
+    return [{ codigoArtigo: fallbackCode, descricaoArtigo: fallbackName, specs: {} }];
   }
-  const numero = headerMatch[1];
-  const dataHora = headerMatch[2];
-
-  const clienteMatch = text.match(/Cliente No\.\s*(\d+)\n([^\n]+)/);
-  if (!clienteMatch) {
-    throw new Error('Não foi possível encontrar o "Cliente No." no PDF.');
-  }
-  const clienteNumero = clienteMatch[1];
-  const clienteNome = clienteMatch[2]?.trim();
-
-  const clienteContribuinte = extractDigitsAfterLabel(text, "V/Contribuinte:");
-
-  // Linhas de artigo: "CODIGO | Descrição livre | Quantidade Unidade" — uma
-  // OS pode ter uma ou várias, todas com este formato de 3 colunas, a
-  // seguir ao cabeçalho "Cod. | Descrição | Quant. ...". Para cada uma,
-  // os campos indentados por baixo (Modelo/Dimensões/Acabamento/etc.)
-  // pertencem só a essa linha — por isso são extraídos apenas do trecho de
-  // texto entre esta linha de artigo e a seguinte (ou o fim do documento),
-  // nunca do texto completo, para não misturar os campos de artigos
-  // diferentes quando há mais do que um (ver pedido do utilizador de
-  // 2026-09-02, com a OS 2026/430 real: dois artigos com o mesmo Modelo
-  // mas Dimensões e v/ref diferentes).
-  const afterHeader = text.slice(text.indexOf("Cod."));
-  const artigoLineRe = /^(\S+)\s*\|\s*([^|]+?)\s*\|\s*([\d.,]+)\s*(\S+)\s*$/gm;
-  const artigoMatches = [...afterHeader.matchAll(artigoLineRe)];
-  if (artigoMatches.length === 0) {
-    throw new Error("Não foi possível encontrar a linha do artigo (Código / Descrição / Quantidade) no PDF.");
+  const headerRe = /^Artigo \d+\s*—\s*(\S+)(?:\s+(.*))?$/gm;
+  const headers = [...specifications.matchAll(headerRe)];
+  if (headers.length === 0) {
+    return [{ codigoArtigo: fallbackCode, descricaoArtigo: fallbackName, specs: parseSpecLines(specifications) }];
   }
 
-  const artigos: ParsedArtigo[] = artigoMatches.map((m, i) => {
-    const blockStart = m.index! + m[0].length;
-    const blockEnd = i + 1 < artigoMatches.length ? artigoMatches[i + 1].index! : afterHeader.length;
-    const blockText = afterHeader.slice(blockStart, blockEnd);
-    return {
-      codigoArtigo: m[1],
-      descricaoArtigo: m[2]?.trim(),
-      quantidade: m[3]?.trim(),
-      unidade: m[4]?.trim(),
-      modelo: extractAfterLabel(blockText, "Modelo:"),
-      dimensoes: extractAfterLabel(blockText, "Dimensões:") ?? extractLargAlt(blockText),
-      acabamento: extractAfterLabel(blockText, "Acabamento:"),
-      enchimento: extractAfterLabel(blockText, "Enchimento:"),
-      // Espessura/Vidro só aparecem em alguns tipos de artigo (ex.: painéis
-      // com vidro) — ver etiqueta do produto em labelPdfService.ts, que usa
-      // estas linhas (quando presentes) para preencher os seus campos.
-      espessura: extractAfterLabel(blockText, "Espessura:"),
-      vidro: extractAfterLabel(blockText, "Vidro:"),
-      vRefArtigo: extractVRefArtigo(blockText),
-    };
-  });
-
-  return {
-    numero,
-    dataHora,
-    clienteNumero,
-    clienteNome,
-    clienteContribuinte,
-    artigos,
-    // Impressa uma só vez no documento (não por artigo), mesmo quando há
-    // vários artigos — por isso extraída do texto completo, não do bloco de
-    // um artigo em particular.
-    referencia: extractAfterLabel(text, "Referente a:"),
-    prazoEntrega: text.match(/Prazo de entrega:?\s*\|?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1],
-  };
-}
-
-/** As linhas de campos (Modelo/Acabamento/.../Quant./V.Ref.) de um único artigo, sem o cabeçalho "Artigo N —". */
-function buildArtigoParts(a: ParsedArtigo): string[] {
-  const parts: string[] = [];
-  if (a.modelo) parts.push(`Modelo: ${a.modelo}`);
-  if (a.acabamento) parts.push(`Acabamento: ${a.acabamento}`);
-  if (a.enchimento) parts.push(`Enchimento: ${a.enchimento}`);
-  if (a.espessura) parts.push(`Espessura: ${a.espessura}`);
-  if (a.vidro) parts.push(`Vidro: ${a.vidro}`);
-  if (a.dimensoes) parts.push(`Dimensões: ${a.dimensoes}`);
-  if (a.quantidade) parts.push(`Quant.: ${a.quantidade}${a.unidade ? ` ${a.unidade}` : ""}`);
-  if (a.vRefArtigo) parts.push(`V/Ref.: ${a.vRefArtigo}`);
-  return parts;
-}
-
-function buildNotes(parsed: ParsedOrdemServico): string | undefined {
-  // Uma só linha de artigo: mantém exatamente o formato anterior (sem
-  // cabeçalhos "Artigo N —"), para não alterar o texto de "Características
-  // do Produto" das Ordens de Serviço já existentes/normais (a grande
-  // maioria) que só têm um artigo.
-  if (parsed.artigos.length <= 1) {
-    const parts = parsed.artigos[0] ? buildArtigoParts(parsed.artigos[0]) : [];
-    if (parsed.referencia) parts.push(`Referente a: ${parsed.referencia}`);
-    return parts.length ? parts.join("\n") : undefined;
+  const blocks: MosquiteiraBlock[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const start = headers[i].index! + headers[i][0].length;
+    const end = i + 1 < headers.length ? headers[i + 1].index! : specifications.length;
+    blocks.push({
+      codigoArtigo: headers[i][1],
+      descricaoArtigo: headers[i][2]?.trim() || fallbackName,
+      specs: parseSpecLines(specifications.slice(start, end)),
+    });
   }
-
-  // Vários artigos na mesma OS — cada um fica num bloco próprio,
-  // identificado por título ("Artigo 1 — ...", "Artigo 2 — ..."), separado
-  // por uma linha em branco. A Etiqueta do Produto (labelPdfService.ts)
-  // reconhece estes títulos e imprime uma etiqueta por artigo, todas com o
-  // mesmo número de Ordem de Serviço (ver pedido do utilizador de
-  // 2026-09-02: "esta ordem de serviço tem dois artigos tem que ler os
-  // dois" / "como nas etiquetas uma para cada produto").
-  const blocks = parsed.artigos.map((a, i) => {
-    const title = `Artigo ${i + 1} — ${a.codigoArtigo}${a.descricaoArtigo ? ` ${a.descricaoArtigo}` : ""}`;
-    const body = buildArtigoParts(a).join("\n");
-    return body ? `${title}\n${body}` : title;
-  });
-  if (parsed.referencia) blocks.push(`Referente a: ${parsed.referencia}`);
-  return blocks.join("\n\n");
+  return blocks;
 }
 
 /**
- * Lê um PDF de "Ordem Serviço" do Goldylocks e devolve os dados no mesmo
- * formato usado pelos adaptadores de integração (mock/API real), para que a
- * criação da Ordem de Serviço na aplicação siga sempre o mesmo caminho.
+ * A descrição do artigo (ex.: "Mosquiteria de enrolar Vertical Lacado
+ * Standard") é normalmente demasiado comprida para caber numa só linha da
+ * etiqueta — em vez de cortar o texto com "…" (perdendo informação que
+ * identifica o produto), quebra-se em duas linhas quando não cabe: a
+ * primeira com o rótulo "Descrição:", a segunda só com a continuação do
+ * texto (label null, tal como a linha do N/Ref.). Se nem duas linhas
+ * chegarem, a segunda linha é cortada com "…" pelo pdfkit (ver render).
  */
-export async function parseOrdemServicoPdf(pdfBuffer: Buffer): Promise<GoldylocksServiceOrder> {
-  const data = await pdfParse(pdfBuffer, { pagerender: renderPageWithColumns });
-  const parsed = parseText(data.text);
-  // A aplicação continua a acompanhar um único "produto" por Ordem de
-  // Serviço (etapas, tempos, etc.) — quando a OS tem vários artigos, é o
-  // primeiro que fica associado a esse acompanhamento; os restantes ficam
-  // registados no texto de especificações (ver buildNotes acima) e geram
-  // as suas próprias etiquetas, mas partilham a mesma OS (pedido do
-  // utilizador de 2026-09-02: "uma OS só, mas com uma etiqueta por
-  // artigo").
-  const primeiroArtigo = parsed.artigos[0];
+function wrapLabelValue(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  text: string,
+  width: number,
+  fontSize: number
+): { label: string | null; value: string }[] {
+  doc.font("Helvetica-Bold").fontSize(fontSize);
+  if (doc.widthOfString(`${label}: ${text}`) <= width) return [{ label, value: text }];
 
-  return {
-    externalId: parsed.numero,
-    client: {
-      externalId: parsed.clienteNumero,
-      name: parsed.clienteNome ?? `Cliente ${parsed.clienteNumero}`,
-      taxNumber: parsed.clienteContribuinte,
-    },
-    product: {
-      externalId: primeiroArtigo.codigoArtigo,
-      name: primeiroArtigo.descricaoArtigo ?? primeiroArtigo.codigoArtigo,
-    },
-    createdAt: parsed.dataHora ? parsed.dataHora.replace(" ", "T") : new Date().toISOString(),
-    notes: buildNotes(parsed),
-    deadlineAt: parsed.prazoEntrega ? parsePrazoEntregaDate(parsed.prazoEntrega) : undefined,
-  };
+  const prefix = `${label}: `;
+  const words = text.split(" ");
+  let line1 = "";
+  let i = 0;
+  for (; i < words.length; i++) {
+    const candidate = line1 ? `${line1} ${words[i]}` : words[i];
+    if (doc.widthOfString(prefix + candidate) > width) break;
+    line1 = candidate;
+  }
+  if (!line1 && words.length) {
+    // Nem a primeira palavra cabe — mostra-a na 1ª linha na mesma (o pdfkit
+    // corta-a com "…"), em vez de ficar com o rótulo sozinho.
+    line1 = words[0];
+    i = 1;
+  }
+  const line2 = words.slice(i).join(" ");
+  const result: { label: string | null; value: string }[] = [{ label, value: line1 }];
+  if (line2) result.push({ label: null, value: line2 });
+  return result;
+}
+
+function buildMosquiteiraFieldsForBlock(
+  doc: PDFKit.PDFDocument,
+  block: MosquiteiraBlock
+): { label: string | null; value: string }[] {
+  // Mesma largura/tamanho de letra da Etiqueta do Produto (PL_MARGIN, fonte
+  // 11) — ver nota acima sobre a reversão do conjunto de tamanhos ML_*.
+  const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
+  const fields: { label: string | null; value: string }[] = [];
+  fields.push({ label: "COD.", value: block.codigoArtigo });
+  fields.push(...wrapLabelValue(doc, "Descrição", block.descricaoArtigo, width, 11));
+
+  // "Dim." em vez de "Dimensões" — palavra mais curta, deixa mais espaço
+  // para o valor (ex.: "Larg. 1370 x Alt. 1000") na mesma linha (pedido do
+  // utilizador de 2026-09-02: "a palavra dimensão... tenta por mais
+  // pequeno").
+  const dimensoes = block.specs["dimensões"] ?? block.specs["dimensoes"] ?? block.specs["medida"];
+  if (dimensoes) fields.push({ label: "Dim.", value: dimensoes });
+
+  if (block.specs["acabamento"]) fields.push({ label: "Acabamento", value: block.specs["acabamento"] });
+
+  // Sempre "1" — cada unidade física tem a sua própria etiqueta (ver
+  // unitCountFromSpecs). Sem linha "Ordem de Serviço" (pedido do
+  // utilizador de 2026-09-02: "apaga a linha da ordem de serviço") — o
+  // código de barras por baixo já identifica a OS.
+  fields.push({ label: "Quant.", value: "1" });
+  return fields;
+}
+
+export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderData) {
+  const [barcodePng, siteQrPng] = await Promise.all([
+    generateBarcode(data.externalId),
+    generateQrCode(SITE_QR_URL),
+  ]);
+
+  // Criado antes de calcular os campos (em vez de só depois, como nas
+  // outras etiquetas) porque buildMosquiteiraFieldsForBlock precisa do doc
+  // para medir o texto da Descrição e decidir se quebra em duas linhas.
+  const doc = new PDFDocument({ margin: PL_MARGIN, autoFirstPage: false });
+
+  const blocks = splitMosquiteiraBlocks(data.specifications, data.productExternalId, data.productName);
+
+  // Uma etiqueta por unidade física — uma linha de artigo com Quant. 3 sai
+  // em três páginas idênticas (pedido do utilizador de 2026-09-02: "1 para
+  // cada unidade").
+  const pages = blocks.flatMap((block) => {
+    const fields = buildMosquiteiraFieldsForBlock(doc, block);
+    const count = unitCountFromSpecs(block.specs);
+    return Array.from({ length: count }, () => fields);
+  });
+
+  // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
+  // si — calculada uma só vez a partir do bloco com mais campos — em vez de
+  // variar por página como na Etiqueta do Produto (pedido do utilizador de
+  // 2026-09-02: "tem que ter [só] uma altura"). Reutiliza
+  // productLabelPageHeight (sem indicador "Artigo X de Y") — ver nota acima
+  // sobre a reversão do conjunto de tamanhos ML_* por incompatibilidade de
+  // impressão.
+  const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
+  const pageHeight = productLabelPageHeight(maxFieldsCount, false);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="etiqueta-mosquiteira-${sanitizeFilename(data.externalId)}.pdf"`
+  );
+  doc.pipe(res);
+
+  pages.forEach((fields) => {
+    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
+    renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, null);
+  });
+
+  doc.end();
 }

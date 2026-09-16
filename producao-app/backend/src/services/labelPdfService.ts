@@ -620,12 +620,10 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 // alargado para reconhecer este formato como "Dimensões:", por isso chega
 // aqui já normalizado.
 //
-// Reutiliza a mesma renderProductLabelPage/productLabelPageHeight da
-// Etiqueta do Produto (o desenho é genérico — só depende da lista de
-// campos), com uma lista de campos própria (COD./Descrição/Dimensões/
-// Acabamento/Quant.) e sem o indicador "Artigo X de Y" (aqui não faz
-// sentido: o pedido do utilizador foi "sem indicador, igual ao modelo em
-// papel", que só mostra sempre "QUANT.: 1").
+// A Etiqueta de Mosquiteira passou a ter o seu próprio conjunto de tamanhos
+// mais compacto (ver MOSQ_* mais abaixo), em vez de reutilizar
+// renderProductLabelPage/productLabelPageHeight da Etiqueta do Produto como
+// acontecia até 2026-09-16 — ver essa mudança logo a seguir a esta nota.
 //
 // "1 para cada unidade": uma linha de artigo com Quant. 3, por exemplo, sai
 // em três páginas de etiqueta separadas (uma por unidade física), todas
@@ -649,15 +647,10 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 // altura de página à volta de 73mm: foi revertido no mesmo dia depois de o
 // utilizador reportar que a impressora Brother QL-1100 recusava imprimir
 // essa etiqueta ("o rolo de etiquetas ou a fita dentro da máquina não
-// corresponde ao selecionado na aplicação"), enquanto a Etiqueta do Produto
-// (Painéis, mais alta, tipicamente 100-160mm) imprime sem problema na
-// mesma impressora ("o painel sai, mosquiteiras não"). E, como o
-// utilizador não vai imprimir sempre na mesma impressora ("nem sempre vou
-// imprimir apenas naquela impressora"), corrigir isto do lado do driver de
-// só uma máquina não seria uma solução geral — por isso a etiqueta de
-// mosquiteira volta a usar exatamente o mesmo desenho/tamanhos já
-// comprovados a imprimir bem na Etiqueta do Produto, em vez de um conjunto
-// de tamanhos próprio.
+// corresponde ao selecionado na aplicação"). O conjunto MOSQ_* abaixo
+// (2026-09-16) foi desenhado com isto em mente: mais compacto do que o
+// desenho partilhado com a Etiqueta do Produto (que ronda os 110mm), mas
+// com uma altura (~85-95mm) claramente acima dos ~73mm que falharam.
 // ---------------------------------------------------------------------------
 
 interface MosquiteiraBlock {
@@ -701,63 +694,17 @@ function splitMosquiteiraBlocks(
   return blocks;
 }
 
-/**
- * A descrição do artigo (ex.: "Mosquiteria de enrolar Vertical Lacado
- * Standard") é normalmente demasiado comprida para caber numa só linha da
- * etiqueta — em vez de cortar o texto com "…" (perdendo informação que
- * identifica o produto), quebra-se em duas linhas quando não cabe: a
- * primeira com o rótulo "Descrição:", a segunda só com a continuação do
- * texto (label null, tal como a linha do N/Ref.). Se nem duas linhas
- * chegarem, a segunda linha é cortada com "…" pelo pdfkit (ver render).
- */
-function wrapLabelValue(
-  doc: PDFKit.PDFDocument,
-  label: string,
-  text: string,
-  width: number,
-  fontSize: number
-): { label: string | null; value: string }[] {
-  doc.font("Helvetica-Bold").fontSize(fontSize);
-  if (doc.widthOfString(`${label}: ${text}`) <= width) return [{ label, value: text }];
-
-  const prefix = `${label}: `;
-  const words = text.split(" ");
-  let line1 = "";
-  let i = 0;
-  for (; i < words.length; i++) {
-    const candidate = line1 ? `${line1} ${words[i]}` : words[i];
-    if (doc.widthOfString(prefix + candidate) > width) break;
-    line1 = candidate;
-  }
-  if (!line1 && words.length) {
-    // Nem a primeira palavra cabe — mostra-a na 1ª linha na mesma (o pdfkit
-    // corta-a com "…"), em vez de ficar com o rótulo sozinho.
-    line1 = words[0];
-    i = 1;
-  }
-  const line2 = words.slice(i).join(" ");
-  const result: { label: string | null; value: string }[] = [{ label, value: line1 }];
-  if (line2) result.push({ label: null, value: line2 });
-  return result;
-}
-
-function buildMosquiteiraFieldsForBlock(
-  doc: PDFKit.PDFDocument,
-  block: MosquiteiraBlock
-): { label: string | null; value: string }[] {
-  // Mesma largura/tamanho de letra da Etiqueta do Produto (PL_MARGIN, fonte
-  // 11) — ver nota acima sobre a reversão do conjunto de tamanhos ML_*.
-  const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
+function buildMosquiteiraFieldsForBlock(block: MosquiteiraBlock): { label: string | null; value: string }[] {
   const fields: { label: string | null; value: string }[] = [];
   fields.push({ label: "COD.", value: block.codigoArtigo });
-  fields.push(...wrapLabelValue(doc, "Descrição", block.descricaoArtigo, width, 11));
+  fields.push({ label: "Descrição", value: block.descricaoArtigo });
 
-  // "Dim." em vez de "Dimensões" — palavra mais curta, deixa mais espaço
-  // para o valor (ex.: "Larg. 1370 x Alt. 1000") na mesma linha (pedido do
-  // utilizador de 2026-09-02: "a palavra dimensão... tenta por mais
-  // pequeno").
+  // Sem rótulo "Dim." à frente — só o valor (ex.: "Larg. 1370 x Alt. 1000"),
+  // tal como o N/Ref. na Etiqueta do Produto (pedido do utilizador de
+  // 2026-09-16, com foto anotada da etiqueta impressa da OS 2026/432:
+  // risco a vermelho sobre a palavra "Dim.").
   const dimensoes = block.specs["dimensões"] ?? block.specs["dimensoes"] ?? block.specs["medida"];
-  if (dimensoes) fields.push({ label: "Dim.", value: dimensoes });
+  if (dimensoes) fields.push({ label: null, value: dimensoes });
 
   if (block.specs["acabamento"]) fields.push({ label: "Acabamento", value: block.specs["acabamento"] });
 
@@ -769,37 +716,191 @@ function buildMosquiteiraFieldsForBlock(
   return fields;
 }
 
+// Tamanho de letra maior a testar primeiro (e mínimo abaixo do qual já não
+// se tenta encolher mais, deixando o pdfkit cortar com "…" nesse caso
+// extremo) — ver mosquiteiraFieldFontSize.
+const MOSQ_FIELD_FONT_MAX = 10;
+const MOSQ_FIELD_FONT_MIN = 6.5;
+
+/**
+ * Escolhe o maior tamanho de letra (entre MOSQ_FIELD_FONT_MAX e
+ * MOSQ_FIELD_FONT_MIN) com que TODOS os campos — incluindo a "Descrição",
+ * normalmente o texto mais comprido (ex.: "Descrição: Mosquiteria de
+ * enrolar Vertical Lacado Standard") — cabem numa única linha, em vez de
+ * usar sempre o mesmo tamanho fixo e deixar a Descrição quebrar em duas
+ * linhas (pedido do utilizador de 2026-09-16: "Descrição todo numa só
+ * linha"). O mesmo tamanho é depois usado em todas as páginas desta OS
+ * (mesmo texto passado inclui os campos de todos os artigos), para manter o
+ * mesmo aspeto em todas as etiquetas impressas de seguida.
+ */
+function mosquiteiraFieldFontSize(
+  doc: PDFKit.PDFDocument,
+  allFields: { label: string | null; value: string }[],
+  width: number
+): number {
+  doc.font("Helvetica-Bold");
+  const fitsAt = (size: number) => {
+    doc.fontSize(size);
+    return allFields.every((f) => {
+      const text = f.label ? `${f.label}: ${f.value}` : f.value;
+      return doc.widthOfString(text) <= width;
+    });
+  };
+  let size = MOSQ_FIELD_FONT_MAX;
+  while (size > MOSQ_FIELD_FONT_MIN && !fitsAt(size)) {
+    size -= 0.5;
+  }
+  return size;
+}
+
+// ---------------------------------------------------------------------------
+// Tamanhos próprios da Etiqueta de Mosquiteira — mais compactos do que os
+// PL_* da Etiqueta do Produto (pedido do utilizador de 2026-09-16, com foto
+// anotada da etiqueta impressa da OS 2026/432: menos espaço em branco no
+// topo, logótipo mais pequeno, menos espaço antes do código de barras, e
+// código de barras/QR mais pequenos). Ao contrário da tentativa ML_* de
+// 2026-09-02 (revertida por a impressora Brother QL-1100 ter recusado
+// imprimir uma etiqueta de ~73mm de altura — ver nota mais acima), estes
+// valores foram escolhidos para chegar a uma altura sensivelmente menor do
+// que a da Etiqueta do Produto mas ainda claramente acima desse limite
+// problemático (~85-95mm consoante o número de campos, contra os ~110mm de
+// antes e os ~73mm que falharam) — a testar na mesma impressora antes de
+// confiar cegamente nisto para todas as etiquetas.
+// ---------------------------------------------------------------------------
+const MOSQ_MARGIN = 10;
+const MOSQ_LOGO_SIZE = 32;
+const MOSQ_TITLE_LINE_HEIGHT = 15;
+const MOSQ_SUBTITLE_LINE_HEIGHT = 13;
+const MOSQ_DIVIDER_GAP = 10;
+const MOSQ_CODES_TOP_GAP = 12;
+const MOSQ_QR_SIZE = 52;
+const MOSQ_CAPTION_GAP = 3;
+const MOSQ_CAPTION_HEIGHT = 8;
+
+function mosquiteiraFieldLineHeight(fieldFontSize: number): number {
+  return Math.max(14, fieldFontSize + 5);
+}
+
+function mosquiteiraLabelPageHeight(fieldsCount: number, fieldFontSize: number): number {
+  let y = MOSQ_MARGIN + MOSQ_LOGO_SIZE + 6;
+  y += MOSQ_TITLE_LINE_HEIGHT;
+  y += MOSQ_SUBTITLE_LINE_HEIGHT;
+  y += MOSQ_DIVIDER_GAP;
+  y += fieldsCount * mosquiteiraFieldLineHeight(fieldFontSize);
+  const qrY = y + MOSQ_CODES_TOP_GAP;
+  const contentBottom = qrY + MOSQ_QR_SIZE + MOSQ_CAPTION_GAP + MOSQ_CAPTION_HEIGHT;
+  return contentBottom + MOSQ_MARGIN;
+}
+
+/**
+ * Desenha uma página da Etiqueta de Mosquiteira — à parte de
+ * renderProductLabelPage (que continua a servir só a Etiqueta do Produto)
+ * porque esta passou a ter o seu próprio conjunto de tamanhos, mais
+ * compacto (ver MOSQ_* acima e o pedido do utilizador de 2026-09-16).
+ */
+function renderMosquiteiraLabelPage(
+  doc: PDFKit.PDFDocument,
+  fields: { label: string | null; value: string }[],
+  barcodePng: Buffer,
+  siteQrPng: Buffer,
+  createdAt: string,
+  fieldFontSize: number
+) {
+  const width = PRODUCT_LABEL_WIDTH - MOSQ_MARGIN * 2;
+
+  const logoSize = MOSQ_LOGO_SIZE;
+  const logoX = MOSQ_MARGIN + (width - logoSize) / 2;
+  doc.image(LOGO_PNG, logoX, MOSQ_MARGIN, { width: logoSize, height: logoSize });
+
+  let y = MOSQ_MARGIN + logoSize + 6;
+  doc
+    .fontSize(10)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text("MINHO FERRAGENS", MOSQ_MARGIN, y, { width, align: "center" });
+  y += MOSQ_TITLE_LINE_HEIGHT;
+  doc
+    .fontSize(6.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Oblique")
+    .text("JPDC - MYNHOFERRAGENS, LDA", MOSQ_MARGIN, y, { width, align: "center" });
+  y += MOSQ_SUBTITLE_LINE_HEIGHT;
+
+  doc
+    .moveTo(MOSQ_MARGIN, y)
+    .lineTo(PRODUCT_LABEL_WIDTH - MOSQ_MARGIN, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(1)
+    .stroke();
+  y += MOSQ_DIVIDER_GAP;
+
+  const fieldLineHeight = mosquiteiraFieldLineHeight(fieldFontSize);
+  doc.font("Helvetica-Bold").fontSize(fieldFontSize).fillColor(COLORS.ink);
+  for (const f of fields) {
+    const text = f.label ? `${f.label}: ${f.value}` : f.value;
+    doc.text(text, MOSQ_MARGIN, y, { width, height: fieldLineHeight - 1, ellipsis: true });
+    y += fieldLineHeight;
+  }
+
+  const qrSize = MOSQ_QR_SIZE;
+  const codesGap = 8;
+  const barcodeColWidth = width - qrSize - codesGap;
+  const qrY = y + MOSQ_CODES_TOP_GAP;
+  const dateY = qrY - 11;
+
+  doc
+    .fontSize(6.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text(formatDate(createdAt), MOSQ_MARGIN, dateY, { width, align: "right" });
+
+  const qr2X = MOSQ_MARGIN + width - qrSize;
+  doc.image(barcodePng, MOSQ_MARGIN, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
+  doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
+  doc
+    .fontSize(5.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .text("Minho Ferragens", qr2X, qrY + qrSize + MOSQ_CAPTION_GAP, {
+      width: qrSize,
+      height: MOSQ_CAPTION_HEIGHT,
+      align: "center",
+      ellipsis: true,
+    });
+}
+
 export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderData) {
   const [barcodePng, siteQrPng] = await Promise.all([
     generateBarcode(data.externalId),
     generateQrCode(SITE_QR_URL),
   ]);
 
-  // Criado antes de calcular os campos (em vez de só depois, como nas
-  // outras etiquetas) porque buildMosquiteiraFieldsForBlock precisa do doc
-  // para medir o texto da Descrição e decidir se quebra em duas linhas.
-  const doc = new PDFDocument({ margin: PL_MARGIN, autoFirstPage: false });
+  const doc = new PDFDocument({ margin: MOSQ_MARGIN, autoFirstPage: false });
 
   const blocks = splitMosquiteiraBlocks(data.specifications, data.productExternalId, data.productName);
+  const fieldsPerBlock = blocks.map(buildMosquiteiraFieldsForBlock);
+
+  // Um só tamanho de letra para todas as páginas desta OS — calculado a
+  // partir dos campos de todos os artigos, para que a Descrição de nenhum
+  // deles fique a quebrar linha e para que todas as etiquetas impressas a
+  // seguir tenham o mesmo aspeto (ver mosquiteiraFieldFontSize).
+  const width = PRODUCT_LABEL_WIDTH - MOSQ_MARGIN * 2;
+  const fieldFontSize = mosquiteiraFieldFontSize(doc, fieldsPerBlock.flat(), width);
 
   // Uma etiqueta por unidade física — uma linha de artigo com Quant. 3 sai
   // em três páginas idênticas (pedido do utilizador de 2026-09-02: "1 para
   // cada unidade").
-  const pages = blocks.flatMap((block) => {
-    const fields = buildMosquiteiraFieldsForBlock(doc, block);
-    const count = unitCountFromSpecs(block.specs);
+  const pages = fieldsPerBlock.flatMap((fields, i) => {
+    const count = unitCountFromSpecs(blocks[i].specs);
     return Array.from({ length: count }, () => fields);
   });
 
   // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
   // si — calculada uma só vez a partir do bloco com mais campos — em vez de
   // variar por página como na Etiqueta do Produto (pedido do utilizador de
-  // 2026-09-02: "tem que ter [só] uma altura"). Reutiliza
-  // productLabelPageHeight (sem indicador "Artigo X de Y") — ver nota acima
-  // sobre a reversão do conjunto de tamanhos ML_* por incompatibilidade de
-  // impressão.
+  // 2026-09-02: "tem que ter [só] uma altura").
   const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
-  const pageHeight = productLabelPageHeight(maxFieldsCount, false);
+  const pageHeight = mosquiteiraLabelPageHeight(maxFieldsCount, fieldFontSize);
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Cache-Control", "no-store");
@@ -811,7 +912,7 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
 
   pages.forEach((fields) => {
     doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
-    renderProductLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, null);
+    renderMosquiteiraLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, fieldFontSize);
   });
 
   doc.end();

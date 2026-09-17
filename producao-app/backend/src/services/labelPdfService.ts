@@ -652,46 +652,44 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 // desenho partilhado com a Etiqueta do Produto (que ronda os 110mm), mas
 // com uma altura (~85-95mm) claramente acima dos ~73mm que falharam.
 //
-// Rotação de 90º — tentada, revertida e depois RESTAURADA, tudo no mesmo dia
-// (2026-09-16): uma foto de uma etiqueta já impressa (OS 2026/443) veio com
-// anotações a vermelho "Menos espaço" e uma frase pouco legível junto ao
-// logótipo, que o utilizador esclareceu (via pergunta) como "vire o sentido"
-// e depois confirmou como "rodar 90º" — implementada nessa altura (conteúdo
-// desenhado num sistema de coordenadas rodado 90º antes de encaixar na
-// página física, largura da página sempre fixa em PRODUCT_LABEL_WIDTH). O
-// utilizador imprimiu essa etiqueta rodada a sério e confirmou que saía bem
-// ("Está bem assim"), e pediu ainda para "anular o espaço em branco no fim"
-// (a largura fixa da fita, 102mm, sobrava mais do que o conteúdo rodado
-// precisava — corrigido ampliando proporcionalmente o desenho, ver `scale`
-// mais abaixo).
+// Rotação de 90º — tentada, revertida, restaurada e depois revertida outra
+// vez, tudo em 2026-09-16/17: uma foto de uma etiqueta já impressa (OS
+// 2026/443) veio com anotações a vermelho "Menos espaço" e uma frase pouco
+// legível junto ao logótipo, esclarecida como "rodar 90º" — implementada
+// (conteúdo desenhado num sistema de coordenadas rodado 90º, largura da
+// página sempre fixa em PRODUCT_LABEL_WIDTH), testada a sério na impressora
+// e aprovada ("Está bem assim"), com o espaço em branco no fim eliminado a
+// seguir (escala uniforme). O utilizador pediu depois, olhando só para uma
+// PRÉ-VISUALIZAÇÃO no ecrã, para reverter para "ao alto" (vertical, como a
+// Etiqueta do Produto); ao imprimir essa versão a sério reportou que saía de
+// lado outra vez ("continua no sentido errado"), o que levou a restaurar a
+// rotação — mas dessa vez com fotos que pareciam mostrar a etiqueta antiga
+// (modelo DCMOSQ000) como referência de orientação correta.
 //
-// Só depois disso, olhando para uma PRÉ-VISUALIZAÇÃO no ecrã (não uma
-// impressão real), o utilizador pediu para reverter para "ao alto" — ou
-// seja, na vertical, tal como a Etiqueta do Produto (painéis) sempre
-// esteve — e essa reversão foi feita e confirmada ("é isso") e posta em
-// produção. Mas ao imprimir essa versão revertida a sério (mesma OS
-// 2026/443, fotos reais em cima do teclado), o utilizador reportou que a
-// etiqueta continuava a sair de lado ("continua no sentido errado quero ao
-// alto") — ou seja, a pré-visualização no ecrã (que mostra sempre a página
-// "direita", independentemente do que a impressora faz com o rolo
-// contínuo) não é fiável para avaliar a orientação física real; só um teste
-// de impressão a sério mostra isso. A rotação de 90º era mesmo necessária
-// para a etiqueta sair legível sem rodar a fita física — confirmado com uma
-// foto de referência de uma etiqueta antiga (modelo DCMOSQ000) que o
-// utilizador comparou, pedindo "tipo assim mas com o modelo que tens": a
-// orientação física de leitura da etiqueta antiga, mas com os campos/
-// desenho atuais (COD./Descrição/Dimensões/Acabamento/Quant. + código de
-// barras + QR).
+// Sem novo teste de impressão real entretanto, o utilizador pediu para
+// voltar à vertical, desta vez explicitamente aceitando a troca: "prefiro
+// que metas a letra mais pequena ou a linha da descrição em duas linhas mas
+// que metas na vertical" — ou seja, prioriza a orientação vertical (como a
+// Etiqueta do Produto) sobre caber tudo numa única linha, e autoriza
+// encolher a fonte dos campos e/ou deixar a Descrição (normalmente o texto
+// mais comprido, ex.: "Descrição: Mosquiteria de enrolar Vertical Lacado
+// Standard") quebrar em duas linhas em vez de cortar com "…". Implementado
+// em mosquiteiraFieldFontSize (encolhe a fonte para caber os restantes
+// campos, ignorando a Descrição nesse cálculo) e no aviso de "precisa de 2
+// linhas" calculado em streamMosquiteiraLabelPdf, usado tanto para reservar
+// espaço (mosquiteiraLabelPageHeight) como para desenhar (
+// renderMosquiteiraLabelPage). Sem rotação — conteúdo desenhado normalmente,
+// tal como a Etiqueta do Produto (painéis) sempre esteve.
 //
-// A rotação foi por isso restaurada (ver renderMosquiteiraLabelPageRotated/
-// mosquiteiraRotatedReadingWidth abaixo), com o aperto de espaço junto ao
-// logótipo e ao código de barras/QR (MOSQ_LOGO_GAP e MOSQ_CODES_TOP_GAP) e a
-// eliminação do espaço em branco (escala uniforme, `scale`) mantidos — só a
-// ORIENTAÇÃO voltou atrás, não os restantes pedidos, que continuam válidos.
-// A escala é calculada uma só vez por Ordem de Serviço (a partir do bloco
-// com mais campos), tal como o tamanho de letra e a altura física já eram
-// partilhados por toda a OS antes desta mudança, para que todas as
-// etiquetas impressas a seguir saiam com o mesmo aspeto.
+// Nota para o futuro: esta troca (vertical + fonte menor/Descrição em 2
+// linhas) ainda não foi confirmada numa impressão física a sério depois
+// desta mudança — as duas vezes anteriores em que "vertical" pareceu bem no
+// ecrã, a impressão real mostrou a etiqueta a sair de lado (ver acima). Se
+// isso voltar a acontecer, o problema não é o texto/fonte, é mesmo a
+// orientação — nesse caso a solução já testada e aprovada fisicamente foi a
+// rotação de 90º (ver histórico neste ficheiro e nos commits anteriores).
+// O aperto de espaço junto ao logótipo e ao código de barras/QR (
+// MOSQ_LOGO_GAP e MOSQ_CODES_TOP_GAP) mantém-se, por ser um pedido à parte.
 // ---------------------------------------------------------------------------
 
 interface MosquiteiraBlock {
@@ -757,26 +755,10 @@ function buildMosquiteiraFieldsForBlock(block: MosquiteiraBlock): { label: strin
   return fields;
 }
 
-// Tamanhos de letra fixos para o desenho rodado — ao contrário do desenho
-// vertical (que tinha de encolher a fonte para caber numa largura fixa), no
-// desenho rodado é a "largura de leitura" (o comprimento impresso ao longo
-// da fita) que cresce à medida do texto — ver mosquiteiraRotatedReadingWidth
-// — por isso não há necessidade de encolher nada: tamanhos fixos mantêm o
-// mesmo aspeto em todas as etiquetas. Multiplicados por `scale` (ver
-// streamMosquiteiraLabelPdf) antes de usar, tal como todas as restantes
-// dimensões do desenho.
-const MOSQ_ROT_TITLE_FONT_SIZE = 10;
-const MOSQ_ROT_SUBTITLE_FONT_SIZE = 6.5;
-const MOSQ_ROT_FIELD_FONT_SIZE = 9;
-const MOSQ_ROT_DATE_FONT_SIZE = 6.5;
-const MOSQ_ROT_CAPTION_FONT_SIZE = 5.5;
-const MOSQ_DATE_LINE_HEIGHT = 11;
-// Espaço entre o código de barras e o QR do site, e largura mínima
-// reservada ao código de barras — para nunca ficar minúsculo/ilegível
-// quando os campos de texto são muito curtos e a largura de leitura (que é
-// quem manda no comprimento da etiqueta impressa) acaba pequena.
-const MOSQ_ROT_CODES_GAP = 8;
-const MOSQ_ROT_MIN_BARCODE_WIDTH = 70;
+// Tamanho de letra maior a testar primeiro (e mínimo abaixo do qual já não
+// se tenta encolher mais) — ver mosquiteiraFieldFontSize.
+const MOSQ_FIELD_FONT_MAX = 10;
+const MOSQ_FIELD_FONT_MIN = 6.5;
 
 // ---------------------------------------------------------------------------
 // Tamanhos próprios da Etiqueta de Mosquiteira — mais compactos do que os
@@ -812,208 +794,170 @@ function mosquiteiraFieldLineHeight(fieldFontSize: number): number {
 }
 
 /**
- * Soma de todos os incrementos do desenho da Etiqueta de Mosquiteira ao
- * tamanho "natural" (sem escala) — ou seja, quanto o desenho ocupa antes de
- * ser ampliado para preencher exatamente a largura fixa da fita. Usada
- * agora para calcular `scale` (ver streamMosquiteiraLabelPdf e a nota no
- * cabeçalho do ficheiro sobre a rotação de 90º), em vez de ser diretamente
- * a altura da página como acontecia no desenho vertical entretanto
- * revertido.
+ * Escolhe o maior tamanho de letra (entre MOSQ_FIELD_FONT_MAX e
+ * MOSQ_FIELD_FONT_MIN) com que todos os campos, EXCETO a "Descrição", cabem
+ * numa única linha. A Descrição fica de fora deste cálculo de propósito —
+ * é normalmente o texto mais comprido (ex.: "Descrição: Mosquiteria de
+ * enrolar Vertical Lacado Standard") e, em vez de forçar uma fonte minúscula
+ * só por causa dela, pode antes quebrar em duas linhas (ver
+ * streamMosquiteiraLabelPdf/renderMosquiteiraLabelPage) — pedido do
+ * utilizador de 2026-09-17: "prefiro que metas a letra mais pequena ou a
+ * linha da descrição em duas linhas mas que metas na vertical". O mesmo
+ * tamanho é depois usado em todas as páginas desta OS, para manter o mesmo
+ * aspeto em todas as etiquetas impressas de seguida.
  */
-function mosquiteiraLabelPageHeight(fieldsCount: number, fieldFontSize: number): number {
+function mosquiteiraFieldFontSize(
+  doc: PDFKit.PDFDocument,
+  allFields: { label: string | null; value: string }[],
+  width: number
+): number {
+  doc.font("Helvetica-Bold");
+  const fitsAt = (size: number) => {
+    doc.fontSize(size);
+    return allFields.every((f) => {
+      if (f.label === "Descrição") return true; // pode passar para 2 linhas
+      const text = f.label ? `${f.label}: ${f.value}` : f.value;
+      return doc.widthOfString(text) <= width;
+    });
+  };
+  let size = MOSQ_FIELD_FONT_MAX;
+  while (size > MOSQ_FIELD_FONT_MIN && !fitsAt(size)) {
+    size -= 0.5;
+  }
+  return size;
+}
+
+/**
+ * Se, mesmo depois de mosquiteiraFieldFontSize escolher o tamanho de letra,
+ * o texto da Descrição ainda não couber numa única linha, esta função avisa
+ * disso — usado tanto para reservar espaço a mais na página
+ * (mosquiteiraLabelPageHeight) como para desenhar a segunda linha
+ * (renderMosquiteiraLabelPage).
+ */
+function mosquiteiraDescricaoNeedsWrap(
+  doc: PDFKit.PDFDocument,
+  descricaoText: string,
+  fieldFontSize: number,
+  width: number
+): boolean {
+  doc.font("Helvetica-Bold").fontSize(fieldFontSize);
+  return doc.widthOfString(`Descrição: ${descricaoText}`) > width;
+}
+
+function mosquiteiraLabelPageHeight(fieldsCount: number, fieldFontSize: number, wrapDescricao: boolean): number {
   let y = MOSQ_MARGIN + MOSQ_LOGO_SIZE + MOSQ_LOGO_GAP;
   y += MOSQ_TITLE_LINE_HEIGHT;
   y += MOSQ_SUBTITLE_LINE_HEIGHT;
   y += MOSQ_DIVIDER_GAP;
-  y += fieldsCount * mosquiteiraFieldLineHeight(fieldFontSize);
+  const fieldLineHeight = mosquiteiraFieldLineHeight(fieldFontSize);
+  y += fieldsCount * fieldLineHeight;
+  // A Descrição ocupa uma linha extra quando não coube numa só — ver
+  // mosquiteiraDescricaoNeedsWrap.
+  if (wrapDescricao) y += fieldLineHeight;
   const qrY = y + MOSQ_CODES_TOP_GAP;
   const contentBottom = qrY + MOSQ_QR_SIZE + MOSQ_CAPTION_GAP + MOSQ_CAPTION_HEIGHT;
   return contentBottom + MOSQ_MARGIN;
 }
 
 /**
- * Largura de leitura do desenho rodado — o comprimento que o texto (e o
- * código de barras/QR) precisam ao longo da fita, isto é, a dimensão que
- * depois de rodada 90º se torna o "height" físico da página (o comprimento
- * impresso, sem limite fixo, ao contrário da largura da fita que é sempre
- * PRODUCT_LABEL_WIDTH). Calculada uma só vez a partir dos campos de TODOS
- * os artigos desta OS (mesmo padrão já usado para o tamanho de letra único
- * antes desta mudança), para que todas as etiquetas impressas a seguir
- * saiam com o mesmo comprimento.
- */
-function mosquiteiraRotatedReadingWidth(
-  doc: PDFKit.PDFDocument,
-  allFields: { label: string | null; value: string }[],
-  scale: number
-): number {
-  const margin = MOSQ_MARGIN * scale;
-  let maxW = 0;
-
-  doc.font("Helvetica-Bold").fontSize(MOSQ_ROT_TITLE_FONT_SIZE * scale);
-  maxW = Math.max(maxW, doc.widthOfString("MINHO FERRAGENS"));
-
-  doc.font("Helvetica-Oblique").fontSize(MOSQ_ROT_SUBTITLE_FONT_SIZE * scale);
-  maxW = Math.max(maxW, doc.widthOfString("JPDC - MYNHOFERRAGENS, LDA"));
-
-  doc.font("Helvetica-Bold").fontSize(MOSQ_ROT_FIELD_FONT_SIZE * scale);
-  for (const f of allFields) {
-    const text = f.label ? `${f.label}: ${f.value}` : f.value;
-    maxW = Math.max(maxW, doc.widthOfString(text));
-  }
-
-  // Nunca menos do que o necessário para o código de barras (com uma
-  // largura mínima legível) + o QR lado a lado, para o código de barras
-  // nunca ficar minúsculo quando os campos de texto são muito curtos.
-  const qrSize = MOSQ_QR_SIZE * scale;
-  const codesGap = MOSQ_ROT_CODES_GAP * scale;
-  const minBarcodeWidth = MOSQ_ROT_MIN_BARCODE_WIDTH * scale;
-  maxW = Math.max(maxW, minBarcodeWidth + codesGap + qrSize);
-
-  // +2pt de folga — sem isto, o texto mais comprido mede exatamente a
-  // largura disponível (zero margem), e o cálculo interno do pdfkit para
-  // decidir se corta com "…" é ligeiramente mais conservador do que
-  // widthOfString(), cortando por vezes um texto que "cabia" à justa.
-  return maxW + margin * 2 + 2;
-}
-
-/**
  * Desenha uma página da Etiqueta de Mosquiteira — à parte de
  * renderProductLabelPage (que continua a servir só a Etiqueta do Produto)
  * porque esta tem o seu próprio conjunto de tamanhos, mais compacto (ver
- * MOSQ_* acima) e, ao contrário da Etiqueta do Produto, o conteúdo é
- * desenhado num sistema de coordenadas rodado 90º (`doc.save()` +
- * `translate` + `rotate`) antes de encaixar na página física — ver a nota
- * no cabeçalho do ficheiro sobre a rotação de 90º, tentada, revertida e
- * depois restaurada depois de um teste de impressão real mostrar que a
- * etiqueta saía de lado sem a rotação.
- *
- * A largura da página mantém-se sempre fixa em PRODUCT_LABEL_WIDTH (a
- * largura da fita, constrangimento da impressora — ver cabeçalho), mas essa
- * dimensão passa a corresponder ao eixo de "empilhamento" do conteúdo
- * (logótipo, título, campos, códigos), multiplicado por `scale` para
- * preencher exatamente essa largura sem sobrar espaço em branco no fim
- * ("anula o espaço em branco no fim", pedido do utilizador). O comprimento
- * impresso (a dimensão livre, ao longo da fita) é `readingWidth`, calculado
- * à parte em mosquiteiraRotatedReadingWidth a partir do texto mais comprido.
+ * MOSQ_* acima). Na vertical, tal como a Etiqueta do Produto — sem rotação
+ * (ver a nota no cabeçalho do ficheiro sobre a rotação de 90º, tentada,
+ * revertida, restaurada e revertida outra vez).
  */
-function renderMosquiteiraLabelPageRotated(
+function renderMosquiteiraLabelPage(
   doc: PDFKit.PDFDocument,
   fields: { label: string | null; value: string }[],
   barcodePng: Buffer,
   siteQrPng: Buffer,
   createdAt: string,
-  scale: number,
-  readingWidth: number
+  fieldFontSize: number,
+  wrapDescricao: boolean
 ) {
-  const margin = MOSQ_MARGIN * scale;
-  const localWidth = readingWidth - margin * 2;
+  const width = PRODUCT_LABEL_WIDTH - MOSQ_MARGIN * 2;
 
-  doc.save();
-  doc.translate(PRODUCT_LABEL_WIDTH, 0);
-  doc.rotate(90);
+  const logoSize = MOSQ_LOGO_SIZE;
+  const logoX = MOSQ_MARGIN + (width - logoSize) / 2;
+  doc.image(LOGO_PNG, logoX, MOSQ_MARGIN, { width: logoSize, height: logoSize });
 
-  const logoSize = MOSQ_LOGO_SIZE * scale;
-  const logoGap = MOSQ_LOGO_GAP * scale;
-  const logoX = margin + (localWidth - logoSize) / 2;
-  doc.image(LOGO_PNG, logoX, margin, { width: logoSize, height: logoSize });
-
-  // Tal como no desenho vertical, todo o texto leva sempre `height` (+
-  // `ellipsis` onde há risco real de não caber) por segurança — sem isto, o
-  // pdfkit compara a coordenada Y "crua" passada a `.text()` com a altura
-  // DECLARADA da página (aqui, `readingWidth`), sem saber nada da
-  // transformação `translate`/`rotate` aplicada — e quando `readingWidth` é
-  // menor do que a largura da fita (o que acontece sempre que o texto é
-  // curto), essa comparação dispara a paginação automática do pdfkit e
-  // insere uma segunda página em branco a meio do desenho (bug confirmado
-  // com um repro isolado nesta sessão — ver histórico/commits).
-  let y = margin + logoSize + logoGap;
-
-  const titleLineHeight = MOSQ_TITLE_LINE_HEIGHT * scale;
+  // O título/subtítulo levam sempre `height` (+ `ellipsis` no subtítulo, que
+  // é o único com risco real de não caber) por segurança — sem isto, se o
+  // texto não coubesse na largura dada, o pdfkit "flui" o cursor para além
+  // do fundo da página e insere sozinho uma segunda página em branco (mesmo
+  // problema documentado nas outras etiquetas — ver cabeçalho do ficheiro).
+  let y = MOSQ_MARGIN + logoSize + MOSQ_LOGO_GAP;
   doc
-    .fontSize(MOSQ_ROT_TITLE_FONT_SIZE * scale)
+    .fontSize(10)
     .fillColor(COLORS.ink)
     .font("Helvetica-Bold")
-    .text("MINHO FERRAGENS", margin, y, {
-      width: localWidth,
-      height: titleLineHeight,
+    .text("MINHO FERRAGENS", MOSQ_MARGIN, y, {
+      width,
+      height: MOSQ_TITLE_LINE_HEIGHT,
       align: "center",
       ellipsis: true,
     });
-  y += titleLineHeight;
-
-  const subtitleLineHeight = MOSQ_SUBTITLE_LINE_HEIGHT * scale;
+  y += MOSQ_TITLE_LINE_HEIGHT;
   doc
-    .fontSize(MOSQ_ROT_SUBTITLE_FONT_SIZE * scale)
+    .fontSize(6.5)
     .fillColor(COLORS.muted)
     .font("Helvetica-Oblique")
-    .text("JPDC - MYNHOFERRAGENS, LDA", margin, y, {
-      width: localWidth,
-      height: subtitleLineHeight,
+    .text("JPDC - MYNHOFERRAGENS, LDA", MOSQ_MARGIN, y, {
+      width,
+      height: MOSQ_SUBTITLE_LINE_HEIGHT,
       align: "center",
       ellipsis: true,
     });
-  y += subtitleLineHeight;
+  y += MOSQ_SUBTITLE_LINE_HEIGHT;
 
-  const dividerGap = MOSQ_DIVIDER_GAP * scale;
   doc
-    .moveTo(margin, y)
-    .lineTo(margin + localWidth, y)
+    .moveTo(MOSQ_MARGIN, y)
+    .lineTo(PRODUCT_LABEL_WIDTH - MOSQ_MARGIN, y)
     .strokeColor(COLORS.border)
     .lineWidth(1)
     .stroke();
-  y += dividerGap;
+  y += MOSQ_DIVIDER_GAP;
 
-  const fieldFontSize = MOSQ_ROT_FIELD_FONT_SIZE * scale;
-  const fieldLineHeight = mosquiteiraFieldLineHeight(MOSQ_ROT_FIELD_FONT_SIZE) * scale;
+  const fieldLineHeight = mosquiteiraFieldLineHeight(fieldFontSize);
   doc.font("Helvetica-Bold").fontSize(fieldFontSize).fillColor(COLORS.ink);
   for (const f of fields) {
     const text = f.label ? `${f.label}: ${f.value}` : f.value;
-    doc.text(text, margin, y, { width: localWidth, height: fieldLineHeight - 1, ellipsis: true });
-    y += fieldLineHeight;
+    // A Descrição pode ocupar duas linhas (o pdfkit quebra sozinho dentro da
+    // largura dada, já que não passamos `lineBreak: false`) — as restantes
+    // mantêm-se numa única linha, com "…" como rede de segurança em caso
+    // extremo.
+    const isDescricao = f.label === "Descrição";
+    const rowHeight = isDescricao && wrapDescricao ? fieldLineHeight * 2 : fieldLineHeight;
+    doc.text(text, MOSQ_MARGIN, y, { width, height: rowHeight - 1, ellipsis: true });
+    y += rowHeight;
   }
 
-  const qrSize = MOSQ_QR_SIZE * scale;
-  const codesGap = MOSQ_ROT_CODES_GAP * scale;
-  const codesTopGap = MOSQ_CODES_TOP_GAP * scale;
-  const barcodeColWidth = localWidth - qrSize - codesGap;
-  const qrY = y + codesTopGap;
-  const dateLineHeight = MOSQ_DATE_LINE_HEIGHT * scale;
-  const dateY = qrY - dateLineHeight;
+  const qrSize = MOSQ_QR_SIZE;
+  const codesGap = 8;
+  const barcodeColWidth = width - qrSize - codesGap;
+  const qrY = y + MOSQ_CODES_TOP_GAP;
+  const dateY = qrY - 11;
 
   doc
-    .fontSize(MOSQ_ROT_DATE_FONT_SIZE * scale)
+    .fontSize(6.5)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text(formatDate(createdAt), margin, dateY, {
-      width: localWidth,
-      height: dateLineHeight,
-      align: "right",
-      ellipsis: true,
-    });
+    .text(formatDate(createdAt), MOSQ_MARGIN, dateY, { width, height: 11, align: "right", ellipsis: true });
 
-  // O código de barras usa "fit" (escala uniforme), nunca width/height
-  // fixos, para nunca esticar as barras de forma desigual (mesma razão
-  // documentada nas outras etiquetas). O QR do site usa width=height=qrSize
-  // (sempre o mesmo valor em ambos os eixos, mesmo depois de multiplicado
-  // por `scale`), para nunca sair distorcido.
-  doc.image(barcodePng, margin, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
-  const qr2X = margin + localWidth - qrSize;
+  const qr2X = MOSQ_MARGIN + width - qrSize;
+  doc.image(barcodePng, MOSQ_MARGIN, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
   doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
-
-  const captionGap = MOSQ_CAPTION_GAP * scale;
-  const captionHeight = MOSQ_CAPTION_HEIGHT * scale;
   doc
-    .fontSize(MOSQ_ROT_CAPTION_FONT_SIZE * scale)
+    .fontSize(5.5)
     .fillColor(COLORS.muted)
     .font("Helvetica")
-    .text("Minho Ferragens", qr2X, qrY + qrSize + captionGap, {
+    .text("Minho Ferragens", qr2X, qrY + qrSize + MOSQ_CAPTION_GAP, {
       width: qrSize,
-      height: captionHeight,
+      height: MOSQ_CAPTION_HEIGHT,
       align: "center",
       ellipsis: true,
     });
-
-  doc.restore();
 }
 
 export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderData) {
@@ -1022,24 +966,26 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
     generateQrCode(SITE_QR_URL),
   ]);
 
-  const doc = new PDFDocument({ margin: 0, autoFirstPage: false });
+  const doc = new PDFDocument({ margin: MOSQ_MARGIN, autoFirstPage: false });
 
   const blocks = splitMosquiteiraBlocks(data.specifications, data.productExternalId, data.productName);
   const fieldsPerBlock = blocks.map(buildMosquiteiraFieldsForBlock);
 
-  // Escala única para toda a OS — calculada a partir do bloco com mais
-  // campos (o "pior caso", tal como a altura da etiqueta já era partilhada
-  // por toda a OS antes desta mudança), para que o desenho rodado preencha
-  // exatamente a largura fixa da fita (PRODUCT_LABEL_WIDTH) sem sobrar
-  // espaço em branco no fim, e para que todas as etiquetas impressas a
-  // seguir saiam com o mesmo aspeto.
-  const maxFieldsCount = Math.max(...fieldsPerBlock.map((fields) => fields.length));
-  const naturalStackingLength = mosquiteiraLabelPageHeight(maxFieldsCount, MOSQ_ROT_FIELD_FONT_SIZE);
-  const scale = PRODUCT_LABEL_WIDTH / naturalStackingLength;
+  // Um só tamanho de letra para todas as páginas desta OS — calculado a
+  // partir dos campos de todos os artigos (exceto a Descrição, que pode
+  // quebrar em duas linhas — ver mosquiteiraFieldFontSize), para que todas
+  // as etiquetas impressas a seguir tenham o mesmo aspeto.
+  const width = PRODUCT_LABEL_WIDTH - MOSQ_MARGIN * 2;
+  const fieldFontSize = mosquiteiraFieldFontSize(doc, fieldsPerBlock.flat(), width);
 
-  // Comprimento de impressão único para toda a OS — calculado a partir dos
-  // campos de todos os artigos (mesmo padrão) — ver mosquiteiraRotatedReadingWidth.
-  const readingWidth = mosquiteiraRotatedReadingWidth(doc, fieldsPerBlock.flat(), scale);
+  // Se a Descrição de QUALQUER artigo desta OS precisar de 2 linhas a este
+  // tamanho de letra, reserva-se esse espaço extra em TODAS as páginas —
+  // tal como o tamanho de letra e a altura já eram partilhados por toda a
+  // OS, para todas as etiquetas saírem com o mesmo aspeto entre si.
+  const wrapDescricao = fieldsPerBlock.some((fields) => {
+    const descricao = fields.find((f) => f.label === "Descrição");
+    return !!descricao && mosquiteiraDescricaoNeedsWrap(doc, descricao.value, fieldFontSize, width);
+  });
 
   // Uma etiqueta por unidade física — uma linha de artigo com Quant. 3 sai
   // em três páginas idênticas (pedido do utilizador de 2026-09-02: "1 para
@@ -1048,6 +994,13 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
     const count = unitCountFromSpecs(blocks[i].specs);
     return Array.from({ length: count }, () => fields);
   });
+
+  // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
+  // si — calculada uma só vez a partir do bloco com mais campos — em vez de
+  // variar por página como na Etiqueta do Produto (pedido do utilizador de
+  // 2026-09-02: "tem que ter [só] uma altura").
+  const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
+  const pageHeight = mosquiteiraLabelPageHeight(maxFieldsCount, fieldFontSize, wrapDescricao);
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Cache-Control", "no-store");
@@ -1058,8 +1011,8 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
   doc.pipe(res);
 
   pages.forEach((fields) => {
-    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, readingWidth] });
-    renderMosquiteiraLabelPageRotated(doc, fields, barcodePng, siteQrPng, data.createdAt, scale, readingWidth);
+    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
+    renderMosquiteiraLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, fieldFontSize, wrapDescricao);
   });
 
   doc.end();

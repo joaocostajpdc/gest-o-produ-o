@@ -728,13 +728,38 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 //
 // Para não voltar a ter um espaço em branco morto no fim (o motivo de ter
 // descido para 100mm), o espaço sobrante entre os 164mm fixos e a altura
-// real do conteúdo já não fica todo depois do código QR: é reservado como
-// espaço extra ANTES dos códigos (mosquiteiraCodesGap, mais abaixo, em vez
-// de um MOSQ_CODES_TOP_GAP fixo), empurrando o código de barras/QR para
-// perto do fim da etiqueta em vez de os deixar logo a seguir aos campos
-// seguidos de um vazio grande — o total de página continua a ser sempre
-// 164mm (o valor que a impressora já espera), só a distribuição do espaço
-// dentro dela é que muda.
+// real do conteúdo já não ficava todo depois do código QR: era reservado
+// como espaço extra ANTES dos códigos (mosquiteiraCodesGap), empurrando o
+// código de barras/QR para perto do fim da etiqueta em vez de os deixar
+// logo a seguir aos campos seguidos de um vazio grande.
+//
+// 2026-09-17, ainda mais tarde no mesmo dia — olhando para essa versão de
+// 164mm com os códigos junto ao fim (print preview no Adobe Acrobat, ainda
+// sem testar fisicamente), o utilizador pediu o oposto do que se tinha
+// acabado de fazer: "tens que puxar os codigos para cima e por a altura
+// mais curta cerca de 9cm" — ou seja, ENCURTAR de volta a página (~90mm,
+// não os 164mm) E trazer os códigos de volta para logo a seguir ao texto
+// (não esticados/empurrados para o fim). Confirmado que continua a ser
+// para a Brother QL-1100 (não outra impressora qualquer que apareça
+// selecionada no diálogo de impressão do Acrobat, como a Konica Minolta
+// que aparecia por defeito nesse ecrã).
+//
+// Isto volta a expor o MESMO risco já documentado acima: da última vez que
+// o código gerou uma altura mais pequena do que os 164mm registados na
+// impressora/Acrobat sem essa definição ter sido também atualizada, o
+// resultado não foi um erro — foi a etiqueta a sair rodada. Por isso,
+// desta vez, ANTES de testar a imprimir com este novo valor (~90mm), é
+// preciso ir às propriedades da impressora Brother/Adobe Acrobat (o mesmo
+// sítio onde estava registado o "103mm x 164mm") e mudar o tamanho de
+// papel personalizado selecionado para 103mm x 90mm — sem isso, o mesmo
+// problema (rodar em vez de recusar) pode voltar a acontecer.
+//
+// MOSQ_FIXED_PAGE_HEIGHT desceu por isso de 164mm para 90mm, e o espaço
+// entre os campos e os códigos voltou a ser o MOSQ_CODES_TOP_GAP fixo
+// (pequeno, logo a seguir ao texto) em vez de esticado
+// (mosquiteiraCodesGap foi removida) — o conteúdo típico já ronda os
+// 85-90mm, por isso a 90mm sobra pouco ou nenhum espaço em branco mesmo
+// sem esticar nada.
 // ---------------------------------------------------------------------------
 
 interface MosquiteiraBlock {
@@ -893,22 +918,26 @@ function mosquiteiraDescricaoNeedsWrap(
 // explícito do utilizador de 2026-09-17 depois de o driver da Brother
 // QL-1100/Adobe Acrobat recusar imprimir por a folha de diálogo esperar
 // "103mm x 164mm" em vez da altura dinâmica (~90mm) que o código gerava (ver
-// nota no cabeçalho do ficheiro). Testada uma descida para 100mm no mesmo
-// dia (para reduzir o espaço em branco no fim), mas sem atualizar também o
-// tamanho de papel personalizado na impressora/Acrobat (continuava em
-// 164mm) o resultado foi a etiqueta sair rodada — por isso este valor
-// voltou a 164mm, a ÚNICA combinação já confirmada fisicamente a funcionar
-// bem (sem erro e na vertical, sem rodar). Ver mosquiteiraCodesGap, mais
-// abaixo, para como o espaço sobrante é aproveitado (em vez de simplesmente
-// sobrar no fim) sem mudar este valor.
-const MOSQ_FIXED_PAGE_HEIGHT = 164 * 2.83465;
+// nota no cabeçalho do ficheiro). Passou por 164mm (confirmado fisicamente
+// a funcionar, mas com espaço em branco grande no fim) e por uma tentativa
+// de 100mm sem atualizar a impressora (etiqueta saiu rodada). Desceu depois
+// para 90mm ("cerca de 9cm", pedido do utilizador, com os códigos puxados
+// de volta para logo a seguir ao texto) — IMPORTANTE: tal como da vez
+// anterior que este valor mudou, é preciso atualizar manualmente o tamanho
+// de papel personalizado nas propriedades da impressora Brother/Adobe
+// Acrobat para 103mm x 90mm antes de testar a imprimir, ou o mesmo
+// problema (etiqueta a sair rodada, ver nota no cabeçalho do ficheiro) pode
+// voltar a acontecer.
+const MOSQ_FIXED_PAGE_HEIGHT = 90 * 2.83465;
 
 /**
- * Posição Y logo a seguir à última linha de campos (antes do espaço que
- * antecede os códigos) — partilhada por mosquiteiraContentHeight (altura
- * mínima necessária) e mosquiteiraCodesGap (quanto esticar esse espaço).
+ * Verifica se o conteúdo (campos + eventual 2ª linha da Descrição), com o
+ * espaço normal antes dos códigos (MOSQ_CODES_TOP_GAP), cabe dentro de
+ * MOSQ_FIXED_PAGE_HEIGHT — usado só como rede de segurança para evitar
+ * conteúdo cortado no caso raro de uma OS com muitos campos; nesse caso a
+ * altura cresce além dos 90mm fixos em vez de cortar o conteúdo.
  */
-function mosquiteiraFieldsBottomY(fieldsCount: number, fieldFontSize: number, wrapDescricao: boolean): number {
+function mosquiteiraContentHeight(fieldsCount: number, fieldFontSize: number, wrapDescricao: boolean): number {
   let y = MOSQ_MARGIN + MOSQ_LOGO_SIZE + MOSQ_LOGO_GAP;
   y += MOSQ_TITLE_LINE_HEIGHT;
   y += MOSQ_SUBTITLE_LINE_HEIGHT;
@@ -918,39 +947,9 @@ function mosquiteiraFieldsBottomY(fieldsCount: number, fieldFontSize: number, wr
   // A Descrição ocupa uma linha extra quando não coube numa só — ver
   // mosquiteiraDescricaoNeedsWrap.
   if (wrapDescricao) y += fieldLineHeight;
-  return y;
-}
-
-/**
- * Verifica se o conteúdo (campos + eventual 2ª linha da Descrição), com o
- * espaço MÍNIMO antes dos códigos (MOSQ_CODES_TOP_GAP), cabe dentro de
- * MOSQ_FIXED_PAGE_HEIGHT — usado só como rede de segurança para evitar
- * conteúdo cortado no caso raro de uma OS com muitos campos; nesse caso a
- * altura cresce além dos 164mm fixos em vez de cortar o conteúdo.
- */
-function mosquiteiraContentHeight(fieldsCount: number, fieldFontSize: number, wrapDescricao: boolean): number {
-  const y = mosquiteiraFieldsBottomY(fieldsCount, fieldFontSize, wrapDescricao);
   const qrY = y + MOSQ_CODES_TOP_GAP;
   const contentBottom = qrY + MOSQ_QR_SIZE + MOSQ_CAPTION_GAP + MOSQ_CAPTION_HEIGHT;
   return contentBottom + MOSQ_MARGIN;
-}
-
-/**
- * Espaço entre a última linha de campos e o código de barras/QR — em vez do
- * MOSQ_CODES_TOP_GAP fixo, estica-se para preencher o que sobra entre o
- * conteúdo e MOSQ_FIXED_PAGE_HEIGHT, empurrando os códigos para perto do
- * fim da etiqueta em vez de deixar um espaço em branco depois deles (pedido
- * do utilizador de 2026-09-17: "agora é só tirar o excesso do espaço em
- * branco" — ver nota no cabeçalho do ficheiro). Nunca fica abaixo de
- * MOSQ_CODES_TOP_GAP (o mínimo visual entre o texto e os códigos); se o
- * conteúdo já ultrapassar os 164mm fixos (caso raro), usa esse mínimo e a
- * página cresce em vez de espremer o espaço.
- */
-function mosquiteiraCodesGap(fieldsCount: number, fieldFontSize: number, wrapDescricao: boolean): number {
-  const fieldsBottomY = mosquiteiraFieldsBottomY(fieldsCount, fieldFontSize, wrapDescricao);
-  const footerHeight = MOSQ_QR_SIZE + MOSQ_CAPTION_GAP + MOSQ_CAPTION_HEIGHT;
-  const available = MOSQ_FIXED_PAGE_HEIGHT - MOSQ_MARGIN - fieldsBottomY - footerHeight;
-  return Math.max(MOSQ_CODES_TOP_GAP, available);
 }
 
 /**
@@ -968,8 +967,7 @@ function renderMosquiteiraLabelPage(
   siteQrPng: Buffer,
   createdAt: string,
   fieldFontSize: number,
-  wrapDescricao: boolean,
-  codesTopGap: number
+  wrapDescricao: boolean
 ) {
   const width = PRODUCT_LABEL_WIDTH - MOSQ_MARGIN * 2;
 
@@ -1029,13 +1027,9 @@ function renderMosquiteiraLabelPage(
   }
 
   const qrSize = MOSQ_QR_SIZE;
-  // codesHGap: espaço horizontal entre a coluna do código de barras e o QR
-  // (não confundir com codesTopGap, o parâmetro recebido — espaço vertical
-  // antes desta linha de códigos, esticado por mosquiteiraCodesGap para
-  // preencher os 164mm fixos — ver nota no cabeçalho do ficheiro).
-  const codesHGap = 8;
-  const barcodeColWidth = width - qrSize - codesHGap;
-  const qrY = y + codesTopGap;
+  const codesGap = 8;
+  const barcodeColWidth = width - qrSize - codesGap;
+  const qrY = y + MOSQ_CODES_TOP_GAP;
   const dateY = qrY - 11;
 
   doc
@@ -1095,19 +1089,18 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
   });
 
   // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
-  // si — FIXA (164mm, ver MOSQ_FIXED_PAGE_HEIGHT) em vez de calculada a
+  // si — FIXA (90mm, ver MOSQ_FIXED_PAGE_HEIGHT) em vez de calculada a
   // partir do conteúdo, para corresponder ao tamanho de papel personalizado
-  // que o driver da Brother QL-1100/Adobe Acrobat espera neste posto.
-  // mosquiteiraContentHeight serve só de rede de segurança: se o conteúdo
-  // desta OS precisar mesmo de mais espaço do que os 164mm fixos (caso
-  // raro, muitos campos), a altura cresce em vez de cortar o conteúdo. O
-  // espaço sobrante entre o conteúdo e os 164mm fixos não fica todo no fim
-  // — mosquiteiraCodesGap estica-o para antes dos códigos, empurrando-os
-  // para perto do fim da etiqueta (ver nota no cabeçalho do ficheiro).
+  // que o driver da Brother QL-1100/Adobe Acrobat espera neste posto (ver
+  // nota no cabeçalho do ficheiro — LEMBRETE: essa definição da impressora
+  // tem de ser atualizada manualmente para 103x90mm antes de testar a
+  // imprimir). mosquiteiraContentHeight serve só de rede de segurança: se o
+  // conteúdo desta OS precisar mesmo de mais espaço do que os 90mm fixos
+  // (caso raro, muitos campos), a altura cresce em vez de cortar o
+  // conteúdo.
   const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
   const contentHeight = mosquiteiraContentHeight(maxFieldsCount, fieldFontSize, wrapDescricao);
   const pageHeight = Math.max(MOSQ_FIXED_PAGE_HEIGHT, contentHeight);
-  const codesGap = mosquiteiraCodesGap(maxFieldsCount, fieldFontSize, wrapDescricao);
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Cache-Control", "no-store");
@@ -1119,16 +1112,7 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
 
   pages.forEach((fields) => {
     doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
-    renderMosquiteiraLabelPage(
-      doc,
-      fields,
-      barcodePng,
-      siteQrPng,
-      data.createdAt,
-      fieldFontSize,
-      wrapDescricao,
-      codesGap
-    );
+    renderMosquiteiraLabelPage(doc, fields, barcodePng, siteQrPng, data.createdAt, fieldFontSize, wrapDescricao);
   });
 
   doc.end();

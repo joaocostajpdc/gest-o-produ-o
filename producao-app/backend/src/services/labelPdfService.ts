@@ -695,25 +695,34 @@ export async function streamProductLabelPdf(res: Response, data: LabelOrderData)
 // fluxo de impressão. O utilizador, questionado, confirmou explicitamente
 // querer mudar o código para uma altura FIXA, à semelhança da Etiqueta do
 // Produto ("Muda o código para uma altura fixa (como a Etiqueta do
-// Produto)"). Por isso, MOSQ_FIXED_PAGE_HEIGHT usa os mesmos 164mm que o
-// driver já espera (ver mais abaixo), em vez de mosquiteiraLabelPageHeight
-// calculada a partir do conteúdo — etiquetas com menos campos ficam agora
-// com espaço em branco no fim, tal como acontecia na Etiqueta do Produto
-// antes de esta passar a ser dinâmica; é a troca aceite para resolver a
-// recusa de impressão. IMPORTANTE: isto resolve o erro de impressão, mas
-// NÃO confirma por si só a ORIENTAÇÃO (vertical vs. rodada) — essa questão
-// continua em aberto (ver nota anterior) e precisa de um teste de impressão
-// real com esta versão.
+// Produto)"). MOSQ_FIXED_PAGE_HEIGHT passou então a usar os mesmos 164mm
+// que o driver já esperava, em vez de mosquiteiraLabelPageHeight calculada
+// a partir do conteúdo.
 //
-// Nota para o futuro: esta troca (vertical + fonte menor/Descrição em 2
-// linhas) ainda não foi confirmada numa impressão física a sério depois
-// desta mudança — as duas vezes anteriores em que "vertical" pareceu bem no
-// ecrã, a impressão real mostrou a etiqueta a sair de lado (ver acima). Se
-// isso voltar a acontecer, o problema não é o texto/fonte, é mesmo a
-// orientação — nesse caso a solução já testada e aprovada fisicamente foi a
-// rotação de 90º (ver histórico neste ficheiro e nos commits anteriores).
-// O aperto de espaço junto ao logótipo e ao código de barras/QR (
-// MOSQ_LOGO_GAP e MOSQ_CODES_TOP_GAP) mantém-se, por ser um pedido à parte.
+// CONFIRMADO FISICAMENTE (foto da etiqueta impressa, OS 2026/443, mesmo
+// dia): com os 164mm fixos a impressão já não deu erro E saiu na orientação
+// correta — direita, legível de cima para baixo, tal como o desenho
+// vertical deste ficheiro (a rotação de 90º NÃO foi necessária desta vez).
+// A questão da orientação (ver notas anteriores sobre "sai de lado") fica
+// assim resolvida para este código, mas a foto também mostrou um espaço em
+// branco grande no fim da etiqueta (a diferença entre os ~90-100mm que o
+// conteúdo desta OS ocupa e os 164mm fixos) — o utilizador pediu a seguir
+// para reduzir esse desperdício ("agora é só tirar o excesso do espaço em
+// branco"). Questionado sobre como preferia resolver isto (sabendo que
+// diminuir a altura fixa reabre o risco do erro "não corresponde ao
+// selecionado", a não ser que o tamanho de papel personalizado nas
+// propriedades da impressora/Acrobat seja também atualizado manualmente,
+// uma única vez, para o novo valor), escolheu baixar a altura fixa para
+// perto de 100mm em vez de manter os 164mm ou voltar à altura dinâmica.
+// MOSQ_FIXED_PAGE_HEIGHT passou por isso de 164mm para 100mm — cobre
+// folgadamente os casos reais testados (~85-90mm com Descrição numa linha,
+// ~90-95mm com Descrição em 2 linhas) com bem menos desperdício do que
+// 164mm. IMPORTANTE para o utilizador: com este novo valor, é preciso
+// atualizar o tamanho de papel personalizado selecionado nas propriedades
+// da impressora/Acrobat de 164mm para 100mm (mesmo sítio onde estava
+// registado o 164mm) — sem isso, o erro "o rolo... não corresponde ao
+// selecionado" pode voltar a aparecer, exatamente como aconteceu quando o
+// código gerava ~90mm contra um driver à espera de 164mm.
 // ---------------------------------------------------------------------------
 
 interface MosquiteiraBlock {
@@ -872,18 +881,23 @@ function mosquiteiraDescricaoNeedsWrap(
 // explícito do utilizador de 2026-09-17 depois de o driver da Brother
 // QL-1100/Adobe Acrobat recusar imprimir por a folha de diálogo esperar
 // "103mm x 164mm" em vez da altura dinâmica (~90mm) que o código gerava (ver
-// nota no cabeçalho do ficheiro). Usa os mesmos 164mm — o valor que o
-// próprio driver já mostrou esperar, e historicamente o mesmo usado pela
-// Etiqueta do Produto antes de esta passar a ser dinâmica. Etiquetas com
-// menos conteúdo ficam com espaço em branco no fim, tal como acontecia na
-// Etiqueta do Produto antes de 2026-09-16.
-const MOSQ_FIXED_PAGE_HEIGHT = 164 * 2.83465;
+// nota no cabeçalho do ficheiro). Começou em 164mm (o valor que o driver já
+// mostrava esperar); confirmado por foto que essa versão imprimiu bem e na
+// orientação correta, mas com um espaço em branco grande no fim. Reduzida
+// no mesmo dia para 100mm, a pedido do utilizador ("agora é só tirar o
+// excesso do espaço em branco"), por cobrir folgadamente os casos reais já
+// testados com bem menos desperdício. IMPORTANTE: sempre que este valor
+// mudar, o tamanho de papel personalizado selecionado nas propriedades da
+// impressora/Adobe Acrobat tem de ser atualizado manualmente para o mesmo
+// valor — caso contrário o erro "o rolo/fita não corresponde ao
+// selecionado" volta a aparecer (ver nota no cabeçalho do ficheiro).
+const MOSQ_FIXED_PAGE_HEIGHT = 100 * 2.83465;
 
 /**
  * Verifica se o conteúdo (campos + eventual 2ª linha da Descrição) cabe
  * dentro de MOSQ_FIXED_PAGE_HEIGHT — usado só como rede de segurança para
  * evitar conteúdo cortado no caso raro de uma OS com muitos campos; nesse
- * caso a altura cresce além dos 164mm fixos em vez de cortar o conteúdo.
+ * caso a altura cresce além dos 100mm fixos em vez de cortar o conteúdo.
  */
 function mosquiteiraContentHeight(fieldsCount: number, fieldFontSize: number, wrapDescricao: boolean): number {
   let y = MOSQ_MARGIN + MOSQ_LOGO_SIZE + MOSQ_LOGO_GAP;
@@ -1037,12 +1051,12 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
   });
 
   // Todas as etiquetas desta Ordem de Serviço saem com a mesma altura entre
-  // si — e, desde 2026-09-17, essa altura é FIXA (164mm, ver
+  // si — e, desde 2026-09-17, essa altura é FIXA (100mm, ver
   // MOSQ_FIXED_PAGE_HEIGHT) em vez de calculada a partir do conteúdo, para
   // corresponder ao tamanho de papel personalizado que o driver da Brother
-  // QL-1100/Adobe Acrobat já espera neste posto. mosquiteiraContentHeight
+  // QL-1100/Adobe Acrobat espera neste posto. mosquiteiraContentHeight
   // serve só de rede de segurança: se o conteúdo desta OS precisar mesmo de
-  // mais espaço do que os 164mm fixos (caso raro, muitos campos), a altura
+  // mais espaço do que os 100mm fixos (caso raro, muitos campos), a altura
   // cresce em vez de cortar o conteúdo.
   const maxFieldsCount = Math.max(...pages.map((fields) => fields.length));
   const contentHeight = mosquiteiraContentHeight(maxFieldsCount, fieldFontSize, wrapDescricao);

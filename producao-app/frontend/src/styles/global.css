@@ -498,6 +498,98 @@ tr:hover td {
   cursor: not-allowed;
 }
 
+/* Nº de OS na tabela de listagem — usado como <button> (para abrir o
+   pop-up de consulta rápida, ver .qv-overlay abaixo) mas com o mesmo
+   aspeto visual do <Link> que substituiu. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------- */
+/* Pop-up de consulta rápida de uma Ordem de Serviço (a partir da lista), */
+/* com a informação básica da linha e um botão para avançar de etapa,    */
+/* sem sair da listagem — ver pedido do utilizador de 2026-09-27.        */
+/* --------------------------------------------------------------------- */
+.qv-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 18, 32, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.qv-modal {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 20px 22px;
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.qv-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.qv-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.qv-modal-subtitle {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.qv-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 14px;
+}
+
+.qv-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.qv-close-btn:hover {
+  background: #f1f2f6;
+  color: var(--color-text);
+}
+
+.qv-modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
 .filters-bar {
   display: flex;
   flex-wrap: wrap;

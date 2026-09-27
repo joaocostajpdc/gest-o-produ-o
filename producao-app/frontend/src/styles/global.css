@@ -499,7 +499,7 @@ tr:hover td {
 }
 
 /* Nº de OS na tabela de listagem — usado como <button> (para abrir o
-   pop-up de consulta rápida, ver .qv-overlay abaixo) mas com o mesmo
+   cartão de consulta rápida, ver .qv-popover abaixo) mas com o mesmo
    aspeto visual do <Link> que substituiu. */
 .link-button {
   background: none;
@@ -513,33 +513,30 @@ tr:hover td {
 }
 
 /* --------------------------------------------------------------------- */
-/* Pop-up de consulta rápida de uma Ordem de Serviço (a partir da lista), */
-/* com a informação básica da linha e um botão para avançar de etapa,    */
-/* sem sair da listagem — ver pedido do utilizador de 2026-09-27.        */
+/* Cartão de consulta rápida de uma Ordem de Serviço (a partir da lista): */
+/* aparece ao passar o rato (ou tocar/focar) no nº da OS, com a           */
+/* informação básica da linha e um botão para avançar de etapa — sem     */
+/* escurecer o ecrã nem precisar de clicar para abrir. Posicionado com    */
+/* position:fixed junto ao nº que o abriu (cálculo em                    */
+/* ServiceOrdersListPage.tsx), para nunca ficar cortado pelo scroll       */
+/* horizontal da tabela em ecrãs estreitos — ver pedidos do utilizador    */
+/* de 2026-09-27.                                                         */
 /* --------------------------------------------------------------------- */
-.qv-overlay {
+.qv-popover {
   position: fixed;
-  inset: 0;
-  background: rgba(15, 18, 32, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
   z-index: 100;
-}
-
-.qv-modal {
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
-  padding: 20px 22px;
-  width: 100%;
-  max-width: 420px;
-  max-height: calc(100vh - 40px);
-  overflow-y: auto;
+  padding: 16px 18px;
 }
 
-.qv-modal-header {
+.qv-popover-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -547,20 +544,20 @@ tr:hover td {
   margin-bottom: 2px;
 }
 
-.qv-modal-header h3 {
+.qv-popover-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
-.qv-modal-subtitle {
+.qv-popover-subtitle {
   margin-top: 2px;
   font-size: 13px;
   color: var(--color-text-muted);
 }
 
-.qv-badges {
+.qv-popover-badges {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -583,7 +580,7 @@ tr:hover td {
   color: var(--color-text);
 }
 
-.qv-modal-actions {
+.qv-popover-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;

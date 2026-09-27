@@ -95,6 +95,7 @@ function serializeListItem(order: any, now: Date) {
       name: order.product.name,
       category: order.product.category,
       externalId: order.product.externalId,
+      description: order.product.description,
     },
     createdAt: order.createdAt,
     deadlineAt: order.deadlineAt,

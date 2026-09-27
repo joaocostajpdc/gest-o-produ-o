@@ -40,6 +40,13 @@ export function ServiceOrdersListPage() {
   const [importingPdf, setImportingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
+  // Pop-up de consulta rápida ao clicar no nº da OS na tabela — mostra a
+  // informação básica da linha e um botão para avançar de etapa, sem sair
+  // da listagem (ver pedido do utilizador de 2026-09-27).
+  const [quickView, setQuickView] = useState<ServiceOrderListItem | null>(null);
+  const [quickViewBusy, setQuickViewBusy] = useState(false);
+  const [quickViewError, setQuickViewError] = useState<string | null>(null);
+
   const [filters, setFilters] = useState({
     status: "",
     stageId: "",
@@ -90,15 +97,21 @@ export function ServiceOrdersListPage() {
     };
   }, [orders]);
 
-  async function loadOrders() {
+  // Devolve a lista recebida (além de a guardar em estado) para que quem
+  // chama — por exemplo o pop-up de consulta rápida, depois de avançar uma
+  // etapa — possa ler de imediato os dados atualizados, sem depender do
+  // estado `orders` (que só reflete o novo valor no próximo render).
+  async function loadOrders(): Promise<ServiceOrderListItem[]> {
     setLoading(true);
     setError(null);
     try {
       const query = buildQuery(filters);
       const data = await api.get<ServiceOrderListItem[]>(`/service-orders${query}`);
       setOrders(data);
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar Ordens de Serviço.");
+      return [];
     } finally {
       setLoading(false);
     }
@@ -147,6 +160,26 @@ export function ServiceOrdersListPage() {
       setImportMsg(err instanceof Error ? err.message : "Erro ao importar o PDF.");
     } finally {
       setImportingPdf(false);
+    }
+  }
+
+  // Ação disparada a partir do pop-up de consulta rápida ("Iniciar
+  // produção" / "Avançar etapa"). Depois de concluída, recarrega a lista
+  // (para refletir a nova etapa/estado em toda a página) e atualiza o
+  // próprio pop-up com os dados frescos dessa OS — se deixar de aparecer
+  // nos resultados (ex.: um filtro de estado deixou de a incluir), fecha-se
+  // sozinho, tal como a linha desapareceria da tabela.
+  async function runQuickViewAction(orderId: string, action: () => Promise<unknown>) {
+    setQuickViewError(null);
+    setQuickViewBusy(true);
+    try {
+      await action();
+      const data = await loadOrders();
+      setQuickView(data.find((o) => o.id === orderId) ?? null);
+    } catch (err) {
+      setQuickViewError(err instanceof Error ? err.message : "Ocorreu um erro.");
+    } finally {
+      setQuickViewBusy(false);
     }
   }
 
@@ -293,7 +326,16 @@ export function ServiceOrdersListPage() {
                     <PriorityBadge priority={o.priority} label={o.priorityLabel} color={o.priorityColor} />
                   </td>
                   <td>
-                    <Link to={`/service-orders/${o.id}`}>{o.externalId}</Link>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => {
+                        setQuickView(o);
+                        setQuickViewError(null);
+                      }}
+                    >
+                      {o.externalId}
+                    </button>
                   </td>
                   <td>{o.client.name}</td>
                   <td>{o.product.name}</td>
@@ -339,6 +381,128 @@ export function ServiceOrdersListPage() {
       <p className="muted">
         Sessão: {user?.name} ({user?.role}) — a ordenação por prioridade é aplicada automaticamente.
       </p>
+
+      {quickView && (
+        <ServiceOrderQuickViewModal
+          order={quickView}
+          busy={quickViewBusy}
+          actionError={quickViewError}
+          onClose={() => setQuickView(null)}
+          onStart={() =>
+            runQuickViewAction(quickView.id, () => api.post(`/service-orders/${quickView.id}/start`))
+          }
+          onAdvance={() =>
+            runQuickViewAction(quickView.id, () => api.post(`/service-orders/${quickView.id}/stage-flow/advance`))
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+// Pop-up de consulta rápida aberto a partir da listagem, ao clicar no nº da
+// OS: mostra a informação básica já disponível na linha da tabela (sem
+// pedido extra ao servidor) e, tal como na página de detalhe da OS, um
+// botão para avançar a produção para a etapa/estado seguinte.
+function ServiceOrderQuickViewModal({
+  order,
+  busy,
+  actionError,
+  onClose,
+  onStart,
+  onAdvance,
+}: {
+  order: ServiceOrderListItem;
+  busy: boolean;
+  actionError: string | null;
+  onClose: () => void;
+  onStart: () => void;
+  onAdvance: () => void;
+}) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div className="qv-overlay" onClick={onClose}>
+      <div className="qv-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="qv-modal-header">
+          <div>
+            <h3>{order.externalId}</h3>
+            <div className="qv-modal-subtitle">
+              {order.client.name} — {order.product.name}
+            </div>
+          </div>
+          <button type="button" className="qv-close-btn" onClick={onClose} aria-label="Fechar">
+            ×
+          </button>
+        </div>
+
+        <div className="qv-badges">
+          <StatusBadge status={order.status} />
+          <PriorityBadge priority={order.priority} label={order.priorityLabel} color={order.priorityColor} />
+        </div>
+
+        <div className="info-tiles">
+          <div className="info-tile">
+            <div className="info-tile-label">Etapa atual</div>
+            <div className="info-tile-value">
+              {order.currentStage ? (
+                <div className="current-stage">
+                  <div className="current-stage-name">{order.currentStage.name}</div>
+                  <div className="muted">{minutesToDays(order.currentStage.residenceMinutes)} na etapa</div>
+                  {order.currentStage.supplier && (
+                    <div className="muted">Fornecedor: {order.currentStage.supplier}</div>
+                  )}
+                  {order.currentStage.expectedReturnAt && (
+                    <div className="lead-time-hint">
+                      Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                "—"
+              )}
+            </div>
+          </div>
+          <div className="info-tile">
+            <div className="info-tile-label">Data de início</div>
+            <div className="info-tile-value">{new Date(order.createdAt).toLocaleDateString("pt-PT")}</div>
+          </div>
+          <div className="info-tile">
+            <div className="info-tile-label">Data-limite</div>
+            <div className="info-tile-value">
+              {order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}
+            </div>
+          </div>
+          <div className="info-tile">
+            <div className="info-tile-label">Tempo de produção</div>
+            <div className="info-tile-value">{minutesToDays(order.productionMinutes)}</div>
+          </div>
+        </div>
+
+        {actionError && <p className="error-text">{actionError}</p>}
+
+        <div className="qv-modal-actions">
+          {order.status === "NAO_INICIADA" && (
+            <button className="btn" disabled={busy} onClick={onStart}>
+              {busy ? "A iniciar..." : "Iniciar produção"}
+            </button>
+          )}
+          {order.status === "EM_PRODUCAO" && (
+            <button className="btn" disabled={busy} onClick={onAdvance}>
+              {busy ? "A avançar..." : "Avançar etapa"}
+            </button>
+          )}
+          <Link to={`/service-orders/${order.id}`} className="btn secondary" onClick={onClose}>
+            Ver detalhes completos
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

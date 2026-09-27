@@ -330,9 +330,14 @@ export function ServiceOrderDetailPage() {
           — em vez de dois cartões separados, para não aparecerem desligadas
           uma da outra nem se separarem ao imprimir (ver .spec-card em
           global.css: break-inside/page-break-inside: avoid) — pedido do
-          utilizador de 2026-09-27. */}
-      {(order.specifications || order.currentStage?.expectedReturnAt) && (
+          utilizador de 2026-09-27. A descrição do produto (order.product.description)
+          sai no topo do cartão, centrada — pedido do utilizador de 2026-09-27. */}
+      {(order.product.description || order.specifications || order.currentStage?.expectedReturnAt) && (
         <div className="card spec-card">
+          {order.product.description && (
+            <div className="spec-product-description">{order.product.description}</div>
+          )}
+
           {order.specifications && (
             <>
               <div className="spec-card-label">Características do Produto</div>
@@ -341,7 +346,7 @@ export function ServiceOrderDetailPage() {
           )}
 
           {order.currentStage?.expectedReturnAt && (
-            <div className={order.specifications ? "spec-stage-block" : undefined}>
+            <div className={order.specifications || order.product.description ? "spec-stage-block" : undefined}>
               <div className="spec-card-label">
                 {order.currentStage.name}
                 {order.currentStage.supplier ? ` — ${order.currentStage.supplier}` : ""}

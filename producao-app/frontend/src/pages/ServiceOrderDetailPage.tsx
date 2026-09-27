@@ -325,23 +325,33 @@ export function ServiceOrderDetailPage() {
 
       {actionError && <p className="error-text">{actionError}</p>}
 
-      {order.specifications && (
+      {/* Características do Produto e a etapa/fornecedor com entrega prevista
+          (ex.: Lacagem) voltam a sair no mesmo cartão — como acontecia antes
+          — em vez de dois cartões separados, para não aparecerem desligadas
+          uma da outra nem se separarem ao imprimir (ver .spec-card em
+          global.css: break-inside/page-break-inside: avoid) — pedido do
+          utilizador de 2026-09-27. */}
+      {(order.specifications || order.currentStage?.expectedReturnAt) && (
         <div className="card spec-card">
-          <div className="spec-card-label">Características do Produto</div>
-          <SpecificationsBody specifications={order.specifications} />
-        </div>
-      )}
+          {order.specifications && (
+            <>
+              <div className="spec-card-label">Características do Produto</div>
+              <SpecificationsBody specifications={order.specifications} />
+            </>
+          )}
 
-      {order.currentStage?.expectedReturnAt && (
-        <div className="card spec-card">
-          <div className="spec-card-label">
-            {order.currentStage.name}
-            {order.currentStage.supplier ? ` — ${order.currentStage.supplier}` : ""}
-          </div>
-          <div className="spec-card-body">
-            Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
-            {order.currentStage.leadDays != null && ` (prazo de ${order.currentStage.leadDays} dias)`}
-          </div>
+          {order.currentStage?.expectedReturnAt && (
+            <div className={order.specifications ? "spec-stage-block" : undefined}>
+              <div className="spec-card-label">
+                {order.currentStage.name}
+                {order.currentStage.supplier ? ` — ${order.currentStage.supplier}` : ""}
+              </div>
+              <div className="spec-card-body">
+                Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
+                {order.currentStage.leadDays != null && ` (prazo de ${order.currentStage.leadDays} dias)`}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

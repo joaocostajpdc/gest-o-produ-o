@@ -855,6 +855,20 @@ label {
   color: var(--color-text);
 }
 
+/* Descrição do produto (Product.description) — mostra-se centrada, no topo
+   do cartão, como um subtítulo, antes das Características do Produto —
+   pedido do utilizador de 2026-09-27. */
+.spec-product-description {
+  text-align: center;
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--color-text);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed var(--color-border);
+}
+
 /* Quando "Características do Produto" tem vários artigos (ver
    SpecificationsBody em ServiceOrderDetailPage.tsx) — separa cada bloco
    visualmente, em vez de tudo seguido. */

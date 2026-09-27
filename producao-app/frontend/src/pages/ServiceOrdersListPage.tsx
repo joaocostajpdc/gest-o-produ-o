@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, buildQuery } from "../api/client";
 import {
@@ -40,12 +40,67 @@ export function ServiceOrdersListPage() {
   const [importingPdf, setImportingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  // Pop-up de consulta rápida ao clicar no nº da OS na tabela — mostra a
-  // informação básica da linha e um botão para avançar de etapa, sem sair
-  // da listagem (ver pedido do utilizador de 2026-09-27).
-  const [quickView, setQuickView] = useState<ServiceOrderListItem | null>(null);
+  // Cartão de consulta rápida ao passar o rato (ou tocar/focar) no nº da OS
+  // na tabela — mostra de imediato a informação básica da linha e um botão
+  // para avançar de etapa, sem sair da listagem e sem precisar de clicar
+  // (ver pedidos do utilizador de 2026-09-27: primeiro um pop-up ao clique,
+  // depois "quero que apareça sem ter que clicar outra vez"). Guarda-se
+  // também a posição do nº clicado/focado (`rect`), para posicionar o
+  // cartão logo ao lado em vez de ao centro do ecrã.
+  const [quickView, setQuickView] = useState<{ order: ServiceOrderListItem; rect: DOMRect } | null>(null);
   const [quickViewBusy, setQuickViewBusy] = useState(false);
   const [quickViewError, setQuickViewError] = useState<string | null>(null);
+  const quickViewCloseTimer = useRef<number | null>(null);
+
+  function cancelQuickViewClose() {
+    if (quickViewCloseTimer.current !== null) {
+      window.clearTimeout(quickViewCloseTimer.current);
+      quickViewCloseTimer.current = null;
+    }
+  }
+
+  // Pequeno atraso antes de fechar (em vez de fechar logo ao sair com o
+  // rato do nº da OS) — dá tempo de o rato chegar ao cartão sem este
+  // desaparecer a meio do caminho.
+  function scheduleQuickViewClose() {
+    cancelQuickViewClose();
+    quickViewCloseTimer.current = window.setTimeout(() => setQuickView(null), 150);
+  }
+
+  function openQuickView(order: ServiceOrderListItem, target: HTMLElement) {
+    cancelQuickViewClose();
+    setQuickView({ order, rect: target.getBoundingClientRect() });
+    setQuickViewError(null);
+  }
+
+  // Enquanto o cartão está aberto: Esc fecha, deslocar a página fecha (a
+  // posição do cartão é calculada uma única vez, na abertura, por isso não
+  // a acompanharia), e clicar fora do cartão e fora de qualquer nº de OS
+  // também fecha — cobre o caso de abertura por toque/clique (sem rato a
+  // sair de lado nenhum para despoletar o fecho automático).
+  useEffect(() => {
+    if (!quickView) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setQuickView(null);
+    }
+    function handleScroll() {
+      setQuickView(null);
+    }
+    function handlePointerDown(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest(".qv-popover") || target.closest(".link-button")) return;
+      setQuickView(null);
+    }
+    window.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", handleScroll, true);
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", handleScroll, true);
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickView !== null]);
 
   const [filters, setFilters] = useState({
     status: "",
@@ -163,19 +218,21 @@ export function ServiceOrdersListPage() {
     }
   }
 
-  // Ação disparada a partir do pop-up de consulta rápida ("Iniciar
+  // Ação disparada a partir do cartão de consulta rápida ("Iniciar
   // produção" / "Avançar etapa"). Depois de concluída, recarrega a lista
   // (para refletir a nova etapa/estado em toda a página) e atualiza o
-  // próprio pop-up com os dados frescos dessa OS — se deixar de aparecer
-  // nos resultados (ex.: um filtro de estado deixou de a incluir), fecha-se
-  // sozinho, tal como a linha desapareceria da tabela.
+  // próprio cartão com os dados frescos dessa OS, mantendo a posição onde
+  // já estava — se deixar de aparecer nos resultados (ex.: um filtro de
+  // estado deixou de a incluir), fecha-se sozinho, tal como a linha
+  // desapareceria da tabela.
   async function runQuickViewAction(orderId: string, action: () => Promise<unknown>) {
     setQuickViewError(null);
     setQuickViewBusy(true);
     try {
       await action();
       const data = await loadOrders();
-      setQuickView(data.find((o) => o.id === orderId) ?? null);
+      const updated = data.find((o) => o.id === orderId);
+      setQuickView((current) => (updated && current ? { order: updated, rect: current.rect } : null));
     } catch (err) {
       setQuickViewError(err instanceof Error ? err.message : "Ocorreu um erro.");
     } finally {
@@ -329,10 +386,11 @@ export function ServiceOrdersListPage() {
                     <button
                       type="button"
                       className="link-button"
-                      onClick={() => {
-                        setQuickView(o);
-                        setQuickViewError(null);
-                      }}
+                      aria-haspopup="dialog"
+                      aria-expanded={quickView?.order.id === o.id}
+                      onMouseEnter={(e) => openQuickView(o, e.currentTarget)}
+                      onMouseLeave={scheduleQuickViewClose}
+                      onClick={(e) => openQuickView(o, e.currentTarget)}
                     >
                       {o.externalId}
                     </button>
@@ -383,16 +441,21 @@ export function ServiceOrdersListPage() {
       </p>
 
       {quickView && (
-        <ServiceOrderQuickViewModal
-          order={quickView}
+        <ServiceOrderQuickViewCard
+          order={quickView.order}
+          rect={quickView.rect}
           busy={quickViewBusy}
           actionError={quickViewError}
           onClose={() => setQuickView(null)}
+          onMouseEnter={cancelQuickViewClose}
+          onMouseLeave={scheduleQuickViewClose}
           onStart={() =>
-            runQuickViewAction(quickView.id, () => api.post(`/service-orders/${quickView.id}/start`))
+            runQuickViewAction(quickView.order.id, () => api.post(`/service-orders/${quickView.order.id}/start`))
           }
           onAdvance={() =>
-            runQuickViewAction(quickView.id, () => api.post(`/service-orders/${quickView.id}/stage-flow/advance`))
+            runQuickViewAction(quickView.order.id, () =>
+              api.post(`/service-orders/${quickView.order.id}/stage-flow/advance`)
+            )
           }
         />
       )}
@@ -400,108 +463,129 @@ export function ServiceOrdersListPage() {
   );
 }
 
-// Pop-up de consulta rápida aberto a partir da listagem, ao clicar no nº da
-// OS: mostra a informação básica já disponível na linha da tabela (sem
-// pedido extra ao servidor) e, tal como na página de detalhe da OS, um
-// botão para avançar a produção para a etapa/estado seguinte.
-function ServiceOrderQuickViewModal({
+// Largura fixa do cartão (mantida também em global.css, em .qv-popover) —
+// usada aqui só para calcular onde o encostar sem sair do ecrã.
+const QV_POPOVER_WIDTH = 340;
+const QV_POPOVER_MARGIN = 12;
+const QV_POPOVER_EST_HEIGHT = 340;
+
+// Cartão de consulta rápida aberto a partir da listagem, ao passar o rato
+// (ou tocar/focar) no nº da OS: mostra a informação básica já disponível na
+// linha da tabela (sem pedido extra ao servidor) e, tal como na página de
+// detalhe da OS, um botão para avançar a produção para a etapa/estado
+// seguinte. Usa position:fixed, ancorado ao elemento que o abriu, para
+// nunca ficar cortado pelo scroll horizontal da tabela em ecrãs estreitos.
+function ServiceOrderQuickViewCard({
   order,
+  rect,
   busy,
   actionError,
   onClose,
+  onMouseEnter,
+  onMouseLeave,
   onStart,
   onAdvance,
 }: {
   order: ServiceOrderListItem;
+  rect: DOMRect;
   busy: boolean;
   actionError: string | null;
   onClose: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
   onStart: () => void;
   onAdvance: () => void;
 }) {
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  const left = Math.max(
+    QV_POPOVER_MARGIN,
+    Math.min(rect.left, window.innerWidth - QV_POPOVER_WIDTH - QV_POPOVER_MARGIN)
+  );
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const openUpwards = spaceBelow < QV_POPOVER_EST_HEIGHT && rect.top > QV_POPOVER_EST_HEIGHT;
+  const position: CSSProperties = openUpwards
+    ? { left, bottom: window.innerHeight - rect.top + 8 }
+    : { left, top: rect.bottom + 8 };
 
   return (
-    <div className="qv-overlay" onClick={onClose}>
-      <div className="qv-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="qv-modal-header">
-          <div>
-            <h3>{order.externalId}</h3>
-            <div className="qv-modal-subtitle">
-              {order.client.name} — {order.product.name}
-            </div>
+    <div
+      className="qv-popover"
+      style={position}
+      role="dialog"
+      aria-label={`Informação rápida da OS ${order.externalId}`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div className="qv-popover-header">
+        <div>
+          <h3>{order.externalId}</h3>
+          <div className="qv-popover-subtitle">
+            {order.client.name} — {order.product.name}
           </div>
-          <button type="button" className="qv-close-btn" onClick={onClose} aria-label="Fechar">
-            ×
+        </div>
+        <button type="button" className="qv-close-btn" onClick={onClose} aria-label="Fechar">
+          ×
+        </button>
+      </div>
+
+      <div className="qv-popover-badges">
+        <StatusBadge status={order.status} />
+        <PriorityBadge priority={order.priority} label={order.priorityLabel} color={order.priorityColor} />
+      </div>
+
+      <div className="info-tiles">
+        <div className="info-tile">
+          <div className="info-tile-label">Etapa atual</div>
+          <div className="info-tile-value">
+            {order.currentStage ? (
+              <div className="current-stage">
+                <div className="current-stage-name">{order.currentStage.name}</div>
+                <div className="muted">{minutesToDays(order.currentStage.residenceMinutes)} na etapa</div>
+                {order.currentStage.supplier && (
+                  <div className="muted">Fornecedor: {order.currentStage.supplier}</div>
+                )}
+                {order.currentStage.expectedReturnAt && (
+                  <div className="lead-time-hint">
+                    Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
+                  </div>
+                )}
+              </div>
+            ) : (
+              "—"
+            )}
+          </div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Data de início</div>
+          <div className="info-tile-value">{new Date(order.createdAt).toLocaleDateString("pt-PT")}</div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Data-limite</div>
+          <div className="info-tile-value">
+            {order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}
+          </div>
+        </div>
+        <div className="info-tile">
+          <div className="info-tile-label">Tempo de produção</div>
+          <div className="info-tile-value">{minutesToDays(order.productionMinutes)}</div>
+        </div>
+      </div>
+
+      {actionError && <p className="error-text">{actionError}</p>}
+
+      <div className="qv-popover-actions">
+        {order.status === "NAO_INICIADA" && (
+          <button className="btn" disabled={busy} onClick={onStart}>
+            {busy ? "A iniciar..." : "Iniciar produção"}
           </button>
-        </div>
-
-        <div className="qv-badges">
-          <StatusBadge status={order.status} />
-          <PriorityBadge priority={order.priority} label={order.priorityLabel} color={order.priorityColor} />
-        </div>
-
-        <div className="info-tiles">
-          <div className="info-tile">
-            <div className="info-tile-label">Etapa atual</div>
-            <div className="info-tile-value">
-              {order.currentStage ? (
-                <div className="current-stage">
-                  <div className="current-stage-name">{order.currentStage.name}</div>
-                  <div className="muted">{minutesToDays(order.currentStage.residenceMinutes)} na etapa</div>
-                  {order.currentStage.supplier && (
-                    <div className="muted">Fornecedor: {order.currentStage.supplier}</div>
-                  )}
-                  {order.currentStage.expectedReturnAt && (
-                    <div className="lead-time-hint">
-                      Entrega prevista: {new Date(order.currentStage.expectedReturnAt).toLocaleDateString("pt-PT")}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                "—"
-              )}
-            </div>
-          </div>
-          <div className="info-tile">
-            <div className="info-tile-label">Data de início</div>
-            <div className="info-tile-value">{new Date(order.createdAt).toLocaleDateString("pt-PT")}</div>
-          </div>
-          <div className="info-tile">
-            <div className="info-tile-label">Data-limite</div>
-            <div className="info-tile-value">
-              {order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}
-            </div>
-          </div>
-          <div className="info-tile">
-            <div className="info-tile-label">Tempo de produção</div>
-            <div className="info-tile-value">{minutesToDays(order.productionMinutes)}</div>
-          </div>
-        </div>
-
-        {actionError && <p className="error-text">{actionError}</p>}
-
-        <div className="qv-modal-actions">
-          {order.status === "NAO_INICIADA" && (
-            <button className="btn" disabled={busy} onClick={onStart}>
-              {busy ? "A iniciar..." : "Iniciar produção"}
-            </button>
-          )}
-          {order.status === "EM_PRODUCAO" && (
-            <button className="btn" disabled={busy} onClick={onAdvance}>
-              {busy ? "A avançar..." : "Avançar etapa"}
-            </button>
-          )}
-          <Link to={`/service-orders/${order.id}`} className="btn secondary" onClick={onClose}>
-            Ver detalhes completos
-          </Link>
-        </div>
+        )}
+        {order.status === "EM_PRODUCAO" && (
+          <button className="btn" disabled={busy} onClick={onAdvance}>
+            {busy ? "A avançar..." : "Avançar etapa"}
+          </button>
+        )}
+        <Link to={`/service-orders/${order.id}`} className="btn secondary" onClick={onClose}>
+          Ver detalhes completos
+        </Link>
       </div>
     </div>
   );

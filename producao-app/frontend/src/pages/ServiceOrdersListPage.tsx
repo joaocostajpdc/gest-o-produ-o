@@ -521,6 +521,9 @@ function ServiceOrderQuickViewCard({
           <div className="qv-popover-subtitle">
             {order.client.name} — {order.product.name}
           </div>
+          {order.product.description && (
+            <div className="qv-popover-description">{order.product.description}</div>
+          )}
         </div>
         <button type="button" className="qv-close-btn" onClick={onClose} aria-label="Fechar">
           ×

@@ -467,7 +467,6 @@ export function ServiceOrdersListPage() {
 // usada aqui só para calcular onde o encostar sem sair do ecrã.
 const QV_POPOVER_WIDTH = 340;
 const QV_POPOVER_MARGIN = 12;
-const QV_POPOVER_EST_HEIGHT = 340;
 
 // Cartão de consulta rápida aberto a partir da listagem, ao passar o rato
 // (ou tocar/focar) no nº da OS: mostra a informação básica já disponível na
@@ -500,11 +499,22 @@ function ServiceOrderQuickViewCard({
     QV_POPOVER_MARGIN,
     Math.min(rect.left, window.innerWidth - QV_POPOVER_WIDTH - QV_POPOVER_MARGIN)
   );
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const openUpwards = spaceBelow < QV_POPOVER_EST_HEIGHT && rect.top > QV_POPOVER_EST_HEIGHT;
+  // Abre sempre para o lado (cima/baixo) com mais espaço livre, e limita a
+  // altura do cartão ao espaço realmente disponível nesse lado (em vez de
+  // uma altura fixa estimada) — o cartão já tem overflow-y:auto (ver
+  // .qv-popover em global.css), por isso o que não couber fica com scroll
+  // próprio em vez de ultrapassar o ecrã. Sem isto, uma OS perto do topo da
+  // página (pouco espaço acima) podia abrir para cima na mesma e ficar com
+  // o topo do cartão (nº da OS, descrição do produto, badges) cortado e
+  // invisível acima do ecrã — pedido do utilizador de 2026-09-28, depois
+  // de a descrição do produto ter tornado o cartão mais alto.
+  const spaceBelow = window.innerHeight - rect.bottom - QV_POPOVER_MARGIN;
+  const spaceAbove = rect.top - QV_POPOVER_MARGIN;
+  const openUpwards = spaceAbove > spaceBelow;
+  const maxHeight = Math.max(openUpwards ? spaceAbove : spaceBelow, 160);
   const position: CSSProperties = openUpwards
-    ? { left, bottom: window.innerHeight - rect.top + 8 }
-    : { left, top: rect.bottom + 8 };
+    ? { left, bottom: window.innerHeight - rect.top + 8, maxHeight }
+    : { left, top: rect.bottom + 8, maxHeight };
 
   return (
     <div

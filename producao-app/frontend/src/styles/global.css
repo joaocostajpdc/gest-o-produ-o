@@ -557,6 +557,18 @@ tr:hover td {
   color: var(--color-text-muted);
 }
 
+/* Descrição do produto (Product.description) no cartão de consulta rápida
+   — mesmo campo mostrado no cartão "Características do Produto" da página
+   de detalhe da OS, aqui em versão compacta — pedido do utilizador de
+   2026-09-27. */
+.qv-popover-description {
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
 .qv-popover-badges {
   display: flex;
   gap: 8px;

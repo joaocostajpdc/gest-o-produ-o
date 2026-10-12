@@ -1,4 +1,4 @@
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, buildQuery } from "../api/client";
 import {
@@ -40,64 +40,34 @@ export function ServiceOrdersListPage() {
   const [importingPdf, setImportingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  // Cartão de consulta rápida ao passar o rato (ou tocar/focar) no nº da OS
-  // na tabela — mostra de imediato a informação básica da linha e um botão
-  // para avançar de etapa, sem sair da listagem e sem precisar de clicar
-  // (ver pedidos do utilizador de 2026-09-27: primeiro um pop-up ao clique,
-  // depois "quero que apareça sem ter que clicar outra vez"). Guarda-se
-  // também a posição do nº clicado/focado (`rect`), para posicionar o
-  // cartão logo ao lado em vez de ao centro do ecrã.
-  const [quickView, setQuickView] = useState<{ order: ServiceOrderListItem; rect: DOMRect } | null>(null);
+  // Cartão de consulta rápida da OS: abre ao CENTRO do ecrã, só ao clicar no
+  // nº da OS na tabela (já não abre ao passar o rato — pedido do utilizador
+  // de 2026-10-12: "tira este pop-up assim, quero que abra a meio"). Mostra
+  // a informação básica da linha e um botão para avançar de etapa, sem sair
+  // da listagem.
+  const [quickView, setQuickView] = useState<{ order: ServiceOrderListItem } | null>(null);
   const [quickViewBusy, setQuickViewBusy] = useState(false);
   const [quickViewError, setQuickViewError] = useState<string | null>(null);
-  const quickViewCloseTimer = useRef<number | null>(null);
 
-  function cancelQuickViewClose() {
-    if (quickViewCloseTimer.current !== null) {
-      window.clearTimeout(quickViewCloseTimer.current);
-      quickViewCloseTimer.current = null;
-    }
-  }
-
-  // Pequeno atraso antes de fechar (em vez de fechar logo ao sair com o
-  // rato do nº da OS) — dá tempo de o rato chegar ao cartão sem este
-  // desaparecer a meio do caminho.
-  function scheduleQuickViewClose() {
-    cancelQuickViewClose();
-    quickViewCloseTimer.current = window.setTimeout(() => setQuickView(null), 150);
-  }
-
-  function openQuickView(order: ServiceOrderListItem, target: HTMLElement) {
-    cancelQuickViewClose();
-    setQuickView({ order, rect: target.getBoundingClientRect() });
+  function openQuickView(order: ServiceOrderListItem) {
+    setQuickView({ order });
     setQuickViewError(null);
   }
 
-  // Enquanto o cartão está aberto: Esc fecha, deslocar a página fecha (a
-  // posição do cartão é calculada uma única vez, na abertura, por isso não
-  // a acompanharia), e clicar fora do cartão e fora de qualquer nº de OS
-  // também fecha — cobre o caso de abertura por toque/clique (sem rato a
-  // sair de lado nenhum para despoletar o fecho automático).
+  // Enquanto o cartão está aberto: Esc fecha (clicar no fundo escurecido
+  // também fecha, ver o overlay mais abaixo) e a página por trás não se
+  // desloca.
   useEffect(() => {
     if (!quickView) return;
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") setQuickView(null);
     }
-    function handleScroll() {
-      setQuickView(null);
-    }
-    function handlePointerDown(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (target.closest(".qv-popover") || target.closest(".link-button")) return;
-      setQuickView(null);
-    }
     window.addEventListener("keydown", handleKey);
-    window.addEventListener("scroll", handleScroll, true);
-    document.addEventListener("mousedown", handlePointerDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", handleKey);
-      window.removeEventListener("scroll", handleScroll, true);
-      document.removeEventListener("mousedown", handlePointerDown);
+      document.body.style.overflow = previousOverflow;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickView !== null]);
@@ -232,7 +202,7 @@ export function ServiceOrdersListPage() {
       await action();
       const data = await loadOrders();
       const updated = data.find((o) => o.id === orderId);
-      setQuickView((current) => (updated && current ? { order: updated, rect: current.rect } : null));
+      setQuickView((current) => (updated && current ? { order: updated } : null));
     } catch (err) {
       setQuickViewError(err instanceof Error ? err.message : "Ocorreu um erro.");
     } finally {
@@ -388,9 +358,7 @@ export function ServiceOrdersListPage() {
                       className="link-button"
                       aria-haspopup="dialog"
                       aria-expanded={quickView?.order.id === o.id}
-                      onMouseEnter={(e) => openQuickView(o, e.currentTarget)}
-                      onMouseLeave={scheduleQuickViewClose}
-                      onClick={(e) => openQuickView(o, e.currentTarget)}
+                      onClick={() => openQuickView(o)}
                     >
                       {o.externalId}
                     </button>
@@ -443,12 +411,9 @@ export function ServiceOrdersListPage() {
       {quickView && (
         <ServiceOrderQuickViewCard
           order={quickView.order}
-          rect={quickView.rect}
           busy={quickViewBusy}
           actionError={quickViewError}
           onClose={() => setQuickView(null)}
-          onMouseEnter={cancelQuickViewClose}
-          onMouseLeave={scheduleQuickViewClose}
           onStart={() =>
             runQuickViewAction(quickView.order.id, () => api.post(`/service-orders/${quickView.order.id}/start`))
           }
@@ -463,67 +428,34 @@ export function ServiceOrdersListPage() {
   );
 }
 
-// Largura fixa do cartão (mantida também em global.css, em .qv-popover) —
-// usada aqui só para calcular onde o encostar sem sair do ecrã.
-const QV_POPOVER_WIDTH = 340;
-const QV_POPOVER_MARGIN = 12;
-
-// Cartão de consulta rápida aberto a partir da listagem, ao passar o rato
-// (ou tocar/focar) no nº da OS: mostra a informação básica já disponível na
-// linha da tabela (sem pedido extra ao servidor) e, tal como na página de
-// detalhe da OS, um botão para avançar a produção para a etapa/estado
-// seguinte. Usa position:fixed, ancorado ao elemento que o abriu, para
-// nunca ficar cortado pelo scroll horizontal da tabela em ecrãs estreitos.
+// Cartão de consulta rápida aberto a partir da listagem, ao clicar no nº da
+// OS: janela centrada no ecrã, com fundo escurecido (clicar fora ou Esc
+// fecha). Mostra a informação básica já disponível na linha da tabela (sem
+// pedido extra ao servidor) e, tal como na página de detalhe da OS, um
+// botão para avançar a produção para a etapa/estado seguinte.
 function ServiceOrderQuickViewCard({
   order,
-  rect,
   busy,
   actionError,
   onClose,
-  onMouseEnter,
-  onMouseLeave,
   onStart,
   onAdvance,
 }: {
   order: ServiceOrderListItem;
-  rect: DOMRect;
   busy: boolean;
   actionError: string | null;
   onClose: () => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   onStart: () => void;
   onAdvance: () => void;
 }) {
-  const left = Math.max(
-    QV_POPOVER_MARGIN,
-    Math.min(rect.left, window.innerWidth - QV_POPOVER_WIDTH - QV_POPOVER_MARGIN)
-  );
-  // Abre sempre para o lado (cima/baixo) com mais espaço livre, e limita a
-  // altura do cartão ao espaço realmente disponível nesse lado (em vez de
-  // uma altura fixa estimada) — o cartão já tem overflow-y:auto (ver
-  // .qv-popover em global.css), por isso o que não couber fica com scroll
-  // próprio em vez de ultrapassar o ecrã. Sem isto, uma OS perto do topo da
-  // página (pouco espaço acima) podia abrir para cima na mesma e ficar com
-  // o topo do cartão (nº da OS, descrição do produto, badges) cortado e
-  // invisível acima do ecrã — pedido do utilizador de 2026-09-28, depois
-  // de a descrição do produto ter tornado o cartão mais alto.
-  const spaceBelow = window.innerHeight - rect.bottom - QV_POPOVER_MARGIN;
-  const spaceAbove = rect.top - QV_POPOVER_MARGIN;
-  const openUpwards = spaceAbove > spaceBelow;
-  const maxHeight = Math.max(openUpwards ? spaceAbove : spaceBelow, 160);
-  const position: CSSProperties = openUpwards
-    ? { left, bottom: window.innerHeight - rect.top + 8, maxHeight }
-    : { left, top: rect.bottom + 8, maxHeight };
-
   return (
+    <div className="qv-overlay" onMouseDown={onClose}>
     <div
       className="qv-popover"
-      style={position}
       role="dialog"
+      aria-modal="true"
       aria-label={`Informação rápida da OS ${order.externalId}`}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="qv-popover-header">
         <div>
@@ -600,6 +532,7 @@ function ServiceOrderQuickViewCard({
           Ver detalhes completos
         </Link>
       </div>
+    </div>
     </div>
   );
 }

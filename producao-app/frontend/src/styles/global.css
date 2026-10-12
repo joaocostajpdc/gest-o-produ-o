@@ -522,12 +522,21 @@ tr:hover td {
 /* horizontal da tabela em ecrãs estreitos — ver pedidos do utilizador    */
 /* de 2026-09-27.                                                         */
 /* --------------------------------------------------------------------- */
-.qv-popover {
+.qv-overlay {
   position: fixed;
+  inset: 0;
   z-index: 100;
-  width: 340px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(20, 24, 40, 0.45);
+}
+
+.qv-popover {
+  width: 420px;
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
   overflow-y: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-border);

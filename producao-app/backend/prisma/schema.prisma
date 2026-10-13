@@ -50,6 +50,7 @@ model User {
   stageTransitions  ServiceOrderStageInstance[] @relation("StageChangedBy")
   uploadedAttachments Attachment[]
   materialRequests  MaterialRequest[]
+  powderMovements   PowderMovement[]
 
   @@map("users")
 }
@@ -421,4 +422,83 @@ model HistoryEvent {
 
   @@index([serviceOrderId, createdAt])
   @@map("history_events")
+}
+
+// ---------------------------------------------------------------------------
+// Pó em Stock (tintas em pó para lacagem) — pedido do utilizador de
+// 2026-10-13: nova aba com Referência / Marca / Código / RAL / Quant. (kg) /
+// Local (Lavagens ou Armazém), e uma etiqueta com código de barras por caixa
+// para dar entrada e saída de pó mais depressa.
+//
+// O "código" é o conteúdo do código de barras/QR impresso na etiqueta da
+// caixa — por isso é único. A quantidade em stock é mantida em kg e
+// atualizada por cada movimento (entrada/saída), que fica registado em
+// PowderMovement para se saber quem tirou/deu entrada de quanto e quando.
+// ---------------------------------------------------------------------------
+
+enum PowderLocation {
+  LAVAGENS
+  ARMAZEM
+}
+
+enum PowderMovementType {
+  ENTRADA
+  SAIDA
+  ACERTO
+}
+
+model PowderStock {
+  id          String         @id @default(cuid())
+  referencia  String
+  marca       String
+  codigo      String         @unique
+  ral         String?
+  quantityKg  Decimal        @default(0) @db.Decimal(10, 2)
+  location    PowderLocation @default(ARMAZEM)
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  movements   PowderMovement[]
+
+  @@map("powder_stock")
+}
+
+model PowderMovement {
+  id         String             @id @default(cuid())
+  powderId   String
+  powder     PowderStock        @relation(fields: [powderId], references: [id], onDelete: Cascade)
+  type       PowderMovementType
+  // Sempre positivo para ENTRADA/SAIDA; para ACERTO (correção manual do
+  // stock ao editar a quantidade) guarda a diferença, com sinal.
+  quantityKg Decimal            @db.Decimal(10, 2)
+  balanceKg  Decimal            @db.Decimal(10, 2) // stock depois deste movimento
+  notes      String?
+  userId     String?
+  user       User?              @relation(fields: [userId], references: [id])
+  createdAt  DateTime           @default(now())
+
+  @@index([powderId, createdAt])
+  @@map("powder_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Lançamento faseado de funcionalidades novas — pedido do utilizador de
+// 2026-10-13: "quero primeiro lançar as atualizações apenas para o
+// administrador e só depois de ele aprovar lançar para o resto".
+//
+// Enquanto `released` for false, a funcionalidade só está disponível para
+// utilizadores ADMINISTRADOR (no menu e na API). O administrador aprova-a
+// dentro da própria aplicação, o que a liberta para todos os perfis sem
+// precisar de novo deploy. Sem linha na tabela = ainda não aprovada.
+// ---------------------------------------------------------------------------
+
+model FeatureRelease {
+  key          String    @id // ex.: "powderStock"
+  released     Boolean   @default(false)
+  releasedAt   DateTime?
+  releasedById String?
+  updatedAt    DateTime  @updatedAt
+
+  @@map("feature_releases")
 }

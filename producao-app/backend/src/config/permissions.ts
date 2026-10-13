@@ -30,7 +30,12 @@ export type Permission =
   | "observations:write"
   | "reports:printable"
   | "materialRequests:read"
-  | "materialRequests:write";
+  | "materialRequests:write"
+  // Pó em Stock (2026-10-13): consultar, criar/editar/remover pós, e dar
+  // entrada/saída de quantidades (o que se faz ao ler a etiqueta da caixa).
+  | "powderStock:read"
+  | "powderStock:write"
+  | "powderStock:move";
 
 const ALL_PERMISSIONS: Permission[] = [
   "products:read",
@@ -52,6 +57,9 @@ const ALL_PERMISSIONS: Permission[] = [
   "reports:printable",
   "materialRequests:read",
   "materialRequests:write",
+  "powderStock:read",
+  "powderStock:write",
+  "powderStock:move",
 ];
 
 export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
@@ -77,6 +85,9 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "reports:printable",
     "materialRequests:read",
     "materialRequests:write",
+    "powderStock:read",
+    "powderStock:write",
+    "powderStock:move",
   ],
 
   // Operário - execução e consulta das operações produtivas
@@ -91,6 +102,10 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "observations:write",
     "reports:printable",
     "materialRequests:read",
+    // O operário dá entrada/saída de pó (ao levar ou devolver uma caixa),
+    // mas não cria nem apaga referências.
+    "powderStock:read",
+    "powderStock:move",
   ],
 };
 

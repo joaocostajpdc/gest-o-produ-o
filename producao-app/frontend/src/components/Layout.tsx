@@ -1,6 +1,7 @@
 import { SVGProps, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
+import { useFeature } from "../contexts/FeaturesContext";
 import logoMark from "../assets/logo-mark.png";
 import {
   IconBox,
@@ -38,6 +39,28 @@ function IconScan(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone do "Pó em Stock" (lata/balde de tinta) — também aqui, pelo mesmo
+// motivo do ícone acima.
+function IconPaintBucket(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M5 7h14l-1.5 12.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5L5 7Z" />
+      <ellipse cx="12" cy="7" rx="7" ry="2.5" />
+      <path d="M9 12h6" />
+    </svg>
+  );
+}
+
 function initials(name?: string) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
@@ -48,6 +71,9 @@ function initials(name?: string) {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  // Pó em Stock: enquanto não for aprovado pelo administrador, só aparece
+  // no menu dos administradores, com a marca "Teste" (ver FeaturesContext).
+  const powderStock = useFeature("powderStock");
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
   // CSS ignora esta flag e o menu está sempre visível.
@@ -106,6 +132,20 @@ export function Layout() {
           <NavLink to="/material-a-pedir">
             <IconShoppingCart /> Material a Pedir
           </NavLink>
+          {powderStock.available && (
+            <NavLink to="/po-em-stock">
+              <IconPaintBucket /> Pó em Stock
+              {!powderStock.released && (
+                <span
+                  className="badge"
+                  style={{ background: "#d97706", marginLeft: "auto", fontSize: 10, padding: "1px 6px" }}
+                  title="Só visível para administradores até ser aprovado"
+                >
+                  Teste
+                </span>
+              )}
+            </NavLink>
+          )}
           <NavLink to="/reports">
             <IconPrinter /> Listagens Imprimíveis
           </NavLink>

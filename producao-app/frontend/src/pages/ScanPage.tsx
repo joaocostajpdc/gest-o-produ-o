@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { api } from "../api/client";
-import { ServiceOrderListItem } from "../types";
+import { Powder, ServiceOrderListItem } from "../types";
+import { useFeature } from "../contexts/FeaturesContext";
 
 // ============================================================================
 // Ler Código — lê o código de barras impresso na Etiqueta de Código de
@@ -35,6 +36,10 @@ const READER_ELEMENT_ID = "barcode-scanner-viewport";
 
 export function ScanPage() {
   const navigate = useNavigate();
+  // Pó em Stock (2026-10-13): o mesmo botão também lê as etiquetas das
+  // caixas de pó — se o código lido for de um pó, abre-o no Pó em Stock para
+  // dar entrada/saída; senão, procura uma Ordem de Serviço como antes.
+  const powderStock = useFeature("powderStock");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   // "Pedido" do utilizador (torna o contentor visível) vs. "scanning"
   // (câmara já efetivamente a correr) — propositadamente dois estados
@@ -53,6 +58,17 @@ export function ScanPage() {
     if (!trimmed) return;
     setLooking(true);
     setLookupError(null);
+    if (powderStock.available) {
+      try {
+        const powder = await api.get<Powder>(`/powders/by-code/${encodeURIComponent(trimmed)}`);
+        setWantsCamera(false);
+        setLooking(false);
+        navigate(`/po-em-stock?codigo=${encodeURIComponent(powder.codigo)}`);
+        return;
+      } catch {
+        // não é um pó — continua para a procura de Ordem de Serviço
+      }
+    }
     try {
       const results = await api.get<ServiceOrderListItem[]>(
         `/service-orders?search=${encodeURIComponent(trimmed)}`

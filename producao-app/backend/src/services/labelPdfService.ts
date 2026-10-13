@@ -1117,3 +1117,144 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
 
   doc.end();
 }
+
+// ---------------------------------------------------------------------------
+// Etiqueta de Pó (caixa de tinta em pó) — pedido do utilizador de
+// 2026-10-13: "uma etiqueta para pôr em cada caixa com código de barras para
+// ser mais fácil fazer entrada e saída de pós", "pequena mas respeita a
+// largura", com "código de barras, QR e logo", "marca" e "referência do pó",
+// e "igual às dos painéis".
+//
+// Mesmo rolo e impressora das etiquetas dos painéis e das mosquiteiras
+// (Brother QL-1100, rolo contínuo DK-22243 de 102mm): a largura é sempre a
+// do rolo (PRODUCT_LABEL_WIDTH). A altura é FIXA em 90mm, a mesma da
+// Etiqueta de Mosquiteira — ver a longa nota acima sobre o driver da Brother
+// /Adobe Acrobat, que só imprime bem quando a altura do PDF coincide com o
+// tamanho de papel personalizado registado na impressora (103 x 90mm).
+// Usar exatamente a mesma altura evita ter de mudar essa definição.
+//
+// O código de barras (Code128) e o QR levam ambos o "Código" do pó — é isso
+// que o botão "Ler Código" da aplicação procura para abrir o pó e registar a
+// entrada/saída. O QR é uma segunda forma de leitura, mais rápida de apanhar
+// com a câmara do telemóvel do que o código de barras.
+// ---------------------------------------------------------------------------
+
+export interface PowderLabelData {
+  referencia: string;
+  marca: string;
+  codigo: string;
+  ral?: string | null;
+}
+
+const POWDER_LABEL_HEIGHT = 90 * 2.83465;
+const PW_MARGIN = 10;
+const PW_LOGO_SIZE = 30;
+
+async function generatePowderBarcode(text: string): Promise<Buffer> {
+  return bwipjs.toBuffer({
+    bcid: "code128",
+    text,
+    scale: 3,
+    height: 12,
+    includetext: true,
+    textxalign: "center",
+    textsize: 9,
+  });
+}
+
+function renderPowderLabelPage(
+  doc: PDFKit.PDFDocument,
+  data: PowderLabelData,
+  barcodePng: Buffer,
+  qrPng: Buffer
+) {
+  const width = PRODUCT_LABEL_WIDTH - PW_MARGIN * 2;
+
+  // Cabeçalho compacto: logótipo à esquerda e nome da empresa ao lado (em vez
+  // de centrado por cima, como nos painéis) para poupar altura e deixar o
+  // espaço para a marca/referência e para os códigos.
+  doc.image(LOGO_PNG, PW_MARGIN, PW_MARGIN, { width: PW_LOGO_SIZE, height: PW_LOGO_SIZE });
+  const headerX = PW_MARGIN + PW_LOGO_SIZE + 8;
+  const headerWidth = width - PW_LOGO_SIZE - 8;
+  doc
+    .fontSize(11)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text("MINHO FERRAGENS", headerX, PW_MARGIN + 4, { width: headerWidth, height: 13, ellipsis: true });
+  doc
+    .fontSize(6.5)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Oblique")
+    .text("JPDC - MYNHOFERRAGENS, LDA", headerX, PW_MARGIN + 18, { width: headerWidth, height: 9, ellipsis: true });
+
+  let y = PW_MARGIN + PW_LOGO_SIZE + 6;
+  doc
+    .moveTo(PW_MARGIN, y)
+    .lineTo(PRODUCT_LABEL_WIDTH - PW_MARGIN, y)
+    .strokeColor(COLORS.border)
+    .lineWidth(1)
+    .stroke();
+  y += 8;
+
+  // Marca (pequena, em cima) e Referência do pó (em destaque) — o que se
+  // procura com os olhos na prateleira.
+  doc
+    .fontSize(10)
+    .fillColor(COLORS.muted)
+    .font("Helvetica-Bold")
+    .text(data.marca.toUpperCase(), PW_MARGIN, y, { width, height: 13, ellipsis: true });
+  y += 14;
+
+  doc
+    .fontSize(17)
+    .fillColor(COLORS.ink)
+    .font("Helvetica-Bold")
+    .text(data.referencia, PW_MARGIN, y, { width, height: 21, ellipsis: true });
+  y += 22;
+
+  if (data.ral) {
+    const ralText = /^ral\b/i.test(data.ral) ? data.ral : `RAL ${data.ral}`;
+    doc
+      .fontSize(11)
+      .fillColor(COLORS.ink)
+      .font("Helvetica-Bold")
+      .text(ralText, PW_MARGIN, y, { width, height: 14, ellipsis: true });
+    y += 16;
+  }
+
+  // Códigos lado a lado (código de barras à esquerda, QR à direita), tal como
+  // nos painéis, ocupando o espaço que sobra até ao fundo da etiqueta.
+  // Os códigos crescem até ocupar o espaço que sobra (no máximo 92pt, ~32mm)
+  // e ficam centrados verticalmente nesse espaço — sem deixar uma faixa em
+  // branco no fundo, e o maior possível para a câmara os ler à primeira.
+  const available = POWDER_LABEL_HEIGHT - y - PW_MARGIN;
+  const qrSize = Math.min(92, available - 4);
+  y += Math.max(4, (available - qrSize) / 2);
+  const codesGap = 10;
+  const barcodeColWidth = width - qrSize - codesGap;
+  doc.image(barcodePng, PW_MARGIN, y, { fit: [barcodeColWidth, qrSize], align: "center", valign: "center" });
+  doc.image(qrPng, PW_MARGIN + width - qrSize, y, { width: qrSize, height: qrSize });
+}
+
+export async function streamPowderLabelPdf(res: Response, data: PowderLabelData, copies = 1) {
+  const [barcodePng, qrPng] = await Promise.all([
+    generatePowderBarcode(data.codigo),
+    generateQrCode(data.codigo),
+  ]);
+
+  const doc = new PDFDocument({ margin: PW_MARGIN, autoFirstPage: false });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="etiqueta-po-${sanitizeFilename(data.codigo)}.pdf"`
+  );
+  doc.pipe(res);
+
+  for (let i = 0; i < copies; i++) {
+    doc.addPage({ size: [PRODUCT_LABEL_WIDTH, POWDER_LABEL_HEIGHT] });
+    renderPowderLabelPage(doc, data, barcodePng, qrPng);
+  }
+
+  doc.end();
+}

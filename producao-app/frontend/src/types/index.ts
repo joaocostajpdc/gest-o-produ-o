@@ -218,3 +218,55 @@ export interface Client {
   name: string;
   taxNumber?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Pó em Stock (2026-10-13)
+// ---------------------------------------------------------------------------
+
+export type PowderLocation = "LAVAGENS" | "ARMAZEM";
+
+export const POWDER_LOCATION_LABELS: Record<PowderLocation, string> = {
+  LAVAGENS: "Lavagens",
+  ARMAZEM: "Armazém",
+};
+
+export type PowderMovementType = "ENTRADA" | "SAIDA" | "ACERTO";
+
+export const POWDER_MOVEMENT_LABELS: Record<PowderMovementType, string> = {
+  ENTRADA: "Entrada",
+  SAIDA: "Saída",
+  ACERTO: "Acerto",
+};
+
+export interface PowderMovement {
+  id: string;
+  type: PowderMovementType;
+  quantityKg: number;
+  balanceKg: number;
+  notes?: string | null;
+  user?: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+export interface Powder {
+  id: string;
+  referencia: string;
+  marca: string;
+  codigo: string;
+  ral?: string | null;
+  quantityKg: number;
+  location: PowderLocation;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  movements?: PowderMovement[];
+}
+
+// Lançamento faseado de funcionalidades novas (ver FeaturesContext).
+export interface FeatureState {
+  key: string;
+  name: string;
+  released: boolean;
+  available: boolean;
+  releasedAt: string | null;
+}

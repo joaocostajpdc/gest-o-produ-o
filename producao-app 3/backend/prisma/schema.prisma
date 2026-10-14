@@ -1,0 +1,572 @@
+// ============================================================================
+// Schema Prisma - App de Gestão de Produção
+//
+// Cobre os requisitos do documento "Proposta de Alteração AppProdução":
+//   - Produtos
+//   - Prazos de Produção por Produto + Prioridade/Cores
+//   - Estados da Ordem de Serviço + Tempo por Etapa
+//   - Distinção Tempo de Produção vs Tempo de Permanência
+//   - Interrupções de Produção (motivo obrigatório)
+//   - Clientes (via integração Goldylocks)
+//   - Observações de Produção
+//   - Histórico Global da Ordem de Serviço
+//   - Etapas e Linhas de Produção (predefinidas + alterações pontuais)
+//   - Fornecedores associados a etapas
+//   - Utilizadores e Permissões (Administrador / Supervisor / Operário)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Utilizadores e Permissões
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMINISTRADOR
+  SUPERVISOR
+  OPERARIO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(OPERARIO)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  observations      Observation[]
+  interruptions     Interruption[]
+  historyEvents     HistoryEvent[]
+  stageTransitions  ServiceOrderStageInstance[] @relation("StageChangedBy")
+  uploadedAttachments Attachment[]
+  materialRequests  MaterialRequest[]
+  powderMovements   PowderMovement[]
+  glassOrders       GlassOrder[]
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Clientes (originados no software de faturação - Goldylocks)
+// ---------------------------------------------------------------------------
+
+model Client {
+  id          String   @id @default(cuid())
+  externalId  String   @unique // id no Goldylocks
+  name        String
+  taxNumber   String?
+  email       String?
+  phone       String?
+  syncedAt    DateTime @default(now())
+
+  serviceOrders ServiceOrder[]
+
+  @@map("clients")
+}
+
+// ---------------------------------------------------------------------------
+// Produtos
+// ---------------------------------------------------------------------------
+
+model Product {
+  id              String   @id @default(cuid())
+  externalId      String?  @unique // id no Goldylocks, se aplicável
+  name            String
+  description     String?
+  // Categoria "leve", apenas para agrupar/filtrar produtos na pesquisa
+  // (ex.: "Mosquiteiras", "Painéis") — ao contrário do antigo modelo de
+  // Categoria, não tem prazo de produção nem linha de produção própria;
+  // isso continua a ser definido por Produto.
+  category        String?
+  productionDays  Int      @default(0) // prazo de produção padrão (dias) usado para calcular a data-limite
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  serviceOrders   ServiceOrder[]
+  lineSteps       ProductionLineStep[]
+
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Fornecedores
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String?
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  stageAssociations   ProductionLineStep[] @relation("StageDefaultSupplier")
+  stageInstances      ServiceOrderStageInstance[]
+  leadTimes           SupplierLeadTime[]
+  materialRequests    MaterialRequest[]
+  powderStock         PowderStock[]
+  glassOrders         GlassOrder[]
+
+  @@map("suppliers")
+}
+
+// ---------------------------------------------------------------------------
+// Material a pedir aos fornecedores (matéria-prima/encomendas, ex.: vidro,
+// alumínio, parafusos) — lista de necessidades simples, independente das
+// Ordens de Serviço, para acompanhar o que falta encomendar/receber.
+// ---------------------------------------------------------------------------
+
+// Simplificado para 2 estados (Por tratar / Tratado) — ver pedido do
+// utilizador de 2026-09-01. Os nomes internos do enum mantêm-se (A_PEDIR,
+// RECEBIDO) para não obrigar a migrar dados já existentes; só os rótulos
+// mostrados na aplicação mudaram (ver MATERIAL_REQUEST_STATUS_LABELS no
+// frontend).
+enum MaterialRequestStatus {
+  A_PEDIR
+  RECEBIDO
+}
+
+model MaterialRequest {
+  id            String                @id @default(cuid())
+  description   String
+  quantity      String? // texto livre (ex.: "10 un", "2 rolos"), para não impor uma unidade rígida
+  supplierId    String?
+  supplier      Supplier?             @relation(fields: [supplierId], references: [id])
+  status        MaterialRequestStatus @default(A_PEDIR)
+  notes         String?
+  requestedById String?
+  requestedBy   User?                 @relation(fields: [requestedById], references: [id])
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  orderedAt     DateTime?
+  receivedAt    DateTime?
+
+  @@map("material_requests")
+}
+
+// Prazo de entrega (dias) que este fornecedor pratica para peças de uma
+// dada categoria de produto (ex.: Alumiasas / Mosquiteiras -> 10 dias).
+// Usado, por agora, apenas para a etapa "Lacagem": ao entrar nessa etapa
+// junto de um fornecedor, calcula-se a data prevista de devolução como
+// data de entrada + leadDays (procurado por [fornecedor, categoria]).
+model SupplierLeadTime {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  category   String   // mesmo valor usado em Product.category
+  leadDays   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([supplierId, category])
+  @@map("supplier_lead_times")
+}
+
+// ---------------------------------------------------------------------------
+// Etapas de Produção (catálogo global) e Linhas de Produção (por produto)
+// ---------------------------------------------------------------------------
+
+model Stage {
+  id          String   @id @default(cuid())
+  name        String   @unique // ex.: "Corte", "Fresagem", "Lacagem", "Embalagem"
+  description String?
+  requiresSupplier Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  lineSteps      ProductionLineStep[]
+  stageInstances ServiceOrderStageInstance[]
+
+  @@map("stages")
+}
+
+// Linha de produção predefinida por produto: sequência ordenada de etapas.
+model ProductionLineStep {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id])
+  order      Int      // posição na sequência (1, 2, 3, ...)
+  defaultSupplierId String?
+  defaultSupplier    Supplier? @relation("StageDefaultSupplier", fields: [defaultSupplierId], references: [id])
+
+  @@unique([productId, order])
+  @@map("production_line_steps")
+}
+
+// ---------------------------------------------------------------------------
+// Ordens de Serviço
+// ---------------------------------------------------------------------------
+
+enum ServiceOrderStatus {
+  NAO_INICIADA
+  EM_PRODUCAO
+  SUSPENSA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum PriorityLevel {
+  PRAZO_ULTRAPASSADO
+  URGENTE
+  PROXIMO
+  COM_MARGEM
+}
+
+model ServiceOrder {
+  id                String             @id @default(cuid())
+  externalId        String             @unique // Ordem de Serviço no Goldylocks
+  clientId          String
+  client            Client             @relation(fields: [clientId], references: [id])
+  productId         String
+  product           Product            @relation(fields: [productId], references: [id])
+
+  status            ServiceOrderStatus @default(NAO_INICIADA)
+
+  createdAt         DateTime           @default(now()) // entrada na aplicação
+  startedAt         DateTime?          // início efetivo de produção
+  completedAt       DateTime?          // conclusão
+  deadlineAt        DateTime?          // data-limite calculada (createdAt/startedAt + productionDays do produto)
+
+  // Características específicas desta encomenda (Modelo, Dimensões,
+  // Acabamento, Enchimento, referência à Encomenda Cliente, etc.), tal como
+  // vieram da Ordem Serviço do Goldylocks — mostradas em destaque no topo da
+  // página da OS, por serem informação de produto importante para a
+  // produção (distinta das observações de acompanhamento do dia a dia).
+  specifications    String?            @db.Text
+
+  // Tempo de produção acumulado (excluindo suspensões), em minutos.
+  // Atualizado incrementalmente pelo timeTrackingService.
+  productionMinutes Int                @default(0)
+  lastResumedAt     DateTime?          // timestamp do último "retomar" (para calcular o incremento em curso)
+
+  currentStageInstanceId String?       @unique
+
+  stageInstances    ServiceOrderStageInstance[] @relation("SOStageInstances")
+  currentStageInstance ServiceOrderStageInstance? @relation("CurrentStage", fields: [currentStageInstanceId], references: [id])
+  interruptions     Interruption[]
+  observations      Observation[]
+  historyEvents     HistoryEvent[]
+  attachments       Attachment[]
+  glassOrders       GlassOrder[]
+
+  @@index([status])
+  @@index([deadlineAt])
+  @@map("service_orders")
+}
+
+// Instância concreta de uma OS numa etapa (permite alterações pontuais ao fluxo:
+// avançar, recuar, inserir etapas adicionais, omitir etapas, sem alterar a
+// linha de produção predefinida do produto).
+enum StageInstanceStatus {
+  PENDENTE
+  ATIVA
+  CONCLUIDA
+  OMITIDA
+}
+
+model ServiceOrderStageInstance {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation("SOStageInstances", fields: [serviceOrderId], references: [id])
+  stageId        String
+  stage          Stage    @relation(fields: [stageId], references: [id])
+  order          Int      // posição desta etapa no percurso *desta* OS (pode divergir da linha predefinida)
+  status         StageInstanceStatus @default(PENDENTE)
+
+  supplierId     String?
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
+
+  enteredAt      DateTime?
+  exitedAt       DateTime?
+
+  wasManuallyAdded  Boolean @default(false) // etapa inserida pontualmente (não fazia parte da linha predefinida)
+  wasSkipped        Boolean @default(false) // etapa omitida pontualmente
+
+  changedById    String?
+  changedBy      User?    @relation("StageChangedBy", fields: [changedById], references: [id])
+
+  currentFor     ServiceOrder? @relation("CurrentStage")
+  observations   Observation[]
+
+  @@index([serviceOrderId])
+  @@map("service_order_stage_instances")
+}
+
+// ---------------------------------------------------------------------------
+// Interrupções de Produção
+// ---------------------------------------------------------------------------
+
+enum InterruptionReason {
+  FALTA_MATERIA_PRIMA
+  AVARIA_EQUIPAMENTO
+  FALTA_CAPACIDADE
+  AGUARDAR_INFORMACAO
+  AGUARDAR_APROVACAO
+  AGUARDAR_FORNECEDOR
+  PROBLEMA_QUALIDADE
+  OUTRO
+}
+
+model Interruption {
+  id             String    @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  reason         InterruptionReason
+  otherDescription String? // obrigatório quando reason = OUTRO (validado na aplicação)
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  durationMinutes Int?     // calculado ao terminar a interrupção
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+
+  @@index([serviceOrderId])
+  @@map("interruptions")
+}
+
+// ---------------------------------------------------------------------------
+// Observações de Produção
+// ---------------------------------------------------------------------------
+
+model Observation {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  // Etapa a que esta observação diz respeito (opcional — uma observação pode
+  // ser geral à OS ou específica de uma etapa, ex.: "faltou verniz nesta
+  // passagem pela Lacagem").
+  stageInstanceId String?
+  stageInstance   ServiceOrderStageInstance? @relation(fields: [stageInstanceId], references: [id])
+  text           String
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+  editedAt       DateTime?
+
+  attachments    Attachment[]
+
+  @@index([serviceOrderId])
+  @@map("observations")
+}
+
+// ---------------------------------------------------------------------------
+// Anexos (desenhos técnicos, fotos do produto, fotos de observações)
+//
+// Guardados diretamente na base de dados (coluna bytea) em vez de num
+// serviço de armazenamento externo — simples de operar e suficiente para o
+// volume esperado (desenhos técnicos e fotografias tiradas no telemóvel
+// para acompanhar uma OS/observação, não um repositório de média em massa).
+// Quando associado a uma observação (observationId preenchido), é a
+// fotografia tirada diretamente no telemóvel que documenta essa observação
+// (ex.: um defeito detetado); quando não, é um anexo geral da OS (ex.: um
+// desenho técnico).
+// ---------------------------------------------------------------------------
+
+model Attachment {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  observationId  String?
+  observation    Observation? @relation(fields: [observationId], references: [id])
+  filename       String
+  mimeType       String
+  size           Int
+  data           Bytes
+  uploadedById   String?
+  uploadedBy     User?    @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([serviceOrderId])
+  @@index([observationId])
+  @@map("attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Histórico Global da Ordem de Serviço (log de auditoria cronológico)
+// ---------------------------------------------------------------------------
+
+enum HistoryEventType {
+  CRIACAO
+  ALTERACAO_ESTADO
+  ENTRADA_ETAPA
+  SAIDA_ETAPA
+  INICIO_INTERRUPCAO
+  FIM_INTERRUPCAO
+  ALTERACAO_LINHA_PRODUCAO
+  INSERCAO_ETAPA
+  OMISSAO_ETAPA
+  ENCAMINHAMENTO_FORNECEDOR
+  ENVIO_TRABALHO_EXTERNO
+  RETORNO_TRABALHO_EXTERNO
+  OBSERVACAO_REGISTADA
+  OUTRA_ALTERACAO
+}
+
+model HistoryEvent {
+  id             String   @id @default(cuid())
+  serviceOrderId String
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id])
+  type           HistoryEventType
+  description    String
+  metadata       Json?
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([serviceOrderId, createdAt])
+  @@map("history_events")
+}
+
+// ---------------------------------------------------------------------------
+// Pó em Stock (tintas em pó para lacagem) — pedido do utilizador de
+// 2026-10-13: nova aba com Referência / Marca / Código / RAL / Quant. (kg) /
+// Local (Lavagens ou Armazém), e uma etiqueta com código de barras por caixa
+// para dar entrada e saída de pó mais depressa.
+//
+// O "código" é o conteúdo do código de barras/QR impresso na etiqueta da
+// caixa — por isso é único. A quantidade em stock é mantida em kg e
+// atualizada por cada movimento (entrada/saída), que fica registado em
+// PowderMovement para se saber quem tirou/deu entrada de quanto e quando.
+// ---------------------------------------------------------------------------
+
+enum PowderLocation {
+  LAVAGENS
+  ARMAZEM
+}
+
+enum PowderMovementType {
+  ENTRADA
+  SAIDA
+  ACERTO
+  // Só mudança de local (ex.: Armazém → AM LACA), sem mexer na quantidade —
+  // pedido do utilizador de 2026-10-14.
+  MUDANCA_LOCAL
+}
+
+model PowderStock {
+  id          String         @id @default(cuid())
+  referencia  String
+  // Marca do alumínio a que este pó corresponde (ex.: Cortizo, Anicolor) —
+  // pedido do utilizador de 2026-10-14: "na tabela quero marca alumínio".
+  marca       String
+  // Marca do pó/fabricante da tinta (ex.: Interpon, Tiger) — pedido do
+  // utilizador de 2026-10-14: "aqui falta a marca pó".
+  marcaPo     String?
+  codigo      String         @unique
+  ral         String?
+  quantityKg  Decimal        @default(0) @db.Decimal(10, 2)
+  location    PowderLocation @default(ARMAZEM)
+  // Quando location = LAVAGENS: em que lavagem/lacador está o pó (ex.: AM
+  // LACA, Alumiasas) — são os Fornecedores já registados na aplicação
+  // (pedido do utilizador de 2026-10-14: "quero armazém e depois as
+  // lavagens que vamos tendo"). Novas lavagens acrescentam-se em
+  // Fornecedores e aparecem logo na lista de locais.
+  supplierId  String?
+  supplier    Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  movements   PowderMovement[]
+
+  @@map("powder_stock")
+}
+
+model PowderMovement {
+  id         String             @id @default(cuid())
+  powderId   String
+  powder     PowderStock        @relation(fields: [powderId], references: [id], onDelete: Cascade)
+  type       PowderMovementType
+  // Sempre positivo para ENTRADA/SAIDA; para ACERTO (correção manual do
+  // stock ao editar a quantidade) guarda a diferença, com sinal.
+  quantityKg Decimal            @db.Decimal(10, 2)
+  balanceKg  Decimal            @db.Decimal(10, 2) // stock depois deste movimento
+  notes      String?
+  userId     String?
+  user       User?              @relation(fields: [userId], references: [id])
+  createdAt  DateTime           @default(now())
+
+  @@index([powderId, createdAt])
+  @@map("powder_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Lançamento faseado de funcionalidades novas — pedido do utilizador de
+// 2026-10-13: "quero primeiro lançar as atualizações apenas para o
+// administrador e só depois de ele aprovar lançar para o resto".
+//
+// Enquanto `released` for false, a funcionalidade só está disponível para
+// utilizadores ADMINISTRADOR (no menu e na API). O administrador aprova-a
+// dentro da própria aplicação, o que a liberta para todos os perfis sem
+// precisar de novo deploy. Sem linha na tabela = ainda não aprovada.
+// ---------------------------------------------------------------------------
+
+model FeatureRelease {
+  key          String    @id // ex.: "powderStock"
+  released     Boolean   @default(false)
+  releasedAt   DateTime?
+  releasedById String?
+  // Utilizadores (além dos administradores) que já podem testar esta
+  // funcionalidade antes de ela ser aprovada para todos — pedido do
+  // utilizador de 2026-10-14: "quero lançar o teste do vidro para o
+  // utilizador Marco Costa".
+  testerUserIds String[] @default([])
+  updatedAt    DateTime  @updatedAt
+
+  @@map("feature_releases")
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos de Vidros — pedido do utilizador de 2026-10-14: passa para a
+// aplicação a folha "Pedidos vidros" do Excel (Data / N/Ref. / Fornecedor /
+// Medida / Caixa / Quant. / Estado / Nº Encomenda / Previsão de entrega /
+// Nota), numa página própria e também registado na Ordem de Serviço a que o
+// vidro se destina — e lançado a partir da própria OS.
+//
+// "nRef" é o número da Ordem de Serviço tal como no Excel (ex.: 2026/448);
+// quando existe uma OS com esse número na aplicação, fica também ligada por
+// serviceOrderId (para aparecer no separador "Vidros" dessa OS). Pode haver
+// vidros sem OS (ex.: para stock).
+// ---------------------------------------------------------------------------
+
+enum GlassOrderStatus {
+  POR_ENCOMENDAR
+  ENCOMENDADO
+  FINALIZADO
+}
+
+model GlassOrder {
+  id             String           @id @default(cuid())
+  date           DateTime         @default(now()) @db.Date
+  nRef           String?
+  serviceOrderId String?
+  serviceOrder   ServiceOrder?    @relation(fields: [serviceOrderId], references: [id], onDelete: SetNull)
+  supplierId     String?
+  supplier       Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  medida         String           // ex.: "1160x220"
+  caixa          String           // composição, ex.: "Fosco 4 + Cx. 18 + Fosco 4"
+  quantity       Int              @default(1)
+  status         GlassOrderStatus @default(POR_ENCOMENDAR)
+  orderNumber    String?          // Nº Encomenda ao fornecedor, ex.: "2026/245"
+  expectedDelivery String?        // texto livre, como no Excel: "13/out", "Pronto", "Em stock"
+  notes          String?
+  createdById    String?
+  createdBy      User?            @relation(fields: [createdById], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([serviceOrderId])
+  @@index([status])
+  @@map("glass_orders")
+}

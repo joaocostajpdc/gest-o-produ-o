@@ -1141,7 +1141,8 @@ export async function streamMosquiteiraLabelPdf(res: Response, data: LabelOrderD
 
 export interface PowderLabelData {
   referencia: string;
-  marca: string;
+  marca: string; // marca do alumínio (ex.: Cortizo)
+  marcaPo?: string | null; // marca do pó (ex.: Interpon)
   codigo: string;
   ral?: string | null;
 }
@@ -1202,7 +1203,15 @@ function renderPowderLabelPage(
     .fontSize(10)
     .fillColor(COLORS.muted)
     .font("Helvetica-Bold")
-    .text(data.marca.toUpperCase(), PW_MARGIN, y, { width, height: 13, ellipsis: true });
+    .text(
+      [data.marcaPo, data.marca]
+        .filter((v) => v && v.trim() && v.trim() !== "---")
+        .join("  ·  ")
+        .toUpperCase(),
+      PW_MARGIN,
+      y,
+      { width, height: 13, ellipsis: true }
+    );
   y += 14;
 
   doc

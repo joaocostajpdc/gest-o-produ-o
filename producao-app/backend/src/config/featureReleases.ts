@@ -20,6 +20,7 @@ import { prisma } from "./prisma";
 export const FEATURES = {
   powderStock: "Pó em Stock",
   glassOrders: "Pedidos de Vidros",
+  osSidePanel: "Painel lateral das OS",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

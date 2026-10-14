@@ -28,6 +28,7 @@ const kg = z.coerce.number().finite().min(0).max(100000);
 const createSchema = z.object({
   referencia: z.string().trim().min(1),
   marca: z.string().trim().min(1),
+  marcaPo: z.string().trim().optional(),
   codigo: z.string().trim().min(1).max(60),
   ral: z.string().trim().optional(),
   quantityKg: kg.optional(),
@@ -39,6 +40,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   referencia: z.string().trim().min(1).optional(),
   marca: z.string().trim().min(1).optional(),
+  marcaPo: z.string().trim().nullable().optional(),
   codigo: z.string().trim().min(1).max(60).optional(),
   ral: z.string().trim().nullable().optional(),
   quantityKg: kg.optional(),
@@ -118,6 +120,7 @@ powdersRouter.get(
       where.OR = [
         { referencia: { contains: search, mode: "insensitive" } },
         { marca: { contains: search, mode: "insensitive" } },
+        { marcaPo: { contains: search, mode: "insensitive" } },
         { codigo: { contains: search, mode: "insensitive" } },
         { ral: { contains: search, mode: "insensitive" } },
       ];
@@ -177,6 +180,7 @@ powdersRouter.post(
           data: {
             referencia: data.referencia,
             marca: data.marca,
+            marcaPo: data.marcaPo || null,
             codigo: data.codigo,
             ral: data.ral || null,
             quantityKg: qty,
@@ -231,6 +235,7 @@ powdersRouter.put(
             ...rest,
             ...loc,
             ral: data.ral === undefined ? undefined : data.ral || null,
+            marcaPo: data.marcaPo === undefined ? undefined : data.marcaPo || null,
             notes: data.notes === undefined ? undefined : data.notes || null,
           },
         });
@@ -314,6 +319,57 @@ powdersRouter.post(
   })
 );
 
+// Mudar só o local do pó (ex.: do Armazém para uma lavagem), sem indicar
+// quantidade — pedido do utilizador de 2026-10-14. Fica registado no
+// histórico de movimentos como "Mudança de local" (0 kg), com o percurso.
+const relocateSchema = z.object({
+  location: z.nativeEnum(PowderLocation),
+  supplierId: z.string().nullable().optional(),
+  notes: z.string().trim().optional(),
+});
+
+powdersRouter.post(
+  "/:id/location",
+  requirePermission("powderStock:move"),
+  asyncHandler(async (req, res) => {
+    const data = relocateSchema.parse(req.body);
+    const loc = await resolveLocation(data.location, data.supplierId);
+    const item = await prisma.$transaction(async (tx) => {
+      const existing = await tx.powderStock.findUnique({
+        where: { id: req.params.id },
+        include: { supplier: SUPPLIER_INCLUDE },
+      });
+      if (!existing) throw new Error("Pó não encontrado.");
+      if (existing.location === loc.location && (existing.supplierId ?? null) === loc.supplierId) {
+        throw new Error("O pó já está nesse local.");
+      }
+      const target = loc.supplierId ? await tx.supplier.findUnique({ where: { id: loc.supplierId } }) : null;
+      const fromName = existing.location === "LAVAGENS" ? existing.supplier?.name ?? "Lavagem" : "Armazém";
+      const toName = loc.location === "LAVAGENS" ? target?.name ?? "Lavagem" : "Armazém";
+
+      await tx.powderMovement.create({
+        data: {
+          powderId: existing.id,
+          type: "MUDANCA_LOCAL",
+          quantityKg: 0,
+          balanceKg: existing.quantityKg,
+          notes: [`${fromName} → ${toName}`, data.notes].filter(Boolean).join(" · "),
+          userId: req.user?.id,
+        },
+      });
+      return tx.powderStock.update({
+        where: { id: existing.id },
+        data: loc,
+        include: {
+          supplier: SUPPLIER_INCLUDE,
+          movements: { include: MOVEMENT_INCLUDE, orderBy: { createdAt: "desc" }, take: 50 },
+        },
+      });
+    });
+    res.json(serializePowder(item));
+  })
+);
+
 // Etiqueta para colar na caixa — ?copies=N imprime N etiquetas iguais (uma
 // por caixa da mesma referência).
 powdersRouter.get(
@@ -326,7 +382,7 @@ powdersRouter.get(
     const copies = Number.isFinite(copiesRaw) ? Math.min(Math.max(copiesRaw, 1), 50) : 1;
     await streamPowderLabelPdf(
       res,
-      { referencia: item.referencia, marca: item.marca, codigo: item.codigo, ral: item.ral },
+      { referencia: item.referencia, marca: item.marca, marcaPo: item.marcaPo, codigo: item.codigo, ral: item.ral },
       copies
     );
   })

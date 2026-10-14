@@ -123,6 +123,8 @@ export interface ServiceOrderListItem {
   productionMinutes: number;
   // Acabamento da encomenda, quando indicado nas Características do Produto.
   finish?: string | null;
+  // Características/designação do artigo (texto livre vindo do Goldylocks).
+  specifications?: string | null;
 }
 
 export type MaterialRequestStatus = "A_PEDIR" | "RECEBIDO";
@@ -230,12 +232,13 @@ export const POWDER_LOCATION_LABELS: Record<PowderLocation, string> = {
   ARMAZEM: "Armazém",
 };
 
-export type PowderMovementType = "ENTRADA" | "SAIDA" | "ACERTO";
+export type PowderMovementType = "ENTRADA" | "SAIDA" | "ACERTO" | "MUDANCA_LOCAL";
 
 export const POWDER_MOVEMENT_LABELS: Record<PowderMovementType, string> = {
   ENTRADA: "Entrada",
   SAIDA: "Saída",
   ACERTO: "Acerto",
+  MUDANCA_LOCAL: "Mudança de local",
 };
 
 export interface PowderMovement {
@@ -251,7 +254,8 @@ export interface PowderMovement {
 export interface Powder {
   id: string;
   referencia: string;
-  marca: string;
+  marca: string; // marca do alumínio
+  marcaPo?: string | null; // marca do pó
   codigo: string;
   ral?: string | null;
   quantityKg: number;

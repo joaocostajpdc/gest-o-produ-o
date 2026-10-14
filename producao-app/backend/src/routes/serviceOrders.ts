@@ -117,6 +117,10 @@ function serializeListItem(order: any, now: Date) {
     // Produto) — usado sobretudo para filtrar a listagem de Material em
     // Lacagem.
     finish: extractFinish(order.specifications),
+    // Designação/características do artigo — mostradas no painel lateral de
+    // consulta rápida (pedido do utilizador de 2026-10-14: "quero que mostre
+    // a designação").
+    specifications: order.specifications ?? null,
   };
 }
 

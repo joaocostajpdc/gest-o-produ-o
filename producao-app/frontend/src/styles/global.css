@@ -1229,3 +1229,75 @@ label {
     print-color-adjust: exact;
   }
 }
+
+/* --------------------------------------------------------------------- */
+/* Painel lateral de consulta rápida das OS (2026-10-14) — em computador, */
+/* as OS clicadas na lista abrem numa coluna à esquerda, empilhadas, em   */
+/* vez do cartão ao centro; várias podem estar abertas ao mesmo tempo.    */
+/* --------------------------------------------------------------------- */
+.os-split {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.os-split-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.os-side-panel {
+  width: 340px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.os-side-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-muted, #667085);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.os-side-card {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 14px 16px;
+}
+
+.os-side-card .info-tiles {
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.os-side-card .info-tile {
+  flex: 1 1 calc(50% - 8px);
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.os-side-card .info-tile-value {
+  font-size: 13px;
+}
+
+.qv-designation {
+  margin: 10px 0 4px;
+  padding: 8px 10px;
+  background: #eef1ff;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.45;
+}

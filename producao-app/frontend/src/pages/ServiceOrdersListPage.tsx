@@ -10,6 +10,24 @@ import {
 } from "../types";
 import { minutesToDays, PriorityBadge, StatusBadge } from "../components/Badges";
 import { useAuth } from "../contexts/AuthContext";
+import { useFeature } from "../contexts/FeaturesContext";
+
+// Painel lateral de consulta rápida (2026-10-14): só em ecrã de computador
+// (≥ 1100px de largura); em telemóvel/tablet continua o cartão ao centro.
+const SIDE_PANEL_MIN_WIDTH = 1100;
+const MAX_SIDE_PANELS = 8;
+
+function useIsWide(minWidth: number) {
+  const query = `(min-width: ${minWidth}px)`;
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setWide(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return wide;
+}
 
 const PRIORITY_OPTIONS = [
   { value: "PRAZO_ULTRAPASSADO", label: "Prazo ultrapassado" },
@@ -49,9 +67,44 @@ export function ServiceOrdersListPage() {
   const [quickViewBusy, setQuickViewBusy] = useState(false);
   const [quickViewError, setQuickViewError] = useState<string | null>(null);
 
+  // Painel lateral (pedido do utilizador de 2026-10-14: "quero que o pop-up
+  // que abre a meio, quando no computador, abra numa aba no lado esquerdo de
+  // modo a poder ir abrindo várias ao mesmo tempo, e que mostre a
+  // designação"). Em teste: só para administradores até ser aprovado — os
+  // restantes continuam com o cartão ao centro.
+  const sidePanelFeature = useFeature("osSidePanel");
+  const isWide = useIsWide(SIDE_PANEL_MIN_WIDTH);
+  const panelMode = sidePanelFeature.available && isWide;
+  const [panels, setPanels] = useState<ServiceOrderListItem[]>([]);
+  const [panelBusyId, setPanelBusyId] = useState<string | null>(null);
+  const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
+
   function openQuickView(order: ServiceOrderListItem) {
+    if (panelMode) {
+      // A OS clicada vai para o topo da coluna; se já estava aberta, sobe.
+      setPanels((prev) => [order, ...prev.filter((p) => p.id !== order.id)].slice(0, MAX_SIDE_PANELS));
+      return;
+    }
     setQuickView({ order });
     setQuickViewError(null);
+  }
+
+  function closePanel(id: string) {
+    setPanels((prev) => prev.filter((p) => p.id !== id));
+    setPanelErrors(({ [id]: _removed, ...rest }) => rest);
+  }
+
+  async function runPanelAction(orderId: string, action: () => Promise<unknown>) {
+    setPanelErrors(({ [orderId]: _removed, ...rest }) => rest);
+    setPanelBusyId(orderId);
+    try {
+      await action();
+      await loadOrders();
+    } catch (err) {
+      setPanelErrors((prev) => ({ ...prev, [orderId]: err instanceof Error ? err.message : "Ocorreu um erro." }));
+    } finally {
+      setPanelBusyId(null);
+    }
   }
 
   // Enquanto o cartão está aberto: Esc fecha (clicar no fundo escurecido
@@ -71,6 +124,13 @@ export function ServiceOrdersListPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quickView !== null]);
+
+  // Sempre que a lista é recarregada, os cartões abertos ficam com os dados
+  // novos (as OS que deixaram de aparecer nos filtros mantêm-se abertas com
+  // a última informação conhecida).
+  useEffect(() => {
+    setPanels((prev) => prev.map((p) => orders.find((o) => o.id === p.id) ?? p));
+  }, [orders]);
 
   const [filters, setFilters] = useState({
     status: "",
@@ -210,8 +270,38 @@ export function ServiceOrdersListPage() {
     }
   }
 
+  const showPanels = panelMode && panels.length > 0;
+
   return (
-    <div>
+    <div className={showPanels ? "os-split" : undefined}>
+      {showPanels && (
+        <aside className="os-side-panel" aria-label="Ordens de Serviço abertas">
+          <div className="os-side-panel-head">
+            <span>
+              {panels.length} OS aberta{panels.length > 1 ? "s" : ""}
+            </span>
+            {panels.length > 1 && (
+              <button type="button" className="link-button" onClick={() => setPanels([])}>
+                Fechar todas
+              </button>
+            )}
+          </div>
+          {panels.map((p) => (
+            <div key={p.id} className="os-side-card">
+              <QuickViewBody
+                order={p}
+                busy={panelBusyId === p.id}
+                actionError={panelErrors[p.id] ?? null}
+                showDesignation
+                onClose={() => closePanel(p.id)}
+                onStart={() => runPanelAction(p.id, () => api.post(`/service-orders/${p.id}/start`))}
+                onAdvance={() => runPanelAction(p.id, () => api.post(`/service-orders/${p.id}/stage-flow/advance`))}
+              />
+            </div>
+          ))}
+        </aside>
+      )}
+      <div className="os-split-main">
       <div className="page-header">
         <h2>Ordens de Serviço</h2>
         <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -357,7 +447,7 @@ export function ServiceOrdersListPage() {
                       type="button"
                       className="link-button"
                       aria-haspopup="dialog"
-                      aria-expanded={quickView?.order.id === o.id}
+                      aria-expanded={quickView?.order.id === o.id || panels.some((p) => p.id === o.id)}
                       onClick={() => openQuickView(o)}
                     >
                       {o.externalId}
@@ -424,6 +514,7 @@ export function ServiceOrdersListPage() {
           }
         />
       )}
+      </div>
     </div>
   );
 }
@@ -433,30 +524,59 @@ export function ServiceOrdersListPage() {
 // fecha). Mostra a informação básica já disponível na linha da tabela (sem
 // pedido extra ao servidor) e, tal como na página de detalhe da OS, um
 // botão para avançar a produção para a etapa/estado seguinte.
-function ServiceOrderQuickViewCard({
-  order,
-  busy,
-  actionError,
-  onClose,
-  onStart,
-  onAdvance,
-}: {
+function ServiceOrderQuickViewCard(props: QuickViewBodyProps) {
+  return (
+    <div className="qv-overlay" onMouseDown={props.onClose}>
+      <div
+        className="qv-popover"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Informação rápida da OS ${props.order.externalId}`}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <QuickViewBody {...props} />
+      </div>
+    </div>
+  );
+}
+
+interface QuickViewBodyProps {
   order: ServiceOrderListItem;
   busy: boolean;
   actionError: string | null;
+  /** Mostra a designação/características do artigo (painel lateral). */
+  showDesignation?: boolean;
   onClose: () => void;
   onStart: () => void;
   onAdvance: () => void;
-}) {
+}
+
+/**
+ * Linhas da designação/características do artigo, a partir do texto livre
+ * importado do Goldylocks (ex.: "Modelo: MF. QS2", "Dimensões: 2000x800x28").
+ * Linhas com vários campos separados por ";" ficam uma por linha; campos sem
+ * valor útil ("----") são omitidos.
+ */
+function designationLines(specifications?: string | null): string[] {
+  if (!specifications) return [];
+  return specifications
+    .split(/\n|;\s*/)
+    .map((l) => l.trim().replace(/,\s*$/, "").replace(/^([^:]+):(?=\S)/, "$1: "))
+    .filter((l) => l && !/:\s*-{2,}\s*$/.test(l));
+}
+
+function QuickViewBody({
+  order,
+  busy,
+  actionError,
+  showDesignation,
+  onClose,
+  onStart,
+  onAdvance,
+}: QuickViewBodyProps) {
+  const designation = showDesignation ? designationLines(order.specifications) : [];
   return (
-    <div className="qv-overlay" onMouseDown={onClose}>
-    <div
-      className="qv-popover"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Informação rápida da OS ${order.externalId}`}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
+    <>
       <div className="qv-popover-header">
         <div>
           <h3>{order.externalId}</h3>
@@ -476,6 +596,17 @@ function ServiceOrderQuickViewCard({
         <StatusBadge status={order.status} />
         <PriorityBadge priority={order.priority} label={order.priorityLabel} color={order.priorityColor} />
       </div>
+
+      {showDesignation && (
+        <div className="qv-designation">
+          <div className="info-tile-label">Designação</div>
+          {designation.length > 0 ? (
+            designation.map((line, i) => <div key={i}>{line}</div>)
+          ) : (
+            <div className="muted">Sem características indicadas.</div>
+          )}
+        </div>
+      )}
 
       <div className="info-tiles">
         <div className="info-tile">
@@ -528,11 +659,10 @@ function ServiceOrderQuickViewCard({
             {busy ? "A avançar..." : "Avançar etapa"}
           </button>
         )}
-        <Link to={`/service-orders/${order.id}`} className="btn secondary" onClick={onClose}>
+        <Link to={`/service-orders/${order.id}`} className="btn secondary">
           Ver detalhes completos
         </Link>
       </div>
-    </div>
-    </div>
+    </>
   );
 }

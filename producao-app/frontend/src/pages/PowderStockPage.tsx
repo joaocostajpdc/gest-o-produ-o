@@ -26,6 +26,7 @@ const FEATURE_KEY = "powderStock";
 const EMPTY_FORM = {
   referencia: "",
   marca: "",
+  marcaPo: "",
   codigo: "",
   ral: "",
   quantityKg: "",
@@ -65,6 +66,9 @@ function parseKg(value: string): number {
 
 // Marcas de alumínio sugeridas no campo "Marca alumínio" (pode-se escrever
 // outra qualquer; as que já existem na tabela também aparecem na lista).
+// Marcas de pó sugeridas no campo "Marca pó".
+const POWDER_BRANDS = ["Interpon", "Tiger", "Axalta", "Cardinal", "IGP", "Jotun", "Valspar"];
+
 const ALUMINIUM_BRANDS = ["Cortizo", "Anicolor", "Navarra", "Sosoares", "Extrusal", "Technal", "Reynaers", "Schüco"];
 
 // Local do pó, na interface, é uma só escolha: "ARMAZEM" ou o id da lavagem
@@ -195,6 +199,7 @@ export function PowderStockPage() {
       await api.post("/powders", {
         referencia: form.referencia,
         marca: form.marca,
+        marcaPo: form.marcaPo || undefined,
         codigo: form.codigo,
         ral: form.ral || undefined,
         quantityKg: form.quantityKg ? parseKg(form.quantityKg) : undefined,
@@ -214,7 +219,7 @@ export function PowderStockPage() {
     return items.filter((p) => {
       if (locationFilter && localKey(p) !== locationFilter) return false;
       if (!q) return true;
-      return [p.referencia, p.marca, p.codigo, p.ral ?? "", localName(p)].some((v) => v.toLowerCase().includes(q));
+      return [p.referencia, p.marca, p.marcaPo ?? "", p.codigo, p.ral ?? "", localName(p)].some((v) => v.toLowerCase().includes(q));
     });
   }, [items, search, locationFilter]);
 
@@ -238,6 +243,12 @@ export function PowderStockPage() {
   const brandOptions = useMemo(() => {
     const set = new Set(ALUMINIUM_BRANDS);
     items.forEach((p) => p.marca && p.marca !== "---" && set.add(p.marca));
+    return [...set].sort((a, b) => a.localeCompare(b, "pt"));
+  }, [items]);
+
+  const powderBrandOptions = useMemo(() => {
+    const set = new Set(POWDER_BRANDS);
+    items.forEach((p) => p.marcaPo && set.add(p.marcaPo));
     return [...set].sort((a, b) => a.localeCompare(b, "pt"));
   }, [items]);
 
@@ -318,6 +329,21 @@ export function PowderStockPage() {
                   placeholder="Ex.: Noir 200 Sablé"
                   required
                 />
+              </div>
+              <div>
+                <label>Marca pó</label>
+                <input
+                  type="text"
+                  list="powder-maker-options"
+                  value={form.marcaPo}
+                  onChange={(e) => setForm({ ...form, marcaPo: e.target.value })}
+                  placeholder="Ex.: Interpon, Tiger..."
+                />
+                <datalist id="powder-maker-options">
+                  {powderBrandOptions.map((b) => (
+                    <option key={b} value={b} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label>Marca alumínio</label>
@@ -415,6 +441,7 @@ export function PowderStockPage() {
               <thead>
                 <tr>
                   <th>Referência</th>
+                  <th>Marca pó</th>
                   <th>Marca alumínio</th>
                   <th>Código</th>
                   <th>RAL</th>
@@ -429,6 +456,7 @@ export function PowderStockPage() {
                     <td>
                       <strong>{p.referencia}</strong>
                     </td>
+                    <td>{p.marcaPo || "—"}</td>
                     <td>{p.marca}</td>
                     <td>
                       <code>{p.codigo}</code>
@@ -449,7 +477,7 @@ export function PowderStockPage() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="muted">
+                    <td colSpan={8} className="muted">
                       {items.length === 0 ? "Ainda não há pó registado." : "Nenhum pó corresponde à pesquisa."}
                     </td>
                   </tr>
@@ -466,6 +494,7 @@ export function PowderStockPage() {
           powder={selected}
           suppliers={suppliers}
           brandOptions={brandOptions}
+          powderBrandOptions={powderBrandOptions}
           canWrite={canWrite}
           onClose={() => setSelected(null)}
           onChanged={(p) => {
@@ -490,6 +519,7 @@ function PowderDialog({
   powder,
   suppliers,
   brandOptions,
+  powderBrandOptions,
   canWrite,
   onClose,
   onChanged,
@@ -498,6 +528,7 @@ function PowderDialog({
   powder: Powder;
   suppliers: Supplier[];
   brandOptions: string[];
+  powderBrandOptions: string[];
   canWrite: boolean;
   onClose: () => void;
   onChanged: (p: Powder) => void;
@@ -514,6 +545,7 @@ function PowderDialog({
   const [edit, setEdit] = useState({
     referencia: powder.referencia,
     marca: powder.marca,
+    marcaPo: powder.marcaPo ?? "",
     codigo: powder.codigo,
     ral: powder.ral ?? "",
     quantityKg: String(powder.quantityKg).replace(".", ","),
@@ -549,6 +581,28 @@ function PowderDialog({
     }
   }
 
+  // Mudar só o local, sem quantidade (pedido do utilizador de 2026-10-14).
+  async function relocate() {
+    if (!moveLocation) return;
+    setBusy(true);
+    setError(null);
+    setDone(null);
+    try {
+      const updated = await api.post<Powder>(`/powders/${powder.id}/location`, {
+        ...localPayload(moveLocation),
+        notes: moveNotes || undefined,
+      });
+      setDone(`Local mudado para ${localName(updated)}.`);
+      setMoveNotes("");
+      setMoveLocation("");
+      onChanged(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao mudar o local.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function downloadLabel() {
     setBusy(true);
     setError(null);
@@ -576,6 +630,7 @@ function PowderDialog({
       await api.put(`/powders/${powder.id}`, {
         referencia: edit.referencia,
         marca: edit.marca,
+        marcaPo: edit.marcaPo || null,
         codigo: edit.codigo,
         ral: edit.ral || null,
         quantityKg: value,
@@ -610,7 +665,7 @@ function PowderDialog({
         <div className="qv-popover-header">
           <div>
             <div className="muted" style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>
-              {powder.marca}
+              {[powder.marcaPo, powder.marca].filter((v) => v && v !== "---").join(" · ")}
             </div>
             <h3 style={{ marginTop: 2 }}>{powder.referencia}</h3>
             <div className="muted" style={{ fontSize: 13 }}>
@@ -643,7 +698,7 @@ function PowderDialog({
                 />
               </div>
               <div>
-                <label>Mudar local (opcional)</label>
+                <label>Mudar local</label>
                 <select value={moveLocation} onChange={(e) => setMoveLocation(e.target.value)}>
                   <option value="">Manter ({localName(powder)})</option>
                   <LocalOptions suppliers={suppliers} />
@@ -666,6 +721,14 @@ function PowderDialog({
               <button className="btn danger" disabled={busy} onClick={() => move("SAIDA")}>
                 − Saída
               </button>
+              <button
+                className="btn secondary"
+                disabled={busy || !moveLocation}
+                title={moveLocation ? "Mudar só o local, sem mexer na quantidade" : "Escolhe primeiro o novo local"}
+                onClick={relocate}
+              >
+                Só mudar local
+              </button>
             </div>
           </>
         )}
@@ -684,6 +747,20 @@ function PowderDialog({
                   onChange={(e) => setEdit({ ...edit, referencia: e.target.value })}
                   required
                 />
+              </div>
+              <div>
+                <label>Marca pó</label>
+                <input
+                  type="text"
+                  list="powder-maker-options-edit"
+                  value={edit.marcaPo}
+                  onChange={(e) => setEdit({ ...edit, marcaPo: e.target.value })}
+                />
+                <datalist id="powder-maker-options-edit">
+                  {powderBrandOptions.map((b) => (
+                    <option key={b} value={b} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label>Marca alumínio</label>
@@ -785,10 +862,13 @@ function PowderDialog({
                 {powder.movements.map((m) => (
                   <tr key={m.id} title={m.notes ?? undefined}>
                     <td>{formatDateTime(m.createdAt)}</td>
-                    <td>{POWDER_MOVEMENT_LABELS[m.type]}</td>
-                    <td style={{ textAlign: "right", color: m.type === "SAIDA" || m.quantityKg < 0 ? "#dc2626" : "#16a34a" }}>
-                      {m.type === "SAIDA" || m.quantityKg < 0 ? "−" : "+"}
-                      {Math.abs(m.quantityKg).toLocaleString("pt-PT", { maximumFractionDigits: 2 })}
+                    <td>
+                      {POWDER_MOVEMENT_LABELS[m.type]}
+                      {m.type === "MUDANCA_LOCAL" && m.notes && <div className="muted" style={{ fontSize: 12 }}>{m.notes}</div>}
+                    </td>
+                    <td style={{ textAlign: "right", color: m.type === "MUDANCA_LOCAL" ? undefined : m.type === "SAIDA" || m.quantityKg < 0 ? "#dc2626" : "#16a34a" }}>
+                      {m.type === "MUDANCA_LOCAL" ? "" : m.type === "SAIDA" || m.quantityKg < 0 ? "−" : "+"}
+                      {m.type === "MUDANCA_LOCAL" ? "—" : Math.abs(m.quantityKg).toLocaleString("pt-PT", { maximumFractionDigits: 2 })}
                     </td>
                     <td style={{ textAlign: "right" }}>{m.balanceKg.toLocaleString("pt-PT", { maximumFractionDigits: 2 })}</td>
                     <td>{m.user?.name ?? "—"}</td>

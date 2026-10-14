@@ -449,6 +449,9 @@ enum PowderMovementType {
   ENTRADA
   SAIDA
   ACERTO
+  // Só mudança de local (ex.: Armazém → AM LACA), sem mexer na quantidade —
+  // pedido do utilizador de 2026-10-14.
+  MUDANCA_LOCAL
 }
 
 model PowderStock {
@@ -457,6 +460,9 @@ model PowderStock {
   // Marca do alumínio a que este pó corresponde (ex.: Cortizo, Anicolor) —
   // pedido do utilizador de 2026-10-14: "na tabela quero marca alumínio".
   marca       String
+  // Marca do pó/fabricante da tinta (ex.: Interpon, Tiger) — pedido do
+  // utilizador de 2026-10-14: "aqui falta a marca pó".
+  marcaPo     String?
   codigo      String         @unique
   ral         String?
   quantityKg  Decimal        @default(0) @db.Decimal(10, 2)

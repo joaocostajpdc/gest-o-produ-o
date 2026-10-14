@@ -28,15 +28,19 @@ export function isFeatureKey(value: string): value is FeatureKey {
   return Object.prototype.hasOwnProperty.call(FEATURES, value);
 }
 
-export async function isFeatureReleased(key: FeatureKey): Promise<boolean> {
+/**
+ * A funcionalidade está disponível para este utilizador? Sim se for
+ * administrador, se já tiver sido aprovada para todos, ou se este
+ * utilizador tiver sido escolhido para a testar (testerUserIds).
+ */
+export async function canUseFeature(
+  key: FeatureKey,
+  user?: { id: string; role: string } | null
+): Promise<boolean> {
+  if (!user) return false;
+  if (user.role === "ADMINISTRADOR") return true;
   const row = await prisma.featureRelease.findUnique({ where: { key } });
-  return !!row?.released;
-}
-
-/** A funcionalidade está disponível para este utilizador? */
-export async function canUseFeature(key: FeatureKey, role?: string | null): Promise<boolean> {
-  if (role === "ADMINISTRADOR") return true;
-  return isFeatureReleased(key);
+  return !!row?.released || !!row?.testerUserIds.includes(user.id);
 }
 
 /**
@@ -46,7 +50,7 @@ export async function canUseFeature(key: FeatureKey, role?: string | null): Prom
 export function requireFeature(key: FeatureKey) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (await canUseFeature(key, req.user?.role)) return next();
+      if (await canUseFeature(key, req.user)) return next();
       return res.status(404).json({ error: "Funcionalidade ainda não disponível." });
     } catch (err) {
       next(err);

@@ -19,6 +19,7 @@ interface FeaturesContextValue {
   features: FeatureState[];
   loading: boolean;
   setReleased: (key: string, released: boolean) => Promise<void>;
+  setTesters: (key: string, testerUserIds: string[]) => Promise<void>;
 }
 
 const FeaturesContext = createContext<FeaturesContextValue | undefined>(undefined);
@@ -47,8 +48,15 @@ export function FeaturesProvider({ children }: { children: ReactNode }) {
     setFeatures((prev) => prev.map((f) => (f.key === key ? { ...f, ...updated } : f)));
   }, []);
 
+  const setTesters = useCallback(async (key: string, testerUserIds: string[]) => {
+    const updated = await api.put<FeatureState>(`/features/${key}`, { testerUserIds });
+    setFeatures((prev) => prev.map((f) => (f.key === key ? { ...f, ...updated } : f)));
+  }, []);
+
   return (
-    <FeaturesContext.Provider value={{ features, loading, setReleased }}>{children}</FeaturesContext.Provider>
+    <FeaturesContext.Provider value={{ features, loading, setReleased, setTesters }}>
+      {children}
+    </FeaturesContext.Provider>
   );
 }
 
@@ -66,5 +74,6 @@ export function useFeature(key: string) {
     available: !!f?.available,
     released: !!f?.released,
     name: f?.name ?? key,
+    testerUserIds: f?.testerUserIds ?? [],
   };
 }

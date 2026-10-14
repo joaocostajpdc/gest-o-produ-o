@@ -511,6 +511,11 @@ model FeatureRelease {
   released     Boolean   @default(false)
   releasedAt   DateTime?
   releasedById String?
+  // Utilizadores (além dos administradores) que já podem testar esta
+  // funcionalidade antes de ela ser aprovada para todos — pedido do
+  // utilizador de 2026-10-14: "quero lançar o teste do vidro para o
+  // utilizador Marco Costa".
+  testerUserIds String[] @default([])
   updatedAt    DateTime  @updatedAt
 
   @@map("feature_releases")

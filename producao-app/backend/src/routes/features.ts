@@ -8,34 +8,44 @@ import { FEATURES, FeatureKey, isFeatureKey } from "../config/featureReleases";
 // ============================================================================
 // Estado do lançamento das funcionalidades novas (ver
 // config/featureReleases.ts). Qualquer utilizador autenticado pode consultar
-// o estado (para o menu saber o que mostrar); só o ADMINISTRADOR aprova ou
-// recolhe uma funcionalidade.
+// o estado (para o menu saber o que mostrar); só o ADMINISTRADOR aprova,
+// recolhe ou escolhe quem testa uma funcionalidade.
 // ============================================================================
 
 export const featuresRouter = Router();
 featuresRouter.use(requireAuth);
 
+type Row = Awaited<ReturnType<typeof prisma.featureRelease.findMany>>[number];
+
+function present(key: FeatureKey, row: Row | undefined, user: { id: string; role: string }) {
+  const isAdmin = user.role === "ADMINISTRADOR";
+  const released = !!row?.released;
+  const testers = row?.testerUserIds ?? [];
+  return {
+    key,
+    name: FEATURES[key],
+    released,
+    available: released || isAdmin || testers.includes(user.id),
+    releasedAt: row?.releasedAt ?? null,
+    // A lista de quem testa só é mostrada ao administrador.
+    ...(isAdmin ? { testerUserIds: testers } : {}),
+  };
+}
+
 featuresRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const rows = await prisma.featureRelease.findMany();
-    const isAdmin = req.user?.role === "ADMINISTRADOR";
-    const result = (Object.keys(FEATURES) as FeatureKey[]).map((key) => {
-      const row = rows.find((r) => r.key === key);
-      const released = !!row?.released;
-      return {
-        key,
-        name: FEATURES[key],
-        released,
-        available: released || isAdmin,
-        releasedAt: row?.releasedAt ?? null,
-      };
-    });
-    res.json(result);
+    res.json((Object.keys(FEATURES) as FeatureKey[]).map((key) => present(key, rows.find((r) => r.key === key), req.user!)));
   })
 );
 
-const updateSchema = z.object({ released: z.boolean() });
+const updateSchema = z
+  .object({
+    released: z.boolean().optional(),
+    testerUserIds: z.array(z.string()).max(100).optional(),
+  })
+  .refine((d) => d.released !== undefined || d.testerUserIds !== undefined, "Nada para alterar.");
 
 featuresRouter.put(
   "/:key",
@@ -47,17 +57,18 @@ featuresRouter.put(
     if (!isFeatureKey(key)) {
       throw new Error("Funcionalidade não encontrada.");
     }
-    const { released } = updateSchema.parse(req.body);
+    const { released, testerUserIds } = updateSchema.parse(req.body);
     const data = {
-      released,
-      releasedAt: released ? new Date() : null,
-      releasedById: released ? req.user.id : null,
+      ...(released !== undefined
+        ? { released, releasedAt: released ? new Date() : null, releasedById: released ? req.user.id : null }
+        : {}),
+      ...(testerUserIds !== undefined ? { testerUserIds: [...new Set(testerUserIds)] } : {}),
     };
     const row = await prisma.featureRelease.upsert({
       where: { key },
       create: { key, ...data },
       update: data,
     });
-    res.json({ key, name: FEATURES[key], released: row.released, available: true, releasedAt: row.releasedAt });
+    res.json(present(key, row, req.user));
   })
 );

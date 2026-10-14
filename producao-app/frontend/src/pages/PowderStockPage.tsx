@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { api, downloadBlob } from "../api/client";
 import { canManageConfig, useAuth } from "../contexts/AuthContext";
-import { useFeature, useFeatures } from "../contexts/FeaturesContext";
+import { useFeature } from "../contexts/FeaturesContext";
+import { FeatureTestBanner } from "../components/FeatureTestBanner";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import {
   Powder,
@@ -114,8 +115,6 @@ function LocationPill({ powder }: { powder: Powder }) {
 export function PowderStockPage() {
   const { user } = useAuth();
   const feature = useFeature(FEATURE_KEY);
-  const { setReleased } = useFeatures();
-  const isAdmin = user?.role === "ADMINISTRADOR";
   const canWrite = canManageConfig(user?.role);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -131,7 +130,6 @@ export function PowderStockPage() {
   const [manualCode, setManualCode] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Powder | null>(null);
-  const [releasing, setReleasing] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -211,21 +209,6 @@ export function PowderStockPage() {
     }
   }
 
-  async function handleRelease(released: boolean) {
-    const msg = released
-      ? "Aprovar o Pó em Stock e torná-lo visível para todos os utilizadores (supervisores e operários)?"
-      : "Voltar a esconder o Pó em Stock dos outros utilizadores (fica só para administradores)?";
-    if (!window.confirm(msg)) return;
-    setReleasing(true);
-    try {
-      await setReleased(FEATURE_KEY, released);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao alterar o lançamento.");
-    } finally {
-      setReleasing(false);
-    }
-  }
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((p) => {
@@ -278,22 +261,7 @@ export function PowderStockPage() {
         )}
       </div>
 
-      {isAdmin && !feature.released && (
-        <div
-          className="card"
-          style={{ borderLeft: "4px solid #d97706", background: "#fffbeb", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}
-        >
-          <div>
-            <strong>Em teste — só os administradores veem esta aba.</strong>
-            <div className="muted">
-              Experimenta à vontade. Quando estiver tudo bem, aprova para ficar disponível para supervisores e operários.
-            </div>
-          </div>
-          <button className="btn" disabled={releasing} onClick={() => handleRelease(true)}>
-            Aprovar e lançar para todos
-          </button>
-        </div>
-      )}
+      <FeatureTestBanner featureKey={FEATURE_KEY} label="o Pó em Stock" />
 
       {/* Ler a etiqueta da caixa — o caminho rápido para dar entrada/saída. */}
       <div className="card">
@@ -492,19 +460,6 @@ export function PowderStockPage() {
         )}
       </div>
 
-      {isAdmin && feature.released && (
-        <p className="muted" style={{ fontSize: 13 }}>
-          Esta aba está disponível para todos.{" "}
-          <button
-            className="btn secondary"
-            style={{ padding: "2px 8px", fontSize: 12 }}
-            disabled={releasing}
-            onClick={() => handleRelease(false)}
-          >
-            Voltar a restringir a administradores
-          </button>
-        </p>
-      )}
 
       {selected && (
         <PowderDialog

@@ -272,6 +272,8 @@ export interface FeatureState {
   released: boolean;
   available: boolean;
   releasedAt: string | null;
+  // Só vem para administradores: utilizadores escolhidos para testar.
+  testerUserIds?: string[];
 }
 
 // ---------------------------------------------------------------------------

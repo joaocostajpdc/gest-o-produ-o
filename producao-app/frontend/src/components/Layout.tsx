@@ -61,6 +61,40 @@ function IconPaintBucket(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone dos "Pedidos de Vidros" (vidro duplo com caixa de ar).
+function IconGlass(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <rect x="4" y="3" width="16" height="18" rx="1" />
+      <path d="M9 3v18M15 3v18" />
+      <path d="M17.5 7l-1.5 1.5" />
+    </svg>
+  );
+}
+
+// Marca "Teste" ao lado de uma aba ainda não aprovada pelo administrador.
+function TestBadge() {
+  return (
+    <span
+      className="badge"
+      style={{ background: "#d97706", marginLeft: "auto", fontSize: 10, padding: "1px 6px" }}
+      title="Só visível para administradores até ser aprovado"
+    >
+      Teste
+    </span>
+  );
+}
+
 function initials(name?: string) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
@@ -74,6 +108,7 @@ export function Layout() {
   // Pó em Stock: enquanto não for aprovado pelo administrador, só aparece
   // no menu dos administradores, com a marca "Teste" (ver FeaturesContext).
   const powderStock = useFeature("powderStock");
+  const glassOrders = useFeature("glassOrders");
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
   // CSS ignora esta flag e o menu está sempre visível.
@@ -135,15 +170,13 @@ export function Layout() {
           {powderStock.available && (
             <NavLink to="/po-em-stock">
               <IconPaintBucket /> Pó em Stock
-              {!powderStock.released && (
-                <span
-                  className="badge"
-                  style={{ background: "#d97706", marginLeft: "auto", fontSize: 10, padding: "1px 6px" }}
-                  title="Só visível para administradores até ser aprovado"
-                >
-                  Teste
-                </span>
-              )}
+              {!powderStock.released && <TestBadge />}
+            </NavLink>
+          )}
+          {glassOrders.available && (
+            <NavLink to="/pedidos-vidros">
+              <IconGlass /> Pedidos de Vidros
+              {!glassOrders.released && <TestBadge />}
             </NavLink>
           )}
           <NavLink to="/reports">

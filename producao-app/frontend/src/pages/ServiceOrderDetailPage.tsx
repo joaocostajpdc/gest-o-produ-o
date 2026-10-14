@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, downloadBlob } from "../api/client";
+import { useFeature } from "../contexts/FeaturesContext";
+import { GlassOrdersPanel } from "../components/GlassOrdersPanel";
 import {
   Attachment,
   HistoryEvent,
@@ -13,7 +15,7 @@ import {
 import { minutesToDays, minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
 import { canChangeFlow, canDeleteServiceOrders, useAuth } from "../contexts/AuthContext";
 
-type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "anexos" | "historico";
+type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "anexos" | "vidros" | "historico";
 
 // Faz upload de um ficheiro em bruto para uma OS (e, opcionalmente, associado
 // a uma observação — ver ObservacoesTab). O nome original do ficheiro segue
@@ -100,6 +102,7 @@ export function ServiceOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const glassOrdersFeature = useFeature("glassOrders");
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -440,7 +443,19 @@ export function ServiceOrderDetailPage() {
       </div>
 
       <div className="tabs">
-        {(["etapas", "tempos", "interrupcoes", "observacoes", "anexos", "historico"] as Tab[]).map((t) => (
+        {(
+          [
+            "etapas",
+            "tempos",
+            "interrupcoes",
+            "observacoes",
+            "anexos",
+            // Separador "Vidros" (Pedidos de Vidros, 2026-10-14) — só aparece
+            // a quem tem acesso (administradores, até ser aprovado).
+            ...(glassOrdersFeature.available ? ["vidros"] : []),
+            "historico",
+          ] as Tab[]
+        ).map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
             {tabLabel(t)}
           </button>
@@ -477,6 +492,12 @@ export function ServiceOrderDetailPage() {
         <AnexosTab attachments={attachments} busy={busy} onAction={runAction} id={id!} />
       )}
 
+      {tab === "vidros" && glassOrdersFeature.available && (
+        <div className="card">
+          <GlassOrdersPanel serviceOrder={{ id: order.id, externalId: order.externalId }} />
+        </div>
+      )}
+
       {tab === "historico" && <HistoricoTab history={history} />}
     </div>
   );
@@ -489,6 +510,7 @@ function tabLabel(t: Tab) {
     interrupcoes: "Interrupções",
     observacoes: "Observações",
     anexos: "Anexos",
+    vidros: "Vidros",
     historico: "Histórico",
   }[t];
 }

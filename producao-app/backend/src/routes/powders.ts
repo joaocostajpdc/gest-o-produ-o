@@ -32,6 +32,7 @@ const createSchema = z.object({
   ral: z.string().trim().optional(),
   quantityKg: kg.optional(),
   location: z.nativeEnum(PowderLocation),
+  supplierId: z.string().nullable().optional(),
   notes: z.string().trim().optional(),
 });
 
@@ -42,6 +43,7 @@ const updateSchema = z.object({
   ral: z.string().trim().nullable().optional(),
   quantityKg: kg.optional(),
   location: z.nativeEnum(PowderLocation).optional(),
+  supplierId: z.string().nullable().optional(),
   notes: z.string().trim().nullable().optional(),
 });
 
@@ -51,10 +53,28 @@ const movementSchema = z.object({
   // Opcional: ao dar entrada/saída pode-se também mudar o local da caixa
   // (ex.: sai do Armazém e fica nas Lavagens).
   location: z.nativeEnum(PowderLocation).optional(),
+  supplierId: z.string().nullable().optional(),
   notes: z.string().trim().optional(),
 });
 
+/**
+ * Local do pó: Armazém (sem fornecedor) ou uma lavagem concreta (fornecedor
+ * obrigatório). Garante que nunca fica "Lavagens" sem dizer qual, nem um
+ * fornecedor esquecido quando o pó volta ao Armazém.
+ */
+async function resolveLocation(
+  location: PowderLocation,
+  supplierId: string | null | undefined
+): Promise<{ location: PowderLocation; supplierId: string | null }> {
+  if (location === "ARMAZEM") return { location, supplierId: null };
+  if (!supplierId) throw new Error("Indica em que lavagem fica o pó.");
+  const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+  if (!supplier) throw new Error("Lavagem (fornecedor) não encontrada.");
+  return { location, supplierId };
+}
+
 const MOVEMENT_INCLUDE = { user: { select: { id: true, name: true } } } as const;
+const SUPPLIER_INCLUDE = { select: { id: true, name: true } } as const;
 
 type PowderWithMovements = Prisma.PowderStockGetPayload<{
   include: { movements: { include: typeof MOVEMENT_INCLUDE } };
@@ -104,6 +124,7 @@ powdersRouter.get(
     }
     const items = await prisma.powderStock.findMany({
       where,
+      include: { supplier: SUPPLIER_INCLUDE },
       orderBy: [{ marca: "asc" }, { referencia: "asc" }],
     });
     res.json(items.map(serializePowder));
@@ -118,6 +139,7 @@ powdersRouter.get(
     const code = req.params.code.trim();
     const item = await prisma.powderStock.findFirst({
       where: { codigo: { equals: code, mode: "insensitive" } },
+      include: { supplier: SUPPLIER_INCLUDE },
     });
     if (!item) {
       return res.status(404).json({ error: `Não foi encontrado nenhum pó com o código "${code}".` });
@@ -132,7 +154,10 @@ powdersRouter.get(
   asyncHandler(async (req, res) => {
     const item = await prisma.powderStock.findUnique({
       where: { id: req.params.id },
-      include: { movements: { include: MOVEMENT_INCLUDE, orderBy: { createdAt: "desc" }, take: 50 } },
+      include: {
+        supplier: SUPPLIER_INCLUDE,
+        movements: { include: MOVEMENT_INCLUDE, orderBy: { createdAt: "desc" }, take: 50 },
+      },
     });
     if (!item) throw new Error("Pó não encontrado.");
     res.json(serializePowder(item));
@@ -145,6 +170,7 @@ powdersRouter.post(
   asyncHandler(async (req, res) => {
     const data = createSchema.parse(req.body);
     const qty = data.quantityKg ?? 0;
+    const loc = await resolveLocation(data.location, data.supplierId);
     try {
       const item = await prisma.$transaction(async (tx) => {
         const created = await tx.powderStock.create({
@@ -154,9 +180,11 @@ powdersRouter.post(
             codigo: data.codigo,
             ral: data.ral || null,
             quantityKg: qty,
-            location: data.location,
+            location: loc.location,
+            supplierId: loc.supplierId,
             notes: data.notes || null,
           },
+          include: { supplier: SUPPLIER_INCLUDE },
         });
         if (qty > 0) {
           await tx.powderMovement.create({
@@ -190,10 +218,18 @@ powdersRouter.put(
         const existing = await tx.powderStock.findUnique({ where: { id: req.params.id } });
         if (!existing) throw new Error("Pó não encontrado.");
 
+        const { location: newLocation, supplierId: newSupplierId, ...rest } = data;
+        const loc =
+          newLocation !== undefined || newSupplierId !== undefined
+            ? await resolveLocation(newLocation ?? existing.location, newSupplierId ?? existing.supplierId)
+            : {};
+
         const updated = await tx.powderStock.update({
           where: { id: existing.id },
+          include: { supplier: SUPPLIER_INCLUDE },
           data: {
-            ...data,
+            ...rest,
+            ...loc,
             ral: data.ral === undefined ? undefined : data.ral || null,
             notes: data.notes === undefined ? undefined : data.notes || null,
           },
@@ -244,6 +280,7 @@ powdersRouter.post(
     const item = await prisma.$transaction(async (tx) => {
       const existing = await tx.powderStock.findUnique({ where: { id: req.params.id } });
       if (!existing) throw new Error("Pó não encontrado.");
+      const loc = data.location ? await resolveLocation(data.location, data.supplierId) : {};
 
       const qty = new Prisma.Decimal(data.quantityKg);
       const balance =
@@ -266,8 +303,11 @@ powdersRouter.post(
       });
       return tx.powderStock.update({
         where: { id: existing.id },
-        data: { quantityKg: balance, ...(data.location ? { location: data.location } : {}) },
-        include: { movements: { include: MOVEMENT_INCLUDE, orderBy: { createdAt: "desc" }, take: 50 } },
+        data: { quantityKg: balance, ...loc },
+        include: {
+        supplier: SUPPLIER_INCLUDE,
+        movements: { include: MOVEMENT_INCLUDE, orderBy: { createdAt: "desc" }, take: 50 },
+      },
       });
     });
     res.status(201).json(serializePowder(item));

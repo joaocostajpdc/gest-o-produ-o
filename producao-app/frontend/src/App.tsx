@@ -14,6 +14,7 @@ import { MaterialLacagemPage } from "./pages/MaterialLacagemPage";
 import { MaterialRequestsPage } from "./pages/MaterialRequestsPage";
 import { ScanPage } from "./pages/ScanPage";
 import { PowderStockPage } from "./pages/PowderStockPage";
+import { GlassOrdersPage } from "./pages/GlassOrdersPage";
 import { FeaturesProvider } from "./contexts/FeaturesContext";
 
 function ProtectedArea() {
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/material-lacagem" element={<MaterialLacagemPage />} />
         <Route path="/material-a-pedir" element={<MaterialRequestsPage />} />
         <Route path="/po-em-stock" element={<PowderStockPage />} />
+        <Route path="/pedidos-vidros" element={<GlassOrdersPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

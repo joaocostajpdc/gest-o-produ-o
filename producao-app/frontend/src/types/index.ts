@@ -256,6 +256,9 @@ export interface Powder {
   ral?: string | null;
   quantityKg: number;
   location: PowderLocation;
+  // Lavagem onde está o pó, quando location = LAVAGENS (um Fornecedor).
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -269,4 +272,35 @@ export interface FeatureState {
   released: boolean;
   available: boolean;
   releasedAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos de Vidros (2026-10-14)
+// ---------------------------------------------------------------------------
+
+export type GlassOrderStatus = "POR_ENCOMENDAR" | "ENCOMENDADO" | "FINALIZADO";
+
+export const GLASS_ORDER_STATUS_LABELS: Record<GlassOrderStatus, string> = {
+  POR_ENCOMENDAR: "Por encomendar",
+  ENCOMENDADO: "Encomendado",
+  FINALIZADO: "Finalizado",
+};
+
+export interface GlassOrder {
+  id: string;
+  date: string;
+  nRef?: string | null;
+  serviceOrderId?: string | null;
+  serviceOrder?: { id: string; externalId: string; client?: { name: string } | null } | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
+  medida: string;
+  caixa: string;
+  quantity: number;
+  status: GlassOrderStatus;
+  orderNumber?: string | null;
+  expectedDelivery?: string | null;
+  notes?: string | null;
+  createdBy?: { id: string; name: string } | null;
+  createdAt: string;
 }

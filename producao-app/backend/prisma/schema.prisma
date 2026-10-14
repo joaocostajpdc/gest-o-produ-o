@@ -51,6 +51,7 @@ model User {
   uploadedAttachments Attachment[]
   materialRequests  MaterialRequest[]
   powderMovements   PowderMovement[]
+  glassOrders       GlassOrder[]
 
   @@map("users")
 }
@@ -114,6 +115,8 @@ model Supplier {
   stageInstances      ServiceOrderStageInstance[]
   leadTimes           SupplierLeadTime[]
   materialRequests    MaterialRequest[]
+  powderStock         PowderStock[]
+  glassOrders         GlassOrder[]
 
   @@map("suppliers")
 }
@@ -256,6 +259,7 @@ model ServiceOrder {
   observations      Observation[]
   historyEvents     HistoryEvent[]
   attachments       Attachment[]
+  glassOrders       GlassOrder[]
 
   @@index([status])
   @@index([deadlineAt])
@@ -450,11 +454,20 @@ enum PowderMovementType {
 model PowderStock {
   id          String         @id @default(cuid())
   referencia  String
+  // Marca do alumínio a que este pó corresponde (ex.: Cortizo, Anicolor) —
+  // pedido do utilizador de 2026-10-14: "na tabela quero marca alumínio".
   marca       String
   codigo      String         @unique
   ral         String?
   quantityKg  Decimal        @default(0) @db.Decimal(10, 2)
   location    PowderLocation @default(ARMAZEM)
+  // Quando location = LAVAGENS: em que lavagem/lacador está o pó (ex.: AM
+  // LACA, Alumiasas) — são os Fornecedores já registados na aplicação
+  // (pedido do utilizador de 2026-10-14: "quero armazém e depois as
+  // lavagens que vamos tendo"). Novas lavagens acrescentam-se em
+  // Fornecedores e aparecem logo na lista de locais.
+  supplierId  String?
+  supplier    Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   notes       String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -501,4 +514,48 @@ model FeatureRelease {
   updatedAt    DateTime  @updatedAt
 
   @@map("feature_releases")
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos de Vidros — pedido do utilizador de 2026-10-14: passa para a
+// aplicação a folha "Pedidos vidros" do Excel (Data / N/Ref. / Fornecedor /
+// Medida / Caixa / Quant. / Estado / Nº Encomenda / Previsão de entrega /
+// Nota), numa página própria e também registado na Ordem de Serviço a que o
+// vidro se destina — e lançado a partir da própria OS.
+//
+// "nRef" é o número da Ordem de Serviço tal como no Excel (ex.: 2026/448);
+// quando existe uma OS com esse número na aplicação, fica também ligada por
+// serviceOrderId (para aparecer no separador "Vidros" dessa OS). Pode haver
+// vidros sem OS (ex.: para stock).
+// ---------------------------------------------------------------------------
+
+enum GlassOrderStatus {
+  POR_ENCOMENDAR
+  ENCOMENDADO
+  FINALIZADO
+}
+
+model GlassOrder {
+  id             String           @id @default(cuid())
+  date           DateTime         @default(now()) @db.Date
+  nRef           String?
+  serviceOrderId String?
+  serviceOrder   ServiceOrder?    @relation(fields: [serviceOrderId], references: [id], onDelete: SetNull)
+  supplierId     String?
+  supplier       Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  medida         String           // ex.: "1160x220"
+  caixa          String           // composição, ex.: "Fosco 4 + Cx. 18 + Fosco 4"
+  quantity       Int              @default(1)
+  status         GlassOrderStatus @default(POR_ENCOMENDAR)
+  orderNumber    String?          // Nº Encomenda ao fornecedor, ex.: "2026/245"
+  expectedDelivery String?        // texto livre, como no Excel: "13/out", "Pronto", "Em stock"
+  notes          String?
+  createdById    String?
+  createdBy      User?            @relation(fields: [createdById], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([serviceOrderId])
+  @@index([status])
+  @@map("glass_orders")
 }

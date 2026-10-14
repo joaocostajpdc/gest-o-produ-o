@@ -35,7 +35,10 @@ export type Permission =
   // entrada/saída de quantidades (o que se faz ao ler a etiqueta da caixa).
   | "powderStock:read"
   | "powderStock:write"
-  | "powderStock:move";
+  | "powderStock:move"
+  // Pedidos de Vidros (2026-10-14)
+  | "glassOrders:read"
+  | "glassOrders:write";
 
 const ALL_PERMISSIONS: Permission[] = [
   "products:read",
@@ -60,6 +63,8 @@ const ALL_PERMISSIONS: Permission[] = [
   "powderStock:read",
   "powderStock:write",
   "powderStock:move",
+  "glassOrders:read",
+  "glassOrders:write",
 ];
 
 export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
@@ -88,6 +93,8 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "powderStock:read",
     "powderStock:write",
     "powderStock:move",
+    "glassOrders:read",
+    "glassOrders:write",
   ],
 
   // Operário - execução e consulta das operações produtivas
@@ -106,6 +113,8 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     // mas não cria nem apaga referências.
     "powderStock:read",
     "powderStock:move",
+    // O operário vê os vidros pedidos (ex.: na OS), mas não os lança.
+    "glassOrders:read",
   ],
 };
 

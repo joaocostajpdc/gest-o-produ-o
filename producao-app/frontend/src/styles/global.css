@@ -1247,7 +1247,7 @@ label {
 }
 
 .os-side-panel {
-  width: 340px;
+  width: 320px;
   flex-shrink: 0;
   position: sticky;
   top: 16px;
@@ -1300,4 +1300,55 @@ label {
   border-radius: var(--radius-sm);
   font-size: 13px;
   line-height: 1.45;
+}
+
+/* Com o painel lateral aberto (2026-10-15: "melhora o estado em que fica a */
+/* tabela"): a página passa a usar a largura toda do ecrã, os filtros       */
+/* alinham-se numa grelha regular e a tabela fica mais compacta, com scroll */
+/* horizontal próprio em vez de cortar as últimas colunas.                  */
+.main-content:has(.os-split) {
+  max-width: none;
+}
+
+.os-split .filters-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.os-split .filters-bar .os-search {
+  grid-column: span 2;
+}
+
+.os-split .filters-bar input,
+.os-split .filters-bar select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.os-table-scroll {
+  overflow-x: auto;
+}
+
+.os-split .os-table {
+  font-size: 13px;
+}
+
+.os-split .os-table th,
+.os-split .os-table td {
+  padding: 8px 7px;
+}
+
+.os-split .os-table td:nth-child(n + 7) {
+  white-space: nowrap;
+}
+
+.os-table tr.os-row-open td {
+  background: #eef1ff;
+}
+
+.os-table tr.os-row-open td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-primary);
 }

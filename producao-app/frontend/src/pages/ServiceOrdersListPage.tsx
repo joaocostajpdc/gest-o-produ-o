@@ -354,6 +354,7 @@ export function ServiceOrdersListPage() {
         <div className="filters-bar">
           <input
             type="text"
+            className="os-search"
             placeholder="Pesquisar OS, cliente, nº cliente ou produto..."
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
@@ -422,7 +423,8 @@ export function ServiceOrdersListPage() {
         {loading ? (
           <p className="muted">A carregar...</p>
         ) : (
-          <table>
+          <div className="os-table-scroll">
+          <table className="os-table">
             <thead>
               <tr>
                 <th>Prioridade</th>
@@ -438,7 +440,7 @@ export function ServiceOrdersListPage() {
             </thead>
             <tbody>
               {orders.map((o) => (
-                <tr key={o.id}>
+                <tr key={o.id} className={panels.some((p) => p.id === o.id) ? "os-row-open" : undefined}>
                   <td>
                     <PriorityBadge priority={o.priority} label={o.priorityLabel} color={o.priorityColor} />
                   </td>
@@ -491,6 +493,7 @@ export function ServiceOrdersListPage() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

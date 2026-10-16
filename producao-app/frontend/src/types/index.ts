@@ -334,6 +334,7 @@ export interface BarPieceInput {
   length: number;
   qty: number;
   profile?: string | null;
+  os?: string | null; // OS a que a peça pertence (planos que juntam várias obras)
 }
 
 export interface MosquitoItem {
@@ -341,6 +342,8 @@ export interface MosquitoItem {
   height: number;
   qty: number;
   finish?: string | null;
+  os?: string | null;
+  client?: string | null;
 }
 
 export interface MosquitoRules {
@@ -461,6 +464,7 @@ interface CutPlanBase {
   serviceOrderId?: string | null;
   serviceOrder?: { id: string; externalId: string; client?: { name: string } | null } | null;
   createdBy?: { id: string; name: string } | null;
+  extraServiceOrders?: { id: string; externalId: string; client?: { name: string } | null }[];
   createdAt: string;
   updatedAt: string;
 }

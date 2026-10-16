@@ -593,6 +593,9 @@ model CutPlan {
   material       String?       // ex.: "Alumínio 1,5 mm" ou "Perfil MQ-30"
   serviceOrderId String?
   serviceOrder   ServiceOrder? @relation(fields: [serviceOrderId], references: [id], onDelete: SetNull)
+  // Outras OS juntadas no mesmo plano (ex.: várias obras de mosquiteiras a
+  // partilhar as mesmas barras). O plano aparece no separador Cortes de todas.
+  extraServiceOrderIds String[] @default([])
   notes          String?
   input          Json          // peças, stock e definições
   result         Json          // resultado da otimização

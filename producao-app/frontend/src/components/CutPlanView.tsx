@@ -28,6 +28,40 @@ const PALETTE = [
   ["#e2e8f0", "#334155"],
 ];
 
+// Cores por OS (planos que juntam várias obras) — mais fortes que as das
+// peças, para se distinguir bem cada obra na barra.
+const OS_PALETTE = [
+  ["#bfdbfe", "#1e40af"],
+  ["#fde68a", "#92400e"],
+  ["#bbf7d0", "#166534"],
+  ["#fbcfe8", "#9d174d"],
+  ["#ddd6fe", "#5b21b6"],
+  ["#a5f3fc", "#155e75"],
+  ["#fed7aa", "#9a3412"],
+  ["#d9f99d", "#3f6212"],
+];
+
+export function osColor(index: number) {
+  const [fill, stroke] = OS_PALETTE[index % OS_PALETTE.length];
+  return { fill, stroke };
+}
+
+/** OS presentes no plano, pela ordem em que aparecem, com o cliente (se conhecido). */
+export function planOrders(input: CutPlanInput) {
+  const list: { os: string; client: string | null; index: number }[] = [];
+  if (input.mode !== "BARRAS") return list;
+  const clients = new Map<string, string>();
+  (input.mosquitos ?? []).forEach((m) => m.os && m.client && clients.set(m.os, m.client));
+  input.pieces.forEach((p) => {
+    const os = p.os?.trim();
+    if (os && !list.some((x) => x.os === os)) list.push({ os, client: clients.get(os) ?? null, index: list.length });
+  });
+  return list;
+}
+
+/** "2026/491" → "491" (para caber na barra). */
+const shortOs = (os: string) => os.split("/").pop() || os;
+
 export function pieceColor(typeIndex: number) {
   const [fill, stroke] = PALETTE[typeIndex % PALETTE.length];
   return { fill, stroke };
@@ -92,7 +126,7 @@ export function CutPlanView({ input, result }: { input: CutPlanInput; result: Cu
 
       <PiecesTable input={input} result={result} />
 
-      {result.mode === "CHAPAS" ? <SheetsList sheets={result.sheets} /> : <BarsList bars={result.bars} />}
+      {result.mode === "CHAPAS" ? <SheetsList sheets={result.sheets} /> : <BarsList bars={result.bars} input={input} />}
     </div>
   );
 }
@@ -173,6 +207,7 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
   else result.bars.forEach((b) => b.pieces.forEach((p) => placed.set(p.typeIndex, (placed.get(p.typeIndex) ?? 0) + 1)));
 
   const hasProfile = input.mode === "BARRAS" && input.pieces.some((p) => p.profile);
+  const orders = planOrders(input);
 
   return (
     <>
@@ -186,6 +221,7 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
             <th>Ref.</th>
             <th>Descrição</th>
             {hasProfile && <th>Perfil</th>}
+            {orders.length > 0 && <th>OS</th>}
             {input.mode === "CHAPAS" ? <th>Largura × Comprimento</th> : <th>Comprimento</th>}
             <th>Quant.</th>
             {input.mode === "CHAPAS" && (
@@ -200,7 +236,9 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
         </thead>
         <tbody>
           {input.pieces.map((p, i) => {
-            const c = pieceColor(i);
+            const pOs = (p as { os?: string | null }).os?.trim();
+            const o = orders.find((x) => x.os === pOs);
+            const c = orders.length ? (o ? osColor(o.index) : pieceColor(i)) : pieceColor(i);
             const n = placed.get(i) ?? 0;
             return (
               <tr key={i}>
@@ -210,6 +248,7 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
                 </td>
                 <td>{p.description || "—"}</td>
                 {hasProfile && <td>{(p as { profile?: string | null }).profile || "—"}</td>}
+                {orders.length > 0 && <td>{pOs || "—"}</td>}
                 <td>{input.mode === "CHAPAS" ? `${nf((p as { width: number }).width, 1)} × ${nf(p.length, 1)}` : nf(p.length, 1)}</td>
                 <td>{p.qty}</td>
                 {input.mode === "CHAPAS" && (
@@ -240,6 +279,7 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
 function MosquitoSource({ input }: { input: Extract<CutPlanInput, { mode: "BARRAS" }> }) {
   const r = input.mosquitoRules;
   const items = input.mosquitos ?? [];
+  const hasOs = items.some((m) => m.os);
   return (
     <div className="card cut-pieces">
       <h3 style={{ margin: "0 0 4px" }}>Mosquiteiras</h3>
@@ -254,6 +294,7 @@ function MosquitoSource({ input }: { input: Extract<CutPlanInput, { mode: "BARRA
         <table>
           <thead>
             <tr>
+              {hasOs && <th>OS</th>}
               <th>Largura × Altura</th>
               <th>Quant.</th>
               <th>Acabamento</th>
@@ -262,6 +303,12 @@ function MosquitoSource({ input }: { input: Extract<CutPlanInput, { mode: "BARRA
           <tbody>
             {items.map((m, i) => (
               <tr key={i}>
+                {hasOs && (
+                  <td>
+                    {m.os || "—"}
+                    {m.client && <div className="muted" style={{ fontSize: 12 }}>{m.client}</div>}
+                  </td>
+                )}
                 <td>
                   {nf(m.width, 1)} × {nf(m.height, 1)}
                 </td>
@@ -403,13 +450,28 @@ function SheetDrawing({ sheet }: { sheet: SheetLayout }) {
 // Barras
 // ---------------------------------------------------------------------------
 
-function BarsList({ bars }: { bars: BarLayout[] }) {
+function BarsList({ bars, input }: { bars: BarLayout[]; input: CutPlanInput }) {
   const groups = groupBy(bars, (b) => `${b.profile ?? ""}|${b.length}|${b.pieces.map((p) => `${p.typeIndex}:${p.length}`).join(";")}`);
   const profiles = [...new Set(bars.map((b) => b.profile ?? ""))];
   const named = profiles.some((p) => p);
+  const orders = planOrders(input);
+  const osOf = (typeIndex: number) => (input.pieces[typeIndex] as { os?: string | null } | undefined)?.os?.trim() || null;
   return (
     <div className="card cut-bars">
       <h3 style={{ margin: "0 0 10px" }}>Barras</h3>
+      {orders.length > 0 && (
+        <div className="cut-os-legend">
+          {orders.map((o) => {
+            const c = osColor(o.index);
+            return (
+              <span key={o.os} className="cut-os-chip" style={{ background: c.fill, borderColor: c.stroke, color: c.stroke }}>
+                <b>OS {o.os}</b>
+                {o.client ? ` — ${o.client}` : ""}
+              </span>
+            );
+          })}
+        </div>
+      )}
       {profiles.map((profile) => (
         <div key={profile || "-"}>
           {named && (
@@ -434,10 +496,12 @@ function BarsList({ bars }: { bars: BarLayout[] }) {
                 {b.pieces.length} peças · {b.cuts} cortes · sobra {nf(b.remnant, 1)} mm{b.reusable ? " (guardar)" : ""}
               </span>
             </div>
-            <div className="cut-bar">
+            <div className={`cut-bar${orders.length ? " with-os" : ""}`}>
               {start > 0 && <div className="cut-bar-seg cut-bar-trim" style={{ width: `${(start / b.length) * 100}%` }} title={`Topo ${start} mm`} />}
               {b.pieces.map((p, i) => {
-                const c = pieceColor(p.typeIndex);
+                const pOs = osOf(p.typeIndex);
+                const o = orders.find((x) => x.os === pOs);
+                const c = orders.length && o ? osColor(o.index) : pieceColor(p.typeIndex);
                 const next = i + 1 < b.pieces.length ? b.pieces[i + 1].offset : b.usedLength;
                 const gap = Math.max(0, next - (p.offset + p.length));
                 return (
@@ -445,10 +509,11 @@ function BarsList({ bars }: { bars: BarLayout[] }) {
                     <div
                       className="cut-bar-seg"
                       style={{ width: `${(p.length / b.length) * 100}%`, background: c.fill, borderColor: c.stroke, color: c.stroke }}
-                      title={`${p.ref} — ${p.length} mm`}
+                      title={`${p.ref} — ${p.length} mm${pOs ? ` — OS ${pOs}` : ""}`}
                     >
                       <span>
                         <b>{p.ref}</b> {nf(p.length, 1)}
+                        {pOs && <small className="cut-seg-os">OS {shortOs(pOs)}</small>}
                       </span>
                     </div>
                     {gap > 0 && <div className="cut-bar-kerf" style={{ width: `${(gap / b.length) * 100}%` }} />}

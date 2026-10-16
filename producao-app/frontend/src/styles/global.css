@@ -1578,3 +1578,51 @@ form .field textarea {
   padding-top: 0;
   margin-top: 0;
 }
+.cut-join-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.cut-join-row input {
+  width: 240px;
+}
+.cut-os-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.cut-os-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.cut-os-chip button {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+.cut-bar.with-os {
+  height: 44px;
+}
+.cut-bar.with-os .cut-bar-seg > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+.cut-seg-os {
+  font-size: 10px;
+  font-weight: 700;
+}

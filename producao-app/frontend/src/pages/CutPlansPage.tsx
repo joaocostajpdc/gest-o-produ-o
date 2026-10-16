@@ -211,6 +211,12 @@ export function CutPlanPage() {
               {plan.serviceOrder.client ? ` — ${plan.serviceOrder.client.name}` : ""}
             </span>
           )}
+          {plan.extraServiceOrders?.map((o) => (
+            <span key={o.id}>
+              + OS <Link to={`/service-orders/${o.id}`}>{o.externalId}</Link>
+              {o.client ? ` — ${o.client.name}` : ""}
+            </span>
+          ))}
           <span>
             {plan.mode === "CHAPAS"
               ? `Corte ${settings.kerf} mm · esquadria ${settings.trim} mm`

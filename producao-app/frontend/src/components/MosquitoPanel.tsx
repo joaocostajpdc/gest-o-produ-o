@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { MosquitoItem, MosquitoRules } from "../types";
+import { osColor } from "./CutPlanView";
 
 // ============================================================================
 // Mosquiteiras → peças a cortar (pedido do utilizador de 2026-10-16):
@@ -32,7 +33,11 @@ export interface MosquitoRow {
   height: string;
   qty: string;
   finish: string;
+  os: string; // nº da OS de onde vem (para identificar as peças nas barras)
+  client: string;
 }
+
+export const emptyMosquitoRow = (os = ""): MosquitoRow => ({ width: "", height: "", qty: "1", finish: "", os, client: "" });
 
 export interface GeneratedPiece {
   ref: string;
@@ -40,6 +45,7 @@ export interface GeneratedPiece {
   length: number;
   qty: number;
   profile: string;
+  os: string | null;
 }
 
 const num = (s: string | number | null | undefined) => Number(String(s ?? "").replace(",", "."));
@@ -49,7 +55,14 @@ const fmt = (n: number) => n.toLocaleString("pt-PT", { maximumFractionDigits: 1 
 export function rowsToItems(rows: MosquitoRow[]): MosquitoItem[] {
   return rows
     .filter((r) => r.width.trim() || r.height.trim())
-    .map((r) => ({ width: num(r.width), height: num(r.height), qty: Math.max(1, Math.round(num(r.qty) || 1)), finish: r.finish.trim() || null }));
+    .map((r) => ({
+      width: num(r.width),
+      height: num(r.height),
+      qty: Math.max(1, Math.round(num(r.qty) || 1)),
+      finish: r.finish.trim() || null,
+      os: r.os.trim() || null,
+      client: r.client.trim() || null,
+    }));
 }
 
 /** Aplica as regras e devolve as peças por perfil (medidas iguais juntas). */
@@ -65,19 +78,25 @@ export function generatePieces(items: MosquitoItem[], rules: MosquitoRules): Gen
   const bad = items.find((i) => !(i.width > 0 && i.height > 0));
   if (bad) throw new Error("Há mosquiteiras sem largura ou altura.");
 
-  type Acc = { profile: string; prefix: string; length: number; qty: number; from: Set<string> };
+  // Medidas iguais juntam-se numa só linha, mas só dentro da mesma OS — para
+  // cada peça continuar identificada com a sua obra.
+  type Acc = { profile: string; prefix: string; length: number; qty: number; from: Set<string>; os: string | null };
   const acc = new Map<string, Acc>();
+  const osOrder: string[] = [];
+  let os: string | null = null;
   const add = (profile: string, prefix: string, length: number, qty: number, from: string) => {
     if (qty <= 0) return;
     if (!(length > 0)) throw new Error(`Medida final inválida (${fmt(length)} mm) — confirma os descontos.`);
-    const key = `${profile}|${length}`;
-    const e = acc.get(key) ?? { profile, prefix, length, qty: 0, from: new Set<string>() };
+    const key = `${profile}|${length}|${os ?? ""}`;
+    const e = acc.get(key) ?? { profile, prefix, length, qty: 0, from: new Set<string>(), os };
     e.qty += qty;
     e.from.add(from);
     acc.set(key, e);
   };
 
   for (const it of items) {
+    os = it.os?.trim() || null;
+    if (!osOrder.includes(os ?? "")) osOrder.push(os ?? "");
     add(rules.heightProfile, "G", r1(it.height - (rules.heightDeduct ?? 0)), it.qty * rules.heightsPerUnit, `Alt. ${fmt(it.height)}`);
     const small = it.width <= rules.widthLimit;
     add(
@@ -91,7 +110,10 @@ export function generatePieces(items: MosquitoItem[], rules: MosquitoRules): Gen
 
   const order = [rules.heightProfile, rules.widthSmallProfile, rules.widthLargeProfile];
   const list = [...acc.values()].sort(
-    (a, b) => order.indexOf(a.profile) - order.indexOf(b.profile) || b.length - a.length
+    (a, b) =>
+      order.indexOf(a.profile) - order.indexOf(b.profile) ||
+      osOrder.indexOf(a.os ?? "") - osOrder.indexOf(b.os ?? "") ||
+      b.length - a.length
   );
   const counters: Record<string, number> = {};
   return list.map((e) => {
@@ -102,6 +124,7 @@ export function generatePieces(items: MosquitoItem[], rules: MosquitoRules): Gen
       length: e.length,
       qty: e.qty,
       profile: e.profile,
+      os: e.os,
     };
   });
 }
@@ -122,7 +145,7 @@ export function MosquitoPanel({
   rows: MosquitoRow[];
   setRows: (r: MosquitoRow[]) => void;
   onGenerate: (pieces: GeneratedPiece[]) => void;
-  onServiceOrderFound: (externalId: string, client?: string) => void;
+  onServiceOrderFound: (externalId: string, client?: string, isMain?: boolean) => void;
   autoImport?: boolean;
 }) {
   const [busy, setBusy] = useState<"import" | "rules" | null>(null);
@@ -132,9 +155,12 @@ export function MosquitoPanel({
   const numOrNull = (v: string) => (v.trim() === "" ? null : num(v));
   const updateRow = (i: number, patch: Partial<MosquitoRow>) => setRows(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)));
 
-  async function importOs() {
-    if (!osRef.trim()) {
-      setMsg({ ok: false, text: "Escreve primeiro o nº da OS no campo Ordem de Serviço (lá em cima)." });
+  const [joinRef, setJoinRef] = useState("");
+
+  async function importOs(refArg?: string) {
+    const ref = (refArg ?? osRef).trim();
+    if (!ref) {
+      setMsg({ ok: false, text: "Escreve o nº da OS (no campo Ordem de Serviço lá em cima ou em Juntar OS)." });
       return;
     }
     setBusy("import");
@@ -144,13 +170,21 @@ export function MosquitoPanel({
         serviceOrder: { externalId: string; client?: { name: string } | null; product?: { name: string } | null };
         items: MosquitoItem[];
         missing: string[];
-      }>(`/cut-plans/os-measures?ref=${encodeURIComponent(osRef.trim())}`);
-      onServiceOrderFound(res.serviceOrder.externalId, res.serviceOrder.client?.name);
+      }>(`/cut-plans/os-measures?ref=${encodeURIComponent(ref)}`);
+      onServiceOrderFound(res.serviceOrder.externalId, res.serviceOrder.client?.name, ref === osRef.trim());
       if (!res.items.length) {
         setMsg({ ok: false, text: `A OS ${res.serviceOrder.externalId} não tem medidas (Larg. × Alt.) nos artigos. Escreve-as à mão abaixo.` });
         return;
       }
-      setRows(res.items.map((i) => ({ width: String(i.width), height: String(i.height), qty: String(i.qty), finish: i.finish ?? "" })));
+      // Junta às mosquiteiras que já lá estão (substitui as desta mesma OS).
+      const os = res.serviceOrder.externalId;
+      const client = res.serviceOrder.client?.name ?? "";
+      const kept = rows.filter((r) => (r.width.trim() || r.height.trim()) && r.os.trim().toLowerCase() !== os.toLowerCase());
+      setRows([
+        ...kept,
+        ...res.items.map((i) => ({ width: String(i.width), height: String(i.height), qty: String(i.qty), finish: i.finish ?? "", os, client })),
+      ]);
+      setJoinRef("");
       const total = res.items.reduce((a, i) => a + i.qty, 0);
       setMsg({
         ok: res.missing.length === 0,
@@ -196,10 +230,20 @@ export function MosquitoPanel({
   useEffect(() => {
     if (autoImport && !autoDone.current) {
       autoDone.current = true;
-      importOs();
+      importOs(osRef);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoImport]);
+
+  // OS presentes nas mosquiteiras (pela ordem em que foram juntadas)
+  const osList: { os: string; client: string; units: number; index: number }[] = [];
+  rows.forEach((r) => {
+    const os = r.os.trim();
+    if (!os || !(r.width.trim() || r.height.trim())) return;
+    const e = osList.find((x) => x.os === os);
+    if (e) e.units += num(r.qty) || 0;
+    else osList.push({ os, client: r.client, units: num(r.qty) || 0, index: osList.length });
+  });
 
   const totalUnits = rows.reduce((a, r) => a + (num(r.qty) || 0), 0);
 
@@ -208,9 +252,43 @@ export function MosquitoPanel({
       <div className="cut-section-head">
         <h3>Mosquiteiras</h3>
         <span className="muted">{totalUnits} unid.</span>
-        <button type="button" className="btn secondary" onClick={importOs} disabled={busy !== null}>
+        <button type="button" className="btn secondary" onClick={() => importOs(osRef)} disabled={busy !== null}>
           {busy === "import" ? "A ler..." : "Importar medidas da OS"}
         </button>
+      </div>
+
+      <div className="cut-join-row">
+        <input
+          type="text"
+          value={joinRef}
+          onChange={(e) => setJoinRef(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (joinRef.trim()) importOs(joinRef);
+            }
+          }}
+          placeholder="nº de outra OS (ex.: 2026/515 ou 515)"
+        />
+        <button type="button" className="btn secondary" disabled={busy !== null || !joinRef.trim()} onClick={() => importOs(joinRef)}>
+          + Juntar OS
+        </button>
+        {osList.map((o) => (
+          <span key={o.os} className="cut-os-chip" style={{ background: osColor(o.index).fill, borderColor: osColor(o.index).stroke, color: osColor(o.index).stroke }}>
+            OS {o.os}
+            {o.client ? ` — ${o.client}` : ""} · {o.units} un.
+            <button
+              type="button"
+              title={`Tirar a OS ${o.os}`}
+              onClick={() => {
+                const left = rows.filter((r) => r.os.trim() !== o.os);
+                setRows(left.length ? left : [emptyMosquitoRow()]);
+              }}
+            >
+              ✕
+            </button>
+          </span>
+        ))}
       </div>
 
       <div className="cut-rules">
@@ -264,6 +342,7 @@ export function MosquitoPanel({
         <table className="cut-input-table">
           <thead>
             <tr>
+              <th>OS</th>
               <th>Largura</th>
               <th>Altura</th>
               <th>Quant.</th>
@@ -274,6 +353,9 @@ export function MosquitoPanel({
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
+                <td>
+                  <input type="text" value={r.os} onChange={(e) => updateRow(i, { os: e.target.value })} placeholder="—" style={{ width: 96 }} />
+                </td>
                 <td>
                   <input type="number" min={0} value={r.width} onChange={(e) => updateRow(i, { width: e.target.value })} style={{ width: 90 }} />
                 </td>
@@ -291,7 +373,7 @@ export function MosquitoPanel({
                     type="button"
                     className="link-button"
                     title="Remover"
-                    onClick={() => setRows(rows.length > 1 ? rows.filter((_, k) => k !== i) : [{ width: "", height: "", qty: "1", finish: "" }])}
+                    onClick={() => setRows(rows.length > 1 ? rows.filter((_, k) => k !== i) : [emptyMosquitoRow()])}
                   >
                     ✕
                   </button>
@@ -302,7 +384,7 @@ export function MosquitoPanel({
         </table>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-        <button type="button" className="btn secondary" onClick={() => setRows([...rows, { width: "", height: "", qty: "1", finish: "" }])}>
+        <button type="button" className="btn secondary" onClick={() => setRows([...rows, emptyMosquitoRow(rows[rows.length - 1]?.os ?? "")])}>
           + Mosquiteira
         </button>
         <button type="button" className="btn" onClick={generate}>

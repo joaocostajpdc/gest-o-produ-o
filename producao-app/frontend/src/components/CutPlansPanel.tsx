@@ -110,6 +110,11 @@ export function CutPlansPanel({
                   </td>
                   <td>
                     {p.name}
+                    {serviceOrder && (p.extraServiceOrders?.length ?? 0) > 0 && (
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        Junta OS {[p.serviceOrder?.externalId, ...(p.extraServiceOrders ?? []).map((o) => o.externalId)].filter(Boolean).join(" + ")}
+                      </div>
+                    )}
                     {p.material && <div className="muted" style={{ fontSize: 12 }}>{p.material}</div>}
                   </td>
                   <td>{p.mode === "CHAPAS" ? "Chapas" : "Barras"}</td>
@@ -117,8 +122,12 @@ export function CutPlansPanel({
                     <td>
                       {p.serviceOrder ? (
                         <>
-                          {p.serviceOrder.externalId}
-                          <div className="muted" style={{ fontSize: 12 }}>{p.serviceOrder.client?.name}</div>
+                          {[p.serviceOrder.externalId, ...(p.extraServiceOrders ?? []).map((o) => o.externalId)].join(" + ")}
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            {[p.serviceOrder.client?.name, ...(p.extraServiceOrders ?? []).map((o) => o.client?.name)]
+                              .filter((v, i, a) => v && a.indexOf(v) === i)
+                              .join(", ")}
+                          </div>
                         </>
                       ) : (
                         "—"

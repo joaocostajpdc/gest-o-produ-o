@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { CutPlan, CutPlanInput, CutPlanMode, CutResult, MosquitoRules } from "../types";
 import { CutPlanView } from "./CutPlanView";
-import { EMPTY_RULES, GeneratedPiece, MosquitoPanel, MosquitoRow, rowsToItems } from "./MosquitoPanel";
+import { EMPTY_RULES, GeneratedPiece, MosquitoPanel, MosquitoRow, emptyMosquitoRow, rowsToItems } from "./MosquitoPanel";
 
 // ============================================================================
 // Editor de um plano de corte (Otimização de Corte, 2026-10-16): medidas das
@@ -32,6 +32,7 @@ interface PieceRow {
   bends: string;
   cornerCuts: string;
   profile: string; // barras: perfil de onde sai a peça
+  os: string; // barras: OS a que pertence (planos com várias obras)
 }
 interface StockRow {
   length: string;
@@ -60,6 +61,7 @@ const emptyPiece = (i: number): PieceRow => ({
   bends: "",
   cornerCuts: "",
   profile: "",
+  os: "",
 });
 
 const num = (s: string) => Number(String(s).replace(",", "."));
@@ -86,6 +88,7 @@ function rowsFromInput(input?: CutPlanInput) {
     bends: input.mode === "CHAPAS" ? String((p as { bends?: number | null }).bends ?? "") : "",
     cornerCuts: input.mode === "CHAPAS" ? String((p as { cornerCuts?: number | null }).cornerCuts ?? "") : "",
     profile: input.mode === "BARRAS" ? (p as { profile?: string | null }).profile ?? "" : "",
+    os: input.mode === "BARRAS" ? (p as { os?: string | null }).os ?? "" : "",
   }));
   const stock: StockRow[] = input.stock.map((s) => ({
     length: String(s.length),
@@ -137,8 +140,15 @@ export function CutPlanEditor({
   const [rules, setRules] = useState<MosquitoRules>(initialBars?.mosquitoRules ?? EMPTY_RULES);
   const [mosqRows, setMosqRows] = useState<MosquitoRow[]>(
     initialBars?.mosquitos?.length
-      ? initialBars.mosquitos.map((m) => ({ width: String(m.width), height: String(m.height), qty: String(m.qty), finish: m.finish ?? "" }))
-      : [{ width: "", height: "", qty: "1", finish: "" }]
+      ? initialBars.mosquitos.map((m) => ({
+          width: String(m.width),
+          height: String(m.height),
+          qty: String(m.qty),
+          finish: m.finish ?? "",
+          os: m.os ?? "",
+          client: m.client ?? "",
+        }))
+      : [emptyMosquitoRow()]
   );
   const [showMosq, setShowMosq] = useState(!!initialBars?.mosquitos?.length || !!initial?.startMosquito);
   const [paste, setPaste] = useState("");
@@ -166,9 +176,13 @@ export function CutPlanEditor({
         length: String(g.length),
         qty: String(g.qty),
         profile: g.profile,
+        os: g.os ?? "",
       }))
     );
-    if (!name.trim() && osRef.trim()) setName(`Mosquiteiras OS ${osRef.trim()}`);
+    const oss = [...new Set(list.map((g) => g.os).filter((x): x is string => !!x))];
+    const auto = /^Mosquiteiras OS /.test(name.trim());
+    if ((!name.trim() || auto) && oss.length) setName(`Mosquiteiras OS ${oss.join(" + ")}`);
+    else if (!name.trim() && osRef.trim()) setName(`Mosquiteiras OS ${osRef.trim()}`);
     setPreview(null);
   }
 
@@ -225,6 +239,7 @@ export function CutPlanEditor({
         length: num(p.length),
         qty: Math.round(num(p.qty)),
         profile: p.profile.trim() || null,
+        os: p.os.trim() || null,
       })),
       stock: stockRows.map((s) => ({ length: num(s.length), qty: s.qty.trim() ? Math.round(num(s.qty)) : null })),
       settings: { kerf: num(barKerf) || 0, trim: num(barTrim) || 0, minRemnant: num(minRemnant) || 0 },
@@ -364,8 +379,9 @@ export function CutPlanEditor({
           setRows={setMosqRows}
           onGenerate={applyGenerated}
           autoImport={!!initial?.startMosquito && !!initial?.serviceOrderRef}
-          onServiceOrderFound={(externalId) => {
-            if (!lockServiceOrder) setOsRef(externalId);
+          onServiceOrderFound={(externalId, _client, isMain) => {
+            // a OS principal fica com o nº completo; sem OS principal, fica a 1.ª importada
+            if (!lockServiceOrder && (isMain || !osRef.trim())) setOsRef(externalId);
           }}
         />
       )}
@@ -403,6 +419,7 @@ export function CutPlanEditor({
                 <th>Ref.</th>
                 <th>Descrição</th>
                 {!isSheet && <th>Perfil</th>}
+                {!isSheet && <th>OS</th>}
                 {isSheet && <th>Largura</th>}
                 <th>Comprimento</th>
                 <th>Quant.</th>
@@ -428,6 +445,11 @@ export function CutPlanEditor({
                   {!isSheet && (
                     <td>
                       <input type="text" value={p.profile} onChange={(e) => updatePiece(i, { profile: e.target.value })} placeholder="—" style={{ width: 150 }} />
+                    </td>
+                  )}
+                  {!isSheet && (
+                    <td>
+                      <input type="text" value={p.os} onChange={(e) => updatePiece(i, { os: e.target.value })} placeholder="—" style={{ width: 96 }} />
                     </td>
                   )}
                   {isSheet && (

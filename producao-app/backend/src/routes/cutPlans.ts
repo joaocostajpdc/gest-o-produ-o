@@ -43,6 +43,8 @@ const mosquitoItem = z.object({
   height: mm,
   qty: z.coerce.number().int().min(1).max(1000),
   finish: optionalText,
+  os: z.string().trim().max(40).nullable().optional(), // nº da OS de onde vem
+  client: optionalText,
 });
 
 const deduct = z.coerce.number().min(-500).max(2000).nullable();
@@ -95,6 +97,7 @@ const barInput = z.object({
         length: mm,
         qty: z.coerce.number().int().min(1).max(5000),
         profile: z.string().trim().max(60).nullable().optional(),
+        os: z.string().trim().max(40).nullable().optional(), // OS a que a peça pertence
       })
     )
     .min(1, "Indica pelo menos uma peça.")
@@ -135,6 +138,13 @@ function compute(input: CutInput): CutResult {
   return optimizeBars(input.pieces, input.stock, input.settings);
 }
 
+/** OS pelo nº completo ("2026/515") ou só pelo número ("515", a mais recente). */
+async function findOrderByRef(ref: string) {
+  const so = await prisma.serviceOrder.findFirst({ where: { externalId: { equals: ref, mode: "insensitive" } } });
+  if (so || !/^\d+$/.test(ref)) return so;
+  return prisma.serviceOrder.findFirst({ where: { externalId: { endsWith: `/${ref}` } }, orderBy: { createdAt: "desc" } });
+}
+
 async function resolveServiceOrder(id: string | null | undefined, ref: string | null | undefined) {
   if (id) {
     const so = await prisma.serviceOrder.findUnique({ where: { id } });
@@ -143,9 +153,48 @@ async function resolveServiceOrder(id: string | null | undefined, ref: string | 
   }
   const r = ref?.trim();
   if (!r) return null;
-  const so = await prisma.serviceOrder.findFirst({ where: { externalId: { equals: r, mode: "insensitive" } } });
+  const so = await findOrderByRef(r);
   if (!so) throw new Error(`Não encontrei a OS "${r}".`);
   return so.id;
+}
+
+/**
+ * OS ligadas ao plano: a principal (escolhida ou escrita) e as outras OS
+ * indicadas nas peças/mosquiteiras (planos que juntam várias obras).
+ */
+async function linkedOrders(
+  data: { serviceOrderId?: string | null; serviceOrderRef?: string | null; input: CutInput }
+): Promise<{ mainId: string | null; extraIds: string[] }> {
+  let mainId = await resolveServiceOrder(data.serviceOrderId, data.serviceOrderRef);
+  const refs = new Set<string>();
+  if (data.input.mode === "BARRAS") {
+    data.input.pieces.forEach((p) => p.os?.trim() && refs.add(p.os.trim()));
+    (data.input.mosquitos ?? []).forEach((m) => m.os?.trim() && refs.add(m.os.trim()));
+  }
+  const ids: string[] = [];
+  for (const ref of refs) {
+    const so = await findOrderByRef(ref);
+    if (so && !ids.includes(so.id)) ids.push(so.id);
+  }
+  if (!mainId && ids.length) mainId = ids[0];
+  return { mainId, extraIds: ids.filter((id) => id !== mainId) };
+}
+
+type PlanRow = { extraServiceOrderIds: string[] };
+
+/** Junta a cada plano os dados das OS extra (nº e cliente). */
+async function withExtras<T extends PlanRow>(plans: T[]) {
+  const all = [...new Set(plans.flatMap((p) => p.extraServiceOrderIds))];
+  const orders = all.length
+    ? await prisma.serviceOrder.findMany({
+        where: { id: { in: all } },
+        select: { id: true, externalId: true, client: { select: { name: true } } },
+      })
+    : [];
+  return plans.map((p) => ({
+    ...p,
+    extraServiceOrders: p.extraServiceOrderIds.map((id) => orders.find((o) => o.id === id)).filter(Boolean),
+  }));
 }
 
 const INCLUDE = {
@@ -173,8 +222,13 @@ cutPlansRouter.get(
   requirePermission("cutPlans:read"),
   asyncHandler(async (req, res) => {
     const where: Prisma.CutPlanWhereInput = {};
-    if (typeof req.query.serviceOrderId === "string") where.serviceOrderId = req.query.serviceOrderId;
-    const plans = await prisma.cutPlan.findMany({ where, include: INCLUDE, orderBy: { createdAt: "desc" }, take: 300 });
+    if (typeof req.query.serviceOrderId === "string") {
+      const id = req.query.serviceOrderId;
+      where.OR = [{ serviceOrderId: id }, { extraServiceOrderIds: { has: id } }];
+    }
+    const plans = await withExtras(
+      await prisma.cutPlan.findMany({ where, include: INCLUDE, orderBy: { createdAt: "desc" }, take: 300 })
+    );
     // Na lista só vão os totais, não o desenho completo.
     res.json(
       plans.map(({ result, input, ...p }) => ({
@@ -271,7 +325,7 @@ cutPlansRouter.get(
   asyncHandler(async (req, res) => {
     const plan = await prisma.cutPlan.findUnique({ where: { id: req.params.id }, include: INCLUDE });
     if (!plan) throw new Error("Plano de corte não encontrado.");
-    res.json(plan);
+    res.json((await withExtras([plan]))[0]);
   })
 );
 
@@ -280,7 +334,7 @@ cutPlansRouter.post(
   requirePermission("cutPlans:write"),
   asyncHandler(async (req, res) => {
     const data = planSchema.parse(req.body);
-    const serviceOrderId = await resolveServiceOrder(data.serviceOrderId, data.serviceOrderRef);
+    const { mainId: serviceOrderId, extraIds } = await linkedOrders(data);
     const result = compute(data.input);
     const plan = await prisma.$transaction(async (tx) => {
       const created = await tx.cutPlan.create({
@@ -290,25 +344,28 @@ cutPlansRouter.post(
           material: data.material || null,
           notes: data.notes || null,
           serviceOrderId,
+          extraServiceOrderIds: extraIds,
           input: data.input as unknown as Prisma.InputJsonValue,
           result: result as unknown as Prisma.InputJsonValue,
           createdById: req.user?.id,
         },
         include: INCLUDE,
       });
-      if (serviceOrderId) {
+      for (const soId of [serviceOrderId, ...extraIds].filter((x): x is string => !!x)) {
         await logHistoryEvent({
           tx,
-          serviceOrderId,
+          serviceOrderId: soId,
           type: "OUTRA_ALTERACAO",
-          description: `Plano de corte PC-${created.number} "${created.name}": ${summary(result.totals, created.mode)}`,
+          description: `Plano de corte PC-${created.number} "${created.name}": ${summary(result.totals, created.mode)}${
+            extraIds.length ? ` (junta ${extraIds.length + 1} OS)` : ""
+          }`,
           userId: req.user?.id,
           metadata: { cutPlanId: created.id },
         });
       }
       return created;
     });
-    res.status(201).json(plan);
+    res.status(201).json((await withExtras([plan]))[0]);
   })
 );
 
@@ -319,8 +376,9 @@ cutPlansRouter.put(
     const existing = await prisma.cutPlan.findUnique({ where: { id: req.params.id } });
     if (!existing) throw new Error("Plano de corte não encontrado.");
     const data = planSchema.parse(req.body);
-    const serviceOrderId = await resolveServiceOrder(data.serviceOrderId, data.serviceOrderRef);
+    const { mainId: serviceOrderId, extraIds } = await linkedOrders(data);
     const result = compute(data.input);
+    const before = new Set([existing.serviceOrderId, ...existing.extraServiceOrderIds].filter(Boolean));
     const plan = await prisma.$transaction(async (tx) => {
       const updated = await tx.cutPlan.update({
         where: { id: existing.id },
@@ -330,18 +388,19 @@ cutPlansRouter.put(
           material: data.material || null,
           notes: data.notes || null,
           serviceOrderId,
+          extraServiceOrderIds: extraIds,
           input: data.input as unknown as Prisma.InputJsonValue,
           result: result as unknown as Prisma.InputJsonValue,
         },
         include: INCLUDE,
       });
-      if (serviceOrderId) {
+      for (const soId of [serviceOrderId, ...extraIds].filter((x): x is string => !!x)) {
         await logHistoryEvent({
           tx,
-          serviceOrderId,
+          serviceOrderId: soId,
           type: "OUTRA_ALTERACAO",
           description: `Plano de corte PC-${updated.number} "${updated.name}" ${
-            existing.serviceOrderId === serviceOrderId ? "alterado" : "ligado a esta OS"
+            before.has(soId) ? "alterado" : "ligado a esta OS"
           }: ${summary(result.totals, updated.mode)}`,
           userId: req.user?.id,
           metadata: { cutPlanId: updated.id },
@@ -349,7 +408,7 @@ cutPlansRouter.put(
       }
       return updated;
     });
-    res.json(plan);
+    res.json((await withExtras([plan]))[0]);
   })
 );
 

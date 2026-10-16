@@ -52,6 +52,7 @@ model User {
   materialRequests  MaterialRequest[]
   powderMovements   PowderMovement[]
   glassOrders       GlassOrder[]
+  cutPlans          CutPlan[]
 
   @@map("users")
 }
@@ -260,6 +261,7 @@ model ServiceOrder {
   historyEvents     HistoryEvent[]
   attachments       Attachment[]
   glassOrders       GlassOrder[]
+  cutPlans          CutPlan[]
 
   @@index([status])
   @@index([deadlineAt])
@@ -569,4 +571,36 @@ model GlassOrder {
   @@index([serviceOrderId])
   @@index([status])
   @@map("glass_orders")
+}
+
+// ---------------------------------------------------------------------------
+// Otimização de Corte (pedido do utilizador de 2026-10-16: "otimização de
+// corte tipo cut list"). Cada plano guarda as medidas pedidas (input) e o
+// resultado calculado (result) — chapas (2D) ou barras (1D) — e pode ficar
+// ligado a uma Ordem de Serviço, aparecendo no separador "Cortes" da OS.
+// ---------------------------------------------------------------------------
+
+enum CutPlanMode {
+  CHAPAS
+  BARRAS
+}
+
+model CutPlan {
+  id             String        @id @default(cuid())
+  number         Int           @unique @default(autoincrement()) // nº do plano (PC-…)
+  name           String
+  mode           CutPlanMode
+  material       String?       // ex.: "Alumínio 1,5 mm" ou "Perfil MQ-30"
+  serviceOrderId String?
+  serviceOrder   ServiceOrder? @relation(fields: [serviceOrderId], references: [id], onDelete: SetNull)
+  notes          String?
+  input          Json          // peças, stock e definições
+  result         Json          // resultado da otimização
+  createdById    String?
+  createdBy      User?         @relation(fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([serviceOrderId])
+  @@map("cut_plans")
 }

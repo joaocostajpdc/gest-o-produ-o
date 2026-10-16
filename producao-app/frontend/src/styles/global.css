@@ -1352,3 +1352,200 @@ label {
 .os-table tr.os-row-open td:first-child {
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
+
+/* --------------------------------------------------------------------- */
+/* Otimização de Corte (2026-10-16) — editor, desenho das chapas/barras   */
+/* e impressão do plano.                                                  */
+/* --------------------------------------------------------------------- */
+.cut-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.cut-mode-toggle button {
+  border: 0;
+  background: var(--color-surface);
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.cut-mode-toggle button.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+.cut-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.cut-section-head h3 {
+  margin: 0;
+}
+.cut-section-head .btn {
+  margin-left: auto;
+}
+.cut-table-wrap {
+  overflow-x: auto;
+}
+.cut-input-table td {
+  padding: 4px 6px;
+}
+.cut-input-table input[type="text"],
+.cut-input-table input[type="number"] {
+  padding: 6px 8px;
+}
+.cut-stock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cut-stock-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cut-stock-row input {
+  width: 110px;
+}
+.cut-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.cut-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.cut-sheet-head .muted {
+  font-size: 13px;
+}
+.cut-svg {
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  display: block;
+  font-family: inherit;
+}
+.cut-bar-row {
+  margin-bottom: 14px;
+}
+.cut-bar-label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+.cut-bar-label .muted {
+  font-size: 12px;
+}
+.cut-bar {
+  display: flex;
+  height: 34px;
+  border: 1.5px solid #344054;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f2f4f7;
+}
+.cut-bar-seg {
+  height: 100%;
+  border-right: 1.5px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 11px;
+  white-space: nowrap;
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.cut-bar-kerf {
+  height: 100%;
+  background: #344054;
+}
+.cut-bar-trim {
+  background: repeating-linear-gradient(45deg, #d0d5dd 0 4px, #f2f4f7 4px 8px);
+  border-color: #98a2b3;
+}
+.cut-bar-rest {
+  background: repeating-linear-gradient(45deg, #e4e7ec 0 5px, #f9fafb 5px 10px);
+  color: #667085;
+  border-right: 0;
+}
+.cut-bar-rest.reusable {
+  background: repeating-linear-gradient(45deg, #d1fadf 0 5px, #f6fef9 5px 10px);
+  color: #067647;
+  font-weight: 700;
+}
+.cut-print-brand {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-primary);
+}
+.cut-print-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 2px 0 6px;
+}
+.cut-print-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+@media print {
+  .mobile-topbar,
+  .sidebar-overlay {
+    display: none !important;
+  }
+  .cut-plan-page .card {
+    box-shadow: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .cut-svg {
+    max-height: 17cm;
+  }
+  .cut-stats .stat-card {
+    padding: 8px 10px;
+  }
+  .cut-stats .stat-card-value {
+    font-size: 18px;
+  }
+  .cut-svg rect,
+  .cut-bar,
+  .cut-bar-seg {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+.cut-view .badge,
+.cut-plan-page .badge {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+form .field textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}

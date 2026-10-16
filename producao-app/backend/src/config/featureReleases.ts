@@ -21,6 +21,7 @@ export const FEATURES = {
   powderStock: "Pó em Stock",
   glassOrders: "Pedidos de Vidros",
   osSidePanel: "Painel lateral das OS",
+  cutPlans: "Otimização de Corte",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

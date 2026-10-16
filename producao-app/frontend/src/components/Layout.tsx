@@ -82,6 +82,26 @@ function IconGlass(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone da "Otimização de Corte" (chapa com linhas de corte).
+function IconCut(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <rect x="3" y="5" width="18" height="14" rx="1" />
+      <path d="M3 12h18M10 5v7M15 12v7" strokeDasharray="2.5 2" />
+    </svg>
+  );
+}
+
 // Marca "Teste" ao lado de uma aba ainda não aprovada pelo administrador.
 function TestBadge() {
   return (
@@ -109,6 +129,7 @@ export function Layout() {
   // no menu dos administradores, com a marca "Teste" (ver FeaturesContext).
   const powderStock = useFeature("powderStock");
   const glassOrders = useFeature("glassOrders");
+  const cutPlans = useFeature("cutPlans");
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
   // CSS ignora esta flag e o menu está sempre visível.
@@ -177,6 +198,12 @@ export function Layout() {
             <NavLink to="/pedidos-vidros">
               <IconGlass /> Pedidos de Vidros
               {!glassOrders.released && <TestBadge />}
+            </NavLink>
+          )}
+          {cutPlans.available && (
+            <NavLink to="/otimizacao-corte">
+              <IconCut /> Otimização de Corte
+              {!cutPlans.released && <TestBadge />}
             </NavLink>
           )}
           <NavLink to="/reports">

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, downloadBlob } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
 import { GlassOrdersPanel } from "../components/GlassOrdersPanel";
+import { CutPlansPanel } from "../components/CutPlansPanel";
 import {
   Attachment,
   HistoryEvent,
@@ -15,7 +16,7 @@ import {
 import { minutesToDays, minutesToHuman, PriorityBadge, StatusBadge } from "../components/Badges";
 import { canChangeFlow, canDeleteServiceOrders, useAuth } from "../contexts/AuthContext";
 
-type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "anexos" | "vidros" | "historico";
+type Tab = "etapas" | "tempos" | "interrupcoes" | "observacoes" | "anexos" | "vidros" | "cortes" | "historico";
 
 // Faz upload de um ficheiro em bruto para uma OS (e, opcionalmente, associado
 // a uma observação — ver ObservacoesTab). O nome original do ficheiro segue
@@ -103,6 +104,7 @@ export function ServiceOrderDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const glassOrdersFeature = useFeature("glassOrders");
+  const cutPlansFeature = useFeature("cutPlans");
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -453,6 +455,8 @@ export function ServiceOrderDetailPage() {
             // Separador "Vidros" (Pedidos de Vidros, 2026-10-14) — só aparece
             // a quem tem acesso (administradores, até ser aprovado).
             ...(glassOrdersFeature.available ? ["vidros"] : []),
+            // Separador "Cortes" (Otimização de Corte, 2026-10-16) — idem.
+            ...(cutPlansFeature.available ? ["cortes"] : []),
             "historico",
           ] as Tab[]
         ).map((t) => (
@@ -498,6 +502,12 @@ export function ServiceOrderDetailPage() {
         </div>
       )}
 
+      {tab === "cortes" && cutPlansFeature.available && (
+        <div className="card">
+          <CutPlansPanel serviceOrder={{ id: order.id, externalId: order.externalId }} />
+        </div>
+      )}
+
       {tab === "historico" && <HistoricoTab history={history} />}
     </div>
   );
@@ -511,6 +521,7 @@ function tabLabel(t: Tab) {
     observacoes: "Observações",
     anexos: "Anexos",
     vidros: "Vidros",
+    cortes: "Cortes",
     historico: "Histórico",
   }[t];
 }

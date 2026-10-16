@@ -15,6 +15,7 @@ import { MaterialRequestsPage } from "./pages/MaterialRequestsPage";
 import { ScanPage } from "./pages/ScanPage";
 import { PowderStockPage } from "./pages/PowderStockPage";
 import { GlassOrdersPage } from "./pages/GlassOrdersPage";
+import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage";
 import { FeaturesProvider } from "./contexts/FeaturesContext";
 
 function ProtectedArea() {
@@ -40,6 +41,9 @@ export default function App() {
         <Route path="/material-a-pedir" element={<MaterialRequestsPage />} />
         <Route path="/po-em-stock" element={<PowderStockPage />} />
         <Route path="/pedidos-vidros" element={<GlassOrdersPage />} />
+        <Route path="/otimizacao-corte" element={<CutPlansPage />} />
+        <Route path="/otimizacao-corte/novo" element={<CutPlanNewPage />} />
+        <Route path="/otimizacao-corte/:id" element={<CutPlanPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

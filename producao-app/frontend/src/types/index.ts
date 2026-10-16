@@ -310,3 +310,136 @@ export interface GlassOrder {
   createdBy?: { id: string; name: string } | null;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Otimização de Corte (2026-10-16) — espelha backend/src/services/cutOptimizer.ts
+// ---------------------------------------------------------------------------
+
+export type CutPlanMode = "CHAPAS" | "BARRAS";
+
+export interface SheetPieceInput {
+  ref: string;
+  description?: string | null;
+  width: number;
+  length: number;
+  qty: number;
+  rotate: boolean;
+  bends?: number | null;
+  cornerCuts?: number | null;
+}
+
+export interface BarPieceInput {
+  ref: string;
+  description?: string | null;
+  length: number;
+  qty: number;
+}
+
+export type CutPlanInput =
+  | {
+      mode: "CHAPAS";
+      pieces: SheetPieceInput[];
+      stock: { length: number; width: number; qty?: number | null }[];
+      settings: { kerf: number; trim: number };
+    }
+  | {
+      mode: "BARRAS";
+      pieces: BarPieceInput[];
+      stock: { length: number; qty?: number | null }[];
+      settings: { kerf: number; trim: number; minRemnant: number };
+    };
+
+export interface UnplacedPiece {
+  ref: string;
+  typeIndex: number;
+  qty: number;
+  reason: string;
+}
+
+export interface SheetPlacement {
+  ref: string;
+  typeIndex: number;
+  x: number;
+  y: number;
+  l: number;
+  w: number;
+  rotated: boolean;
+}
+
+export interface SheetLayout {
+  index: number;
+  stockIndex: number;
+  length: number;
+  width: number;
+  pieces: SheetPlacement[];
+  strips: { pos: number; size: number; vertical: boolean }[];
+  cuts: number;
+  piecesArea: number;
+  utilization: number;
+}
+
+export interface SheetTotals {
+  piecesCount: number;
+  piecesM2: number;
+  sheetsCount: number;
+  sheetsM2: number;
+  wasteM2: number;
+  yieldPct: number;
+  cuts: number;
+  bends: number;
+  cornerCuts: number;
+  byFormat: { length: number; width: number; count: number }[];
+}
+
+export interface BarLayout {
+  index: number;
+  stockIndex: number;
+  length: number;
+  pieces: { ref: string; typeIndex: number; offset: number; length: number }[];
+  usedLength: number;
+  remnant: number;
+  reusable: boolean;
+  cuts: number;
+}
+
+export interface BarTotals {
+  piecesCount: number;
+  piecesM: number;
+  barsCount: number;
+  barsM: number;
+  wasteM: number;
+  yieldPct: number;
+  cuts: number;
+  reusableRemnants: number;
+  reusableM: number;
+  byLength: { length: number; count: number }[];
+}
+
+export type CutResult =
+  | { mode: "CHAPAS"; sheets: SheetLayout[]; unplaced: UnplacedPiece[]; totals: SheetTotals }
+  | { mode: "BARRAS"; bars: BarLayout[]; unplaced: UnplacedPiece[]; totals: BarTotals };
+
+interface CutPlanBase {
+  id: string;
+  number: number;
+  name: string;
+  mode: CutPlanMode;
+  material?: string | null;
+  notes?: string | null;
+  serviceOrderId?: string | null;
+  serviceOrder?: { id: string; externalId: string; client?: { name: string } | null } | null;
+  createdBy?: { id: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CutPlanSummary extends CutPlanBase {
+  piecesTypes: number;
+  totals: SheetTotals | BarTotals | null;
+  unplacedCount: number;
+}
+
+export interface CutPlan extends CutPlanBase {
+  input: CutPlanInput;
+  result: CutResult;
+}

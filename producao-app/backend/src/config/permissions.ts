@@ -38,7 +38,10 @@ export type Permission =
   | "powderStock:move"
   // Pedidos de Vidros (2026-10-14)
   | "glassOrders:read"
-  | "glassOrders:write";
+  | "glassOrders:write"
+  // Otimização de Corte (2026-10-16)
+  | "cutPlans:read"
+  | "cutPlans:write";
 
 const ALL_PERMISSIONS: Permission[] = [
   "products:read",
@@ -65,6 +68,8 @@ const ALL_PERMISSIONS: Permission[] = [
   "powderStock:move",
   "glassOrders:read",
   "glassOrders:write",
+  "cutPlans:read",
+  "cutPlans:write",
 ];
 
 export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
@@ -95,6 +100,8 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "powderStock:move",
     "glassOrders:read",
     "glassOrders:write",
+    "cutPlans:read",
+    "cutPlans:write",
   ],
 
   // Operário - execução e consulta das operações produtivas
@@ -115,6 +122,8 @@ export const PERMISSION_MATRIX: Record<UserRole, Permission[]> = {
     "powderStock:move",
     // O operário vê os vidros pedidos (ex.: na OS), mas não os lança.
     "glassOrders:read",
+    // O operário consulta e imprime os planos de corte, mas não os altera.
+    "cutPlans:read",
   ],
 };
 

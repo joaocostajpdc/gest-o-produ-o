@@ -504,7 +504,10 @@ export function ServiceOrderDetailPage() {
 
       {tab === "cortes" && cutPlansFeature.available && (
         <div className="card">
-          <CutPlansPanel serviceOrder={{ id: order.id, externalId: order.externalId }} />
+          <CutPlansPanel
+            serviceOrder={{ id: order.id, externalId: order.externalId }}
+            mosquito={order.product.category === "Mosquiteiras"}
+          />
         </div>
       )}
 

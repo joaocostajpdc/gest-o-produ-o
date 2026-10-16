@@ -333,6 +333,26 @@ export interface BarPieceInput {
   description?: string | null;
   length: number;
   qty: number;
+  profile?: string | null;
+}
+
+export interface MosquitoItem {
+  width: number;
+  height: number;
+  qty: number;
+  finish?: string | null;
+}
+
+export interface MosquitoRules {
+  heightDeduct: number | null; // x
+  widthLimit: number;
+  widthDeductSmall: number | null; // f
+  widthDeductLarge: number | null; // y
+  heightsPerUnit: number;
+  widthsPerUnit: number;
+  heightProfile: string;
+  widthSmallProfile: string;
+  widthLargeProfile: string;
 }
 
 export type CutPlanInput =
@@ -347,6 +367,8 @@ export type CutPlanInput =
       pieces: BarPieceInput[];
       stock: { length: number; qty?: number | null }[];
       settings: { kerf: number; trim: number; minRemnant: number };
+      mosquitos?: MosquitoItem[];
+      mosquitoRules?: MosquitoRules;
     };
 
 export interface UnplacedPiece {
@@ -394,6 +416,7 @@ export interface SheetTotals {
 export interface BarLayout {
   index: number;
   stockIndex: number;
+  profile?: string | null;
   length: number;
   pieces: { ref: string; typeIndex: number; offset: number; length: number }[];
   usedLength: number;
@@ -413,6 +436,15 @@ export interface BarTotals {
   reusableRemnants: number;
   reusableM: number;
   byLength: { length: number; count: number }[];
+  byProfile?: {
+    profile: string;
+    barsCount: number;
+    piecesM: number;
+    barsM: number;
+    yieldPct: number;
+    cuts: number;
+    byLength: { length: number; count: number }[];
+  }[];
 }
 
 export type CutResult =

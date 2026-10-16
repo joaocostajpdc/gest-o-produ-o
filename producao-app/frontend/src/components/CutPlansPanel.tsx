@@ -26,7 +26,14 @@ function resultText(p: CutPlanSummary) {
   return `${t.barsCount} barra(s)${f ? ` (${f})` : ""} · ${t.piecesM.toLocaleString("pt-PT")} m peças`;
 }
 
-export function CutPlansPanel({ serviceOrder }: { serviceOrder?: { id: string; externalId: string } }) {
+export function CutPlansPanel({
+  serviceOrder,
+  mosquito,
+}: {
+  serviceOrder?: { id: string; externalId: string };
+  /** OS de mosquiteiras: o plano novo abre já em barras, com as medidas da OS. */
+  mosquito?: boolean;
+}) {
   const { user } = useAuth();
   const canWrite = canManageConfig(user?.role);
   const navigate = useNavigate();
@@ -55,7 +62,7 @@ export function CutPlansPanel({ serviceOrder }: { serviceOrder?: { id: string; e
     : plans;
 
   const newLink = serviceOrder
-    ? `/otimizacao-corte/novo?os=${encodeURIComponent(serviceOrder.externalId)}`
+    ? `/otimizacao-corte/novo?os=${encodeURIComponent(serviceOrder.externalId)}${mosquito ? "&mosquiteiras=1" : ""}`
     : "/otimizacao-corte/novo";
 
   return (

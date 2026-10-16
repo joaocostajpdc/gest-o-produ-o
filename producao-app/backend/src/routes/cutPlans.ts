@@ -31,6 +31,33 @@ const mm = z.coerce.number().positive().max(20000);
 const optionalText = z.string().trim().max(500).nullable().optional();
 const stockQty = z.coerce.number().int().min(1).max(10000).nullable().optional();
 
+// ---------------------------------------------------------------------------
+// Mosquiteiras (2026-10-16): medidas Largura × Altura × Quant. (lidas da OS ou
+// escritas à mão) e regras de desconto — alturas descontam "x"; larguras até
+// 1400 descontam "f" (perfil próprio) e acima de 1400 descontam "y" (outro
+// perfil). Os valores são preenchidos pelo administrador no programa.
+// ---------------------------------------------------------------------------
+
+const mosquitoItem = z.object({
+  width: mm,
+  height: mm,
+  qty: z.coerce.number().int().min(1).max(1000),
+  finish: optionalText,
+});
+
+const deduct = z.coerce.number().min(-500).max(2000).nullable();
+const mosquitoRulesSchema = z.object({
+  heightDeduct: deduct, // x
+  widthLimit: z.coerce.number().positive().max(10000).default(1400),
+  widthDeductSmall: deduct, // f (até ao limite, inclusive)
+  widthDeductLarge: deduct, // y (acima do limite)
+  heightsPerUnit: z.coerce.number().int().min(0).max(10).default(2),
+  widthsPerUnit: z.coerce.number().int().min(0).max(10).default(1),
+  heightProfile: z.string().trim().min(1).max(60).default("Guias (alturas)"),
+  widthSmallProfile: z.string().trim().min(1).max(60).default("Largura até 1400"),
+  widthLargeProfile: z.string().trim().min(1).max(60).default("Largura acima de 1400"),
+});
+
 const sheetInput = z.object({
   mode: z.literal("CHAPAS"),
   pieces: z
@@ -67,6 +94,7 @@ const barInput = z.object({
         description: optionalText,
         length: mm,
         qty: z.coerce.number().int().min(1).max(5000),
+        profile: z.string().trim().max(60).nullable().optional(),
       })
     )
     .min(1, "Indica pelo menos uma peça.")
@@ -80,6 +108,9 @@ const barInput = z.object({
     trim: z.coerce.number().min(0).max(500).default(0),
     minRemnant: z.coerce.number().min(0).max(20000).default(500),
   }),
+  // Mosquiteiras de onde saíram as peças (para se poder voltar a editar)
+  mosquitos: z.array(mosquitoItem).max(300).optional(),
+  mosquitoRules: z.lazy(() => mosquitoRulesSchema).optional(),
 });
 
 const inputSchema = z.discriminatedUnion("mode", [sheetInput, barInput]);
@@ -153,6 +184,84 @@ cutPlansRouter.get(
         unplacedCount: ((result as unknown as CutResult)?.unplaced ?? []).reduce((a, u) => a + u.qty, 0),
       }))
     );
+  })
+);
+
+const MOSQUITO_RULES_KEY = "mosquitoRules";
+
+cutPlansRouter.get(
+  "/mosquito-rules",
+  requirePermission("cutPlans:read"),
+  asyncHandler(async (_req, res) => {
+    const row = await prisma.appSetting.findUnique({ where: { key: MOSQUITO_RULES_KEY } });
+    res.json(mosquitoRulesSchema.parse(row?.value ?? { heightDeduct: null, widthDeductSmall: null, widthDeductLarge: null }));
+  })
+);
+
+cutPlansRouter.put(
+  "/mosquito-rules",
+  requirePermission("cutPlans:write"),
+  asyncHandler(async (req, res) => {
+    const value = mosquitoRulesSchema.parse(req.body);
+    await prisma.appSetting.upsert({
+      where: { key: MOSQUITO_RULES_KEY },
+      create: { key: MOSQUITO_RULES_KEY, value, updatedById: req.user?.id },
+      update: { value, updatedById: req.user?.id },
+    });
+    res.json(value);
+  })
+);
+
+/**
+ * Lê as medidas das mosquiteiras de uma OS, a partir das características
+ * vindas do Goldylocks ("Dimensões: Larg. 1393 x Alt. 1100" / "Quant.: 2,00").
+ */
+cutPlansRouter.get(
+  "/os-measures",
+  requirePermission("cutPlans:read"),
+  asyncHandler(async (req, res) => {
+    const ref = String(req.query.ref ?? "").trim();
+    if (!ref) throw new Error("Indica o nº da OS.");
+    let so = await prisma.serviceOrder.findFirst({
+      where: { externalId: { equals: ref, mode: "insensitive" } },
+      include: { client: { select: { name: true } }, product: { select: { name: true } } },
+    });
+    if (!so && /^\d+$/.test(ref)) {
+      // aceita só o número (ex.: "515" para "2026/515"), escolhendo a mais recente
+      so = await prisma.serviceOrder.findFirst({
+        where: { externalId: { endsWith: `/${ref}` } },
+        orderBy: { createdAt: "desc" },
+        include: { client: { select: { name: true } }, product: { select: { name: true } } },
+      });
+    }
+    if (!so) throw new Error(`Não encontrei a OS "${ref}".`);
+
+    const items: { width: number; height: number; qty: number; finish: string | null }[] = [];
+    const missing: string[] = [];
+    const blocks = (so.specifications ?? "").split(/\n\s*\n/);
+    for (const block of blocks) {
+      if (!/Artigo/i.test(block) || /Valor Total/i.test(block)) continue;
+      const dim = block.match(/Larg\.?\s*([\d.,]+)\s*[x×]\s*Alt\.?\s*([\d.,]+)/i);
+      const title = block.split("\n")[0].trim();
+      if (!dim) {
+        missing.push(title);
+        continue;
+      }
+      const num = (v: string) => Number(v.replace(/\.(?=\d{3}\b)/g, "").replace(",", "."));
+      const qty = block.match(/Quant\.?:\s*([\d.,]+)/i);
+      const finish = block.match(/Acabamento:\s*(.+)/i);
+      items.push({
+        width: num(dim[1]),
+        height: num(dim[2]),
+        qty: Math.max(1, Math.round(qty ? num(qty[1]) : 1)),
+        finish: finish ? finish[1].trim() : null,
+      });
+    }
+    res.json({
+      serviceOrder: { id: so.id, externalId: so.externalId, client: so.client, product: so.product },
+      items,
+      missing,
+    });
   })
 );
 

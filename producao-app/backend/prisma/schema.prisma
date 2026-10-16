@@ -604,3 +604,19 @@ model CutPlan {
   @@index([serviceOrderId])
   @@map("cut_plans")
 }
+
+// ---------------------------------------------------------------------------
+// Definições gerais da aplicação, guardadas por chave (2026-10-16). Primeiro
+// uso: as regras de desconto das mosquiteiras na Otimização de Corte
+// (chave "mosquitoRules": desconto nas alturas e nas larguras até/acima de
+// 1400 mm), que o administrador preenche no próprio programa.
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("app_settings")
+}

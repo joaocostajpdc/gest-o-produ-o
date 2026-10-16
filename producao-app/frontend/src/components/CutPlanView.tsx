@@ -117,6 +117,7 @@ function SheetTotalsView({ totals }: { totals: SheetTotals }) {
 function BarTotalsView({ totals }: { totals: BarTotals }) {
   const lengths = totals.byLength.map((b) => `${b.count}× ${b.length} mm`).join(" · ");
   return (
+    <>
     <div className="stat-grid cut-stats">
       <Stat label={`Barras gastas${lengths ? ` (${lengths})` : ""}`} value={String(totals.barsCount)} />
       <Stat label="Metros de peças" value={`${nf(totals.piecesM, 2)} m`} accent="#16a34a" />
@@ -129,6 +130,40 @@ function BarTotalsView({ totals }: { totals: BarTotals }) {
         accent="#334155"
       />
     </div>
+    {totals.byProfile && totals.byProfile.length > 0 && (
+      <div className="card cut-pieces">
+        <h3 style={{ margin: "0 0 8px" }}>Por perfil</h3>
+        <div className="cut-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Perfil</th>
+                <th>Barras</th>
+                <th>Metros de peças</th>
+                <th>Aproveitamento</th>
+                <th>Cortes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {totals.byProfile.map((p) => (
+                <tr key={p.profile}>
+                  <td>
+                    <strong>{p.profile}</strong>
+                  </td>
+                  <td>
+                    {p.barsCount} ({p.byLength.map((b) => `${b.count}× ${b.length}`).join(", ")})
+                  </td>
+                  <td>{nf(p.piecesM, 2)} m</td>
+                  <td>{nf(p.yieldPct, 1)}%</td>
+                  <td>{p.cuts}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -137,7 +172,11 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
   if (result.mode === "CHAPAS") result.sheets.forEach((s) => s.pieces.forEach((p) => placed.set(p.typeIndex, (placed.get(p.typeIndex) ?? 0) + 1)));
   else result.bars.forEach((b) => b.pieces.forEach((p) => placed.set(p.typeIndex, (placed.get(p.typeIndex) ?? 0) + 1)));
 
+  const hasProfile = input.mode === "BARRAS" && input.pieces.some((p) => p.profile);
+
   return (
+    <>
+    {input.mode === "BARRAS" && input.mosquitos && input.mosquitos.length > 0 && <MosquitoSource input={input} />}
     <div className="card cut-pieces">
       <h3 style={{ margin: "0 0 8px" }}>Lista de peças</h3>
       <div className="cut-table-wrap">
@@ -146,6 +185,7 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
           <tr>
             <th>Ref.</th>
             <th>Descrição</th>
+            {hasProfile && <th>Perfil</th>}
             {input.mode === "CHAPAS" ? <th>Largura × Comprimento</th> : <th>Comprimento</th>}
             <th>Quant.</th>
             {input.mode === "CHAPAS" && (
@@ -169,6 +209,7 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
                   <strong>{p.ref}</strong>
                 </td>
                 <td>{p.description || "—"}</td>
+                {hasProfile && <td>{(p as { profile?: string | null }).profile || "—"}</td>}
                 <td>{input.mode === "CHAPAS" ? `${nf((p as { width: number }).width, 1)} × ${nf(p.length, 1)}` : nf(p.length, 1)}</td>
                 <td>{p.qty}</td>
                 {input.mode === "CHAPAS" && (
@@ -189,6 +230,50 @@ function PiecesTable({ input, result }: { input: CutPlanInput; result: CutResult
       </div>
       <p className="muted" style={{ fontSize: 12, margin: "8px 0 0" }}>
         Total — {input.pieces.reduce((a, p) => a + p.qty, 0)} unid.
+      </p>
+    </div>
+    </>
+  );
+}
+
+/** Mosquiteiras de onde saíram as peças e os descontos aplicados. */
+function MosquitoSource({ input }: { input: Extract<CutPlanInput, { mode: "BARRAS" }> }) {
+  const r = input.mosquitoRules;
+  const items = input.mosquitos ?? [];
+  return (
+    <div className="card cut-pieces">
+      <h3 style={{ margin: "0 0 4px" }}>Mosquiteiras</h3>
+      {r && (
+        <p className="muted" style={{ fontSize: 13, margin: "0 0 8px" }}>
+          Alturas − {nf(r.heightDeduct ?? 0, 1)} mm ({r.heightsPerUnit} por mosquiteira) · larguras até {nf(r.widthLimit, 0)} −{" "}
+          {nf(r.widthDeductSmall ?? 0, 1)} mm · acima de {nf(r.widthLimit, 0)} − {nf(r.widthDeductLarge ?? 0, 1)} mm ({r.widthsPerUnit}{" "}
+          por mosquiteira)
+        </p>
+      )}
+      <div className="cut-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Largura × Altura</th>
+              <th>Quant.</th>
+              <th>Acabamento</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((m, i) => (
+              <tr key={i}>
+                <td>
+                  {nf(m.width, 1)} × {nf(m.height, 1)}
+                </td>
+                <td>{m.qty}</td>
+                <td>{m.finish || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted" style={{ fontSize: 12, margin: "8px 0 0" }}>
+        Total — {items.reduce((a, m) => a + m.qty, 0)} unid.
       </p>
     </div>
   );
@@ -319,11 +404,23 @@ function SheetDrawing({ sheet }: { sheet: SheetLayout }) {
 // ---------------------------------------------------------------------------
 
 function BarsList({ bars }: { bars: BarLayout[] }) {
-  const groups = groupBy(bars, (b) => `${b.length}|${b.pieces.map((p) => `${p.typeIndex}:${p.length}`).join(";")}`);
+  const groups = groupBy(bars, (b) => `${b.profile ?? ""}|${b.length}|${b.pieces.map((p) => `${p.typeIndex}:${p.length}`).join(";")}`);
+  const profiles = [...new Set(bars.map((b) => b.profile ?? ""))];
+  const named = profiles.some((p) => p);
   return (
     <div className="card cut-bars">
       <h3 style={{ margin: "0 0 10px" }}>Barras</h3>
-      {groups.map((g) => {
+      {profiles.map((profile) => (
+        <div key={profile || "-"}>
+          {named && (
+            <div className="cut-profile-head">
+              <strong style={{ fontSize: 16 }}>{profile || "Sem perfil"}</strong>
+              <span className="muted" style={{ fontSize: 13 }}>
+                {bars.filter((b) => (b.profile ?? "") === profile).length} barra(s)
+              </span>
+            </div>
+          )}
+      {groups.filter((g) => (g.first.profile ?? "") === profile).map((g) => {
         const b = g.first;
         const start = b.pieces.length ? b.pieces[0].offset : 0;
         return (
@@ -371,6 +468,8 @@ function BarsList({ bars }: { bars: BarLayout[] }) {
           </div>
         );
       })}
+        </div>
+      ))}
     </div>
   );
 }

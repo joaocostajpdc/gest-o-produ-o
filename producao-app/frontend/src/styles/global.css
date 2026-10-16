@@ -1549,3 +1549,32 @@ form .field textarea {
   width: 100%;
   margin-top: 4px;
 }
+.cut-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 12px;
+}
+.cut-rules-more {
+  margin: -4px 0 10px;
+  font-size: 13px;
+}
+.cut-rules-more summary {
+  cursor: pointer;
+  color: var(--color-primary);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.cut-profile-head {
+  margin: 16px 0 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.cut-profile-head:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}

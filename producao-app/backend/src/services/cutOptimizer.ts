@@ -106,6 +106,9 @@ export interface BarPieceInput {
   description?: string | null;
   length: number;
   qty: number;
+  // Perfil de onde sai a peça (ex.: "Guias", "Largura até 1400"). Peças de
+  // perfis diferentes nunca partilham a mesma barra.
+  profile?: string | null;
 }
 
 export interface BarStockInput {
@@ -122,6 +125,7 @@ export interface BarSettings {
 export interface BarLayout {
   index: number;
   stockIndex: number;
+  profile?: string | null;
   length: number;
   pieces: { ref: string; typeIndex: number; offset: number; length: number }[];
   usedLength: number; // incluindo cortes e topo
@@ -145,6 +149,8 @@ export interface BarResult {
     reusableRemnants: number;
     reusableM: number;
     byLength: { length: number; count: number }[];
+    // Resumo por perfil (só quando há mais do que um perfil ou um perfil com nome)
+    byProfile?: { profile: string; barsCount: number; piecesM: number; barsM: number; yieldPct: number; cuts: number; byLength: { length: number; count: number }[] }[];
   };
 }
 
@@ -657,7 +663,75 @@ function runBarStrategy(
   return { bars, left: remaining };
 }
 
+/**
+ * Barras: cada perfil é otimizado à parte (as peças de perfis diferentes
+ * saem de barras diferentes) e os resultados juntam-se num só plano.
+ */
 export function optimizeBars(pieces: BarPieceInput[], stock: BarStockInput[], settings: BarSettings): BarResult {
+  const profiles: string[] = [];
+  const groups = new Map<string, number[]>();
+  pieces.forEach((p, i) => {
+    const key = (p.profile ?? "").trim();
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      profiles.push(key);
+    }
+    groups.get(key)!.push(i);
+  });
+
+  const bars: BarLayout[] = [];
+  const unplaced: UnplacedPiece[] = [];
+  const byProfile: NonNullable<BarResult["totals"]["byProfile"]> = [];
+  for (const profile of profiles) {
+    const idx = groups.get(profile)!;
+    const r = optimizeBarsSingle(idx.map((i) => pieces[i]), stock, settings);
+    r.bars.forEach((b) => {
+      bars.push({
+        ...b,
+        index: bars.length,
+        profile: profile || null,
+        pieces: b.pieces.map((p) => ({ ...p, typeIndex: idx[p.typeIndex] })),
+      });
+    });
+    r.unplaced.forEach((u) => unplaced.push({ ...u, typeIndex: idx[u.typeIndex] }));
+    byProfile.push({
+      profile: profile || "Sem perfil",
+      barsCount: r.totals.barsCount,
+      piecesM: r.totals.piecesM,
+      barsM: r.totals.barsM,
+      yieldPct: r.totals.yieldPct,
+      cuts: r.totals.cuts,
+      byLength: r.totals.byLength,
+    });
+  }
+
+  const piecesLen = bars.reduce((a, b) => a + b.pieces.reduce((x, p) => x + p.length, 0), 0);
+  const barsLen = bars.reduce((a, b) => a + b.length, 0);
+  const byLength = new Map<number, number>();
+  bars.forEach((b) => byLength.set(b.length, (byLength.get(b.length) ?? 0) + 1));
+  const reusable = bars.filter((b) => b.reusable);
+  const named = profiles.length > 1 || (profiles.length === 1 && profiles[0] !== "");
+  return {
+    mode: "BARRAS",
+    bars,
+    unplaced,
+    totals: {
+      piecesCount: bars.reduce((a, b) => a + b.pieces.length, 0),
+      piecesM: round(piecesLen / 1000, 3),
+      barsCount: bars.length,
+      barsM: round(barsLen / 1000, 3),
+      wasteM: round((barsLen - piecesLen) / 1000, 3),
+      yieldPct: barsLen ? round((piecesLen / barsLen) * 100, 1) : 0,
+      cuts: bars.reduce((a, b) => a + b.cuts, 0),
+      reusableRemnants: reusable.length,
+      reusableM: round(reusable.reduce((a, b) => a + b.remnant, 0) / 1000, 3),
+      byLength: [...byLength.entries()].map(([length, count]) => ({ length, count })).sort((a, b) => b.length - a.length),
+      ...(named ? { byProfile } : {}),
+    },
+  };
+}
+
+function optimizeBarsSingle(pieces: BarPieceInput[], stock: BarStockInput[], settings: BarSettings): BarResult {
   const unplaced: UnplacedPiece[] = [];
   const maxLen = Math.max(0, ...stock.map((st) => st.length - settings.trim));
   const counts = pieces.map((p, t) => {

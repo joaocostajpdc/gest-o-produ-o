@@ -62,6 +62,7 @@ export function CutPlanNewPage() {
   const [error, setError] = useState<string | null>(null);
   const duplicated = (location.state as { duplicate?: EditorInitial } | null)?.duplicate;
   const os = params.get("os");
+  const mosquito = params.get("mosquiteiras") === "1";
 
   if (gate) return gate;
   if (!canManageConfig(user?.role)) return <Navigate to="/otimizacao-corte" replace />;
@@ -78,7 +79,8 @@ export function CutPlanNewPage() {
     }
   }
 
-  const initial: EditorInitial | undefined = duplicated ?? (os ? { serviceOrderRef: os } : undefined);
+  const initial: EditorInitial | undefined =
+    duplicated ?? (os || mosquito ? { serviceOrderRef: os, startMosquito: mosquito } : undefined);
 
   return (
     <div>

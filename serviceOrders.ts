@@ -24,14 +24,8 @@ import {
 } from "../services/serviceOrderService";
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
 import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
-import {
-  streamBarcodeLabelPdf,
-  streamProductLabelPdf,
-  streamMosquiteiraLabelPdf,
-  LabelOrderData,
-} from "../services/labelPdfService";
+import { streamBarcodeLabelPdf, streamProductLabelPdf, LabelOrderData } from "../services/labelPdfService";
 import { PUBLIC_APP_URL } from "../config/publicUrl";
-import { notifyOrderEventLater } from "../services/telegramService";
 import { getServiceOrderHistory, logHistoryEvent } from "../services/historyService";
 
 export const serviceOrdersRouter = Router();
@@ -67,22 +61,6 @@ function computeLacagemExpectedReturn(order: any) {
   return { expectedReturnAt, leadDays: leadTime.leadDays };
 }
 
-// Lê o valor de "Acabamento: ..." do texto livre de especificações da OS
-// (mesmo formato "Rótulo: valor" já usado nas etiquetas — ver
-// labelPdfService.ts). Não há campo estruturado próprio para o acabamento,
-// por isso é lido deste texto tal como os restantes campos da etiqueta.
-function extractFinish(specifications: string | null | undefined): string | null {
-  if (!specifications) return null;
-  for (const rawLine of specifications.split("\n")) {
-    const match = rawLine.match(/^([^:]+):\s*(.+)$/);
-    if (!match) continue;
-    if (match[1].trim().toLowerCase() === "acabamento") {
-      return match[2].trim().replace(/,\s*$/, "");
-    }
-  }
-  return null;
-}
-
 function serializeListItem(order: any, now: Date) {
   const priority = computePriority(order.deadlineAt, order.status, now);
   const { expectedReturnAt, leadDays } = computeLacagemExpectedReturn(order);
@@ -96,7 +74,6 @@ function serializeListItem(order: any, now: Date) {
       name: order.product.name,
       category: order.product.category,
       externalId: order.product.externalId,
-      description: order.product.description,
     },
     createdAt: order.createdAt,
     deadlineAt: order.deadlineAt,
@@ -114,14 +91,6 @@ function serializeListItem(order: any, now: Date) {
         }
       : null,
     productionMinutes: getCurrentProductionMinutes(order, now),
-    // Acabamento da encomenda (quando indicado nas Características do
-    // Produto) — usado sobretudo para filtrar a listagem de Material em
-    // Lacagem.
-    finish: extractFinish(order.specifications),
-    // Designação/características do artigo — mostradas no painel lateral de
-    // consulta rápida (pedido do utilizador de 2026-10-14: "quero que mostre
-    // a designação").
-    specifications: order.specifications ?? null,
   };
 }
 
@@ -296,14 +265,11 @@ serviceOrdersRouter.get(
 );
 
 // ---------------------------------------------------------------------------
-// Etiquetas para colar no produto — por agora disponíveis apenas para as
-// categorias "Painéis" (pedido do utilizador de 2026-08-20) e "Mosquiteiras"
-// (pedido do utilizador de 2026-09-02: "cria etiqueta para mosquiteira" —
-// só a Etiqueta de Mosquiteira está disponível para esta categoria, ver
-// rota /label-mosquiteira abaixo; alargar a mais categorias no futuro é
-// apenas acrescentar aqui).
+// Etiquetas para colar no produto — por agora disponíveis apenas para a
+// categoria "Painéis" (pedido do utilizador de 2026-08-20; alargar a mais
+// categorias no futuro é apenas remover esta condição).
 // ---------------------------------------------------------------------------
-const LABEL_CATEGORIES = ["Painéis", "Mosquiteiras"];
+const LABEL_CATEGORIES = ["Painéis"];
 
 async function loadLabelOrderData(orderId: string): Promise<LabelOrderData | { error: string; status: number }> {
   const order = await prisma.serviceOrder.findUnique({
@@ -321,7 +287,7 @@ async function loadLabelOrderData(orderId: string): Promise<LabelOrderData | { e
     externalId: order.externalId,
     clienteName: order.client.name,
     clienteExternalId: order.client.externalId,
-    productExternalId: order.product.externalId ?? "—",
+    productExternalId: order.product.externalId,
     productName: order.product.name,
     category: order.product.category,
     createdAt: order.createdAt.toISOString(),
@@ -348,16 +314,6 @@ serviceOrdersRouter.get(
     const data = await loadLabelOrderData(req.params.id);
     if ("error" in data) return res.status(data.status).json({ error: data.error });
     await streamProductLabelPdf(res, data);
-  })
-);
-
-serviceOrdersRouter.get(
-  "/:id/label-mosquiteira",
-  requirePermission("serviceOrders:read"),
-  asyncHandler(async (req, res) => {
-    const data = await loadLabelOrderData(req.params.id);
-    if ("error" in data) return res.status(data.status).json({ error: data.error });
-    await streamMosquiteiraLabelPdf(res, data);
   })
 );
 
@@ -400,8 +356,6 @@ serviceOrdersRouter.post(
   asyncHandler(async (req, res) => {
     const order = await startProduction(req.params.id, req.user?.id);
     await enterFirstStage(req.params.id, req.user?.id);
-    // Aviso opcional (desligado por omissão) de produção iniciada.
-    notifyOrderEventLater(req.params.id, "started", req.user?.id);
     res.json(order);
   })
 );
@@ -438,10 +392,7 @@ serviceOrdersRouter.post(
   "/:id/stage-flow/advance",
   requirePermission("serviceOrders:changeStatus"),
   asyncHandler(async (req, res) => {
-    const result = await advanceStage(req.params.id, req.user?.id);
-    // Aviso por Telegram quando a OS fica concluída (saída da última etapa).
-    if (result.completed) notifyOrderEventLater(req.params.id, "completed", req.user?.id);
-    res.json(result);
+    res.json(await advanceStage(req.params.id, req.user?.id));
   })
 );
 

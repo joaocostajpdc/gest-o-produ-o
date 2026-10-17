@@ -3,6 +3,7 @@ import { getGoldylocksAdapter } from "../integrations/goldylocks/factory";
 import { GoldylocksServiceOrder } from "../integrations/goldylocks/types";
 import { logHistoryEvent } from "./historyService";
 import { initializeStageInstances } from "./stageFlowService";
+import { notifyOrderEventLater } from "./telegramService";
 
 // ============================================================================
 // Serviço de Ordens de Serviço
@@ -76,7 +77,7 @@ export async function importSingleGoldylocksOrder(
   const deadlineFromDocument = goldOrder.deadlineAt ? new Date(goldOrder.deadlineAt) : null;
   const deadlineAt = deadlineFromDocument ?? standardDeadlineAt;
 
-  await prisma.$transaction(async (tx) => {
+  const createdId = await prisma.$transaction(async (tx) => {
     const order = await tx.serviceOrder.create({
       data: {
         externalId: goldOrder.externalId,
@@ -114,7 +115,11 @@ export async function importSingleGoldylocksOrder(
         tx,
       });
     }
+    return order.id;
   });
+
+  // Aviso por Telegram (OS lançada) — depois de gravada; nunca faz falhar a importação.
+  notifyOrderEventLater(createdId, "created", actingUserId);
 
   return { status: "created", externalId: goldOrder.externalId };
 }

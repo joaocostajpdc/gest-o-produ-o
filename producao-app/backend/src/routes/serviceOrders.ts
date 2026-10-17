@@ -31,6 +31,7 @@ import {
   LabelOrderData,
 } from "../services/labelPdfService";
 import { PUBLIC_APP_URL } from "../config/publicUrl";
+import { notifyOrderEventLater } from "../services/telegramService";
 import { getServiceOrderHistory, logHistoryEvent } from "../services/historyService";
 
 export const serviceOrdersRouter = Router();
@@ -399,6 +400,8 @@ serviceOrdersRouter.post(
   asyncHandler(async (req, res) => {
     const order = await startProduction(req.params.id, req.user?.id);
     await enterFirstStage(req.params.id, req.user?.id);
+    // Aviso opcional (desligado por omissão) de produção iniciada.
+    notifyOrderEventLater(req.params.id, "started", req.user?.id);
     res.json(order);
   })
 );
@@ -435,7 +438,10 @@ serviceOrdersRouter.post(
   "/:id/stage-flow/advance",
   requirePermission("serviceOrders:changeStatus"),
   asyncHandler(async (req, res) => {
-    res.json(await advanceStage(req.params.id, req.user?.id));
+    const result = await advanceStage(req.params.id, req.user?.id);
+    // Aviso por Telegram quando a OS fica concluída (saída da última etapa).
+    if (result.completed) notifyOrderEventLater(req.params.id, "completed", req.user?.id);
+    res.json(result);
   })
 );
 

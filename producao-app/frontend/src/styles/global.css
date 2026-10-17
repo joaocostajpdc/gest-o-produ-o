@@ -1626,3 +1626,29 @@ form .field textarea {
   font-size: 10px;
   font-weight: 700;
 }
+
+/* Avisos por Telegram (2026-10-17) */
+.tg-chats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.tg-chat,
+.tg-event {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.tg-event {
+  border: 0;
+  padding: 6px 0;
+}
+.tg-chat.on {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}

@@ -16,6 +16,7 @@ import { ScanPage } from "./pages/ScanPage";
 import { PowderStockPage } from "./pages/PowderStockPage";
 import { GlassOrdersPage } from "./pages/GlassOrdersPage";
 import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage";
+import { TelegramPage } from "./pages/TelegramPage";
 import { FeaturesProvider } from "./contexts/FeaturesContext";
 
 function ProtectedArea() {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/production-lines" element={<ProductionLinesPage />} />
         <Route path="/suppliers" element={<SuppliersPage />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route path="/avisos-telegram" element={<TelegramPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

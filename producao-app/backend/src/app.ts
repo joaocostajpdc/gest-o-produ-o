@@ -16,6 +16,7 @@ import { powdersRouter } from "./routes/powders";
 import { featuresRouter } from "./routes/features";
 import { glassOrdersRouter } from "./routes/glassOrders";
 import { cutPlansRouter } from "./routes/cutPlans";
+import { telegramRouter } from "./routes/telegram";
 
 export function createApp() {
   const app = express();
@@ -39,6 +40,7 @@ export function createApp() {
   app.use("/api/features", featuresRouter);
   app.use("/api/glass-orders", glassOrdersRouter);
   app.use("/api/cut-plans", cutPlansRouter);
+  app.use("/api/telegram", telegramRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

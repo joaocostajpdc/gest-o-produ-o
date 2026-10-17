@@ -102,6 +102,26 @@ function IconCut(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone dos "Avisos Telegram" (avião de papel).
+function IconSend(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M21 3 3 10.5l7 2.5 2.5 7L21 3Z" />
+      <path d="m10 13 4.5-4.5" />
+    </svg>
+  );
+}
+
 // Marca "Teste" ao lado de uma aba ainda não aprovada pelo administrador.
 function TestBadge() {
   return (
@@ -233,6 +253,9 @@ export function Layout() {
               <div className="section-label">Administração</div>
               <NavLink to="/users">
                 <IconUsers /> Utilizadores e Permissões
+              </NavLink>
+              <NavLink to="/avisos-telegram">
+                <IconSend /> Avisos Telegram
               </NavLink>
             </>
           )}

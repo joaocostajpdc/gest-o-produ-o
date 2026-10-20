@@ -1,6 +1,5 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "../components/FeatureTestBanner";
@@ -59,7 +58,6 @@ interface Area {
   icon: ReactNode;
   color: string;
   soft: string;
-  metric: { value: number | null; label: string; to: string };
   tiles: Tile[];
 }
 
@@ -86,23 +84,7 @@ const areaIcons = {
   orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
 };
 
-// Conta sem rebentar o ecrã se a API falhar ou a área não estiver disponível.
-function useCount<T>(path: string | null, count: (rows: T[]) => number) {
-  const [n, setN] = useState<number | null>(null);
-  useEffect(() => {
-    if (!path) return;
-    api
-      .get<T[]>(path)
-      .then((rows) => setN(count(rows)))
-      .catch(() => setN(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path]);
-  return n;
-}
-
 export const CENTRAL_UI_KEY = "central_ui";
-
-const ABERTAS = ["NAO_INICIADA", "EM_PRODUCAO", "SUSPENSA"];
 
 export function HomePage() {
   const { user, logout } = useAuth();
@@ -115,14 +97,6 @@ export function HomePage() {
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
 
-  const ordensEmCurso = useCount<{ status: string }>("/service-orders", (r) => r.filter((o) => ABERTAS.includes(o.status)).length);
-  const materialAPedir = useCount<{ status: string }>("/material-requests", (r) => r.filter((m) => m.status === "A_PEDIR").length);
-  const colaboradoresAtivos = useCount<{ active: boolean }>(
-    horas.available || kmViaturas.available ? "/colaboradores" : null,
-    (r) => r.filter((c) => c.active).length
-  );
-  const totalOrcamentos = useCount<unknown>(orcamentos.available ? "/orcamentos/lista" : null, (r) => r.length);
-
   const areas: Area[] = [
     {
       key: "producao",
@@ -131,7 +105,6 @@ export function HomePage() {
       icon: areaIcons.producao,
       color: "#1d4ed8",
       soft: "#e8eeff",
-      metric: { value: ordensEmCurso, label: "ordens em curso", to: "/ordens-servico" },
       tiles: [
         { to: "/ordens-servico", title: "Ordens de Serviço", sub: "Lançar OS, prioridades e prazos", icon: icons.os },
         { to: "/scan", title: "Ler Código", sub: "Entradas e saídas por código", icon: icons.scan },
@@ -147,7 +120,6 @@ export function HomePage() {
       icon: areaIcons.compras,
       color: "#c2410c",
       soft: "#fdeee5",
-      metric: { value: materialAPedir, label: "materiais por pedir", to: "/material-a-pedir" },
       tiles: [
         ...(compras.available ? [{ to: "/compras", title: "Resumo de Compras", sub: "Tudo o que está por pedir", icon: icons.compras }] : []),
         { to: "/material-a-pedir", title: "Material a Pedir", sub: "Pedidos a fornecedores", icon: icons.pedir },
@@ -164,7 +136,6 @@ export function HomePage() {
       icon: areaIcons.equipa,
       color: "#6d28d9",
       soft: "#f1ebff",
-      metric: { value: colaboradoresAtivos, label: "colaboradores ativos", to: horas.available ? "/controlo-horas" : "/km-carrinhas" },
       tiles: [
         ...(horas.available ? [{ to: "/controlo-horas", title: "Controlo de Horas", sub: "Entradas, saídas, extras e ausências", icon: icons.horas }] : []),
         ...(kmViaturas.available ? [{ to: "/km-carrinhas", title: "Km das Carrinhas", sub: "Resumos por carrinha e por condutor", icon: icons.carrinha }] : []),
@@ -179,7 +150,6 @@ export function HomePage() {
       icon: areaIcons.orcamentacao,
       color: "#047857",
       soft: "#e3f5ee",
-      metric: { value: totalOrcamentos, label: "orçamentos registados", to: "/orcamentos" },
       tiles: [
         {
           to: "/orcamentos",
@@ -274,10 +244,6 @@ export function HomePage() {
                   <p>{area.desc}</p>
                 </div>
               </div>
-              <Link to={area.metric.to} className="home-panel-metric">
-                <span className="home-panel-metric-value">{area.metric.value ?? "—"}</span>
-                <span className="home-panel-metric-label">{area.metric.label}</span>
-              </Link>
               <nav className="home-panel-links" aria-label={area.title}>
                 {area.tiles.map((t) => (
                   <Link key={t.to} to={t.to} className="home-link">

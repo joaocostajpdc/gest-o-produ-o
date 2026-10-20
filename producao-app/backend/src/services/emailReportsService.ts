@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { PUBLIC_APP_URL } from "../config/publicUrl";
+import { getTelegramSettings, sendTelegramMessage } from "./telegramService";
 
 // ============================================================================
 // Emails automáticos semanais (pedido do utilizador de 2026-10-20: "quero que
@@ -37,6 +38,12 @@ const reportSchema = z.object({
   to: z.array(z.string().trim().email()).max(20).default([]),
   weekday: z.number().int().min(1).max(7).default(1), // 1 = segunda … 7 = domingo
   hour: z.number().int().min(0).max(23).default(8),
+  // Por onde sai: email, Telegram (conversas configuradas em Avisos Telegram)
+  // ou os dois. O Render gratuito bloqueia o envio de email (portas SMTP),
+  // por isso o Telegram é a alternativa sem custos (2026-10-20).
+  canal: z.enum(["email", "telegram", "ambos"]).default("email"),
+  // Conversas do Telegram que recebem este aviso (ids); vazio = todas.
+  tgChats: z.array(z.string().trim().max(40)).max(20).default([]),
 });
 
 export const emailSettingsSchema = z.object({
@@ -179,7 +186,15 @@ export async function buildReport(key: ReportKey, now = new Date()) {
     if (late.length) {
       body += `<h3 style="margin:22px 0 8px;color:#dc2626">Já com o prazo ultrapassado (${late.length})</h3>` + table(H, rows(late));
     }
+    const tgLine = (o: (typeof due)[number]) =>
+      `• <a href="${PUBLIC_APP_URL}/service-orders/${o.id}"><b>${esc(o.externalId)}</b></a> · ${esc(o.client.name)} · ${esc(o.product.name)}` +
+      ` — ${esc(o.currentStageInstance?.stage.name ?? STATUS_PT[o.status] ?? "")} · até <b>${fmtPT(lisbonDate(o.deadlineAt!)).slice(0, 5)}</b>`;
+    const tg =
+      `📋 <b>OS a terminar esta semana</b>\n${semana}\n\n` +
+      (week.length ? week.map(tgLine).join("\n") : "Nenhuma OS com data-limite esta semana.") +
+      (late.length ? `\n\n🔴 <b>Prazo ultrapassado (${late.length})</b>\n` + late.map(tgLine).join("\n") : "");
     return {
+      tg,
       subject: `OS a terminar esta semana — ${fmtPT(monday)} a ${fmtPT(sunday)} (${week.length}${late.length ? ` + ${late.length} em atraso` : ""})`,
       html: wrap(REPORTS.osSemana, semana, body),
       count: due.length,
@@ -230,7 +245,23 @@ export async function buildReport(key: ReportKey, now = new Date()) {
       `<h3 style="margin:22px 0 8px;color:#667085">Em lacagem sem prazo configurado (${noDate.length})</h3>` +
       table(["OS", "Cliente", "Produto", "Fornecedor"], noDate.map((i) => [osLink(i.o), esc(i.o.client.name), esc(i.o.product.name), esc(i.supplier)]));
   }
+  let tg = `🎨 <b>Lacagens — material a entregar esta semana</b>\n${semana}\n`;
+  if (!due.length) tg += "\nNenhum material com entrega prevista esta semana.";
+  for (const [sup, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    tg +=
+      `\n<b>${esc(sup)}</b> (${list.length})\n` +
+      list
+        .map(
+          (i) =>
+            `• <a href="${PUBLIC_APP_URL}/service-orders/${i.o.id}"><b>${esc(i.o.externalId)}</b></a> · ${esc(i.o.client.name)} · ${esc(finish(i.o.specifications))} · ` +
+            `${i.expected! < monday ? "🔴 atrasado, era " : "entrega "}<b>${fmtPT(i.expected!).slice(0, 5)}</b>`
+        )
+        .join("\n") +
+      "\n";
+  }
+  if (noDate.length) tg += `\n⚪ Em lacagem sem prazo configurado: ${noDate.map((i) => esc(i.o.externalId)).join(", ")}`;
   return {
+    tg,
     subject: `Lacagens — material a entregar esta semana (${fmtPT(monday)} a ${fmtPT(sunday)}): ${due.length}`,
     html: wrap(REPORTS.lacagemSemana, semana, body),
     count: due.length,
@@ -266,12 +297,40 @@ export async function sendTestEmail(to: string) {
   });
 }
 
-export async function sendReport(key: ReportKey, opts: { to?: string[]; now?: Date } = {}) {
+/** Divide uma mensagem longa em partes de até ~3800 caracteres (limite do Telegram: 4096), cortando entre linhas. */
+function splitTelegram(text: string) {
+  const parts: string[] = [];
+  let cur = "";
+  for (const line of text.split("\n")) {
+    if ((cur + "\n" + line).length > 3800 && cur) {
+      parts.push(cur);
+      cur = line;
+    } else cur = cur ? cur + "\n" + line : line;
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+
+async function sendToTelegram(text: string, only: string[]) {
+  const t = await getTelegramSettings();
+  const chats = only.length ? t.chats.filter((c) => only.includes(c.id)) : t.chats;
+  if (!t.botToken || !chats.length) {
+    throw new Error("O Telegram não está configurado (Administração → Avisos Telegram: bot e conversas).");
+  }
+  for (const c of chats) for (const part of splitTelegram(text)) await sendTelegramMessage(t.botToken, c.id, part);
+  return chats.length;
+}
+
+export async function sendReport(key: ReportKey, opts: { to?: string[]; now?: Date; canal?: "email" | "telegram" | "ambos" } = {}) {
   const s = await getEmailSettings();
-  const to = opts.to ?? s.reports[key].to;
-  if (!to.length) throw new Error("Este email não tem destinatários.");
+  const canal = opts.canal ?? s.reports[key].canal;
   const r = await buildReport(key, opts.now);
-  await transport(s).sendMail({ from: fromAddr(s), to: to.join(", "), subject: r.subject, html: r.html });
+  if (canal === "telegram" || canal === "ambos") await sendToTelegram(r.tg, s.reports[key].tgChats);
+  if (canal === "email" || canal === "ambos") {
+    const to = opts.to ?? s.reports[key].to;
+    if (!to.length) throw new Error("Este email não tem destinatários.");
+    await transport(s).sendMail({ from: fromAddr(s), to: to.join(", "), subject: r.subject, html: r.html });
+  }
   return r;
 }
 
@@ -289,7 +348,7 @@ export async function runDueReports(now = new Date()) {
     const { weekday, hour } = lisbonParts(now);
     for (const key of Object.keys(REPORTS) as ReportKey[]) {
       const cfg = s.reports[key];
-      if (!cfg.enabled || !cfg.to.length) continue;
+      if (!cfg.enabled || (cfg.canal !== "telegram" && !cfg.to.length)) continue;
       if (log[key]?.week === monday) continue; // já enviado esta semana
       const due = weekday > cfg.weekday || (weekday === cfg.weekday && hour >= cfg.hour);
       if (!due) continue;

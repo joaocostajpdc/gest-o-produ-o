@@ -11,7 +11,10 @@ import { useAuth } from "../contexts/AuthContext";
 // ============================================================================
 
 type ReportKey = "osSemana" | "lacagemSemana";
+type Canal = "email" | "telegram" | "ambos";
 interface ReportCfg {
+  canal: Canal;
+  tgChats: string[];
   enabled: boolean;
   to: string[];
   weekday: number;
@@ -30,6 +33,7 @@ interface Data {
   smtp: Smtp;
   reports: Record<ReportKey, ReportCfg>;
   reportNames: Record<ReportKey, string>;
+  telegramChats: { id: string; title: string }[];
   log: Partial<Record<ReportKey, { week: string; at: string; ok: boolean; info: string }>>;
 }
 
@@ -96,7 +100,7 @@ export function EmailsPage() {
   return (
     <div>
       <div className="page-header">
-        <h2>Emails Automáticos</h2>
+        <h2>Avisos Semanais</h2>
       </div>
       {msg && (
         <p className={msg.ok ? "" : "error-text"} style={msg.ok ? { color: "#16a34a", fontWeight: 600 } : undefined}>
@@ -105,7 +109,11 @@ export function EmailsPage() {
       )}
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Conta que envia</h3>
+        <h3 style={{ marginTop: 0 }}>Conta de email que envia</h3>
+        <p className="muted" style={{ marginTop: -6 }}>
+          Só é usada nos avisos enviados por email. Atenção: no plano gratuito do Render o envio de email está bloqueado
+          (dá "Connection timeout") — use o Telegram.
+        </p>
         <p className="muted" style={{ marginTop: -6 }}>
           O email de onde saem as mensagens. Em Gmail ou Microsoft 365 use uma <b>palavra-passe de aplicação</b>, não a palavra-passe normal.
         </p>
@@ -188,10 +196,40 @@ export function EmailsPage() {
                 Ativo
               </label>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 1fr", gap: 12, marginTop: 12 }}>
               <div className="field">
-                <label>Enviar para (separe vários emails com vírgula)</label>
-                <input value={toText[k]} onChange={(e) => setToText({ ...toText, [k]: e.target.value })} placeholder="producao@minhoferragens.pt" />
+                <label>Enviar por</label>
+                <select value={r.canal} onChange={(e) => setRep(k, { canal: e.target.value as Canal })}>
+                  <option value="telegram">Telegram</option>
+                  <option value="email">Email</option>
+                  <option value="ambos">Telegram e email</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>{r.canal === "telegram" ? "Destinatários" : "Emails (separe vários com vírgula)"}</label>
+                {r.canal === "telegram" ? (
+                  <div style={{ display: "flex", gap: "6px 14px", flexWrap: "wrap", paddingTop: 6 }}>
+                    {d.telegramChats.length === 0 && <span className="muted">Sem conversas — configure em Avisos Telegram.</span>}
+                    {d.telegramChats.map((c) => (
+                      <label key={c.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={r.tgChats.length === 0 || r.tgChats.includes(c.id)}
+                          onChange={(e) => {
+                            const all = d.telegramChats.map((x) => x.id);
+                            const cur = r.tgChats.length === 0 ? all : r.tgChats;
+                            const next = e.target.checked ? [...new Set([...cur, c.id])] : cur.filter((x) => x !== c.id);
+                            if (next.length === 0) return; // pelo menos uma conversa
+                            setRep(k, { tgChats: next.length === all.length ? [] : next });
+                          }}
+                        />
+                        {c.title}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <input value={toText[k]} onChange={(e) => setToText({ ...toText, [k]: e.target.value })} placeholder="producao@minhoferragens.pt" />
+                )}
               </div>
               <div className="field">
                 <label>Dia</label>

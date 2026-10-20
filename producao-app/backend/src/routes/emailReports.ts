@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
+import { getTelegramSettings } from "../services/telegramService";
 import {
   buildReport,
   emailSettingsSchema,
@@ -35,6 +36,7 @@ async function present() {
     smtp: { ...smtp, hasPass: !!pass },
     reports: s.reports,
     reportNames: REPORTS,
+    telegramChats: (await getTelegramSettings()).chats,
     log: await getEmailLog(),
   };
 }
@@ -73,7 +75,7 @@ emailReportsRouter.get(
   asyncHandler(async (req, res) => {
     if (!isReportKey(req.params.key)) throw new Error("Email não encontrado.");
     const r = await buildReport(req.params.key);
-    res.json({ subject: r.subject, html: r.html, count: r.count });
+    res.json({ subject: r.subject, html: r.html, tg: r.tg, count: r.count });
   })
 );
 
@@ -82,9 +84,11 @@ emailReportsRouter.post(
   "/:key/send",
   asyncHandler(async (req, res) => {
     if (!isReportKey(req.params.key)) throw new Error("Email não encontrado.");
-    const { to } = z.object({ to: z.string().trim().email().optional() }).parse(req.body ?? {});
+    const { to, canal } = z
+      .object({ to: z.string().trim().email().optional(), canal: z.enum(["email", "telegram", "ambos"]).optional() })
+      .parse(req.body ?? {});
     try {
-      const r = await sendReport(req.params.key, to ? { to: [to] } : {});
+      const r = await sendReport(req.params.key, { ...(to ? { to: [to] } : {}), ...(canal ? { canal } : {}) });
       res.json({ ok: true, count: r.count });
     } catch (err) {
       return res.status(400).json({ error: "Não foi possível enviar: " + (err instanceof Error ? err.message : String(err)) });

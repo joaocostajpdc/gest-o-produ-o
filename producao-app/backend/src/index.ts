@@ -3,6 +3,7 @@ import { createApp } from "./app";
 import { ensureCatalog20260907 } from "./scripts/ensureCatalog20260907";
 import { fixVRefOS20260916 } from "./scripts/fixVRefOS20260916";
 import { startEmailScheduler } from "./services/emailReportsService";
+import { goldylocksProbe } from "./scripts/goldylocksProbe";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -26,3 +27,6 @@ void fixVRefOS20260916();
 // Emails automáticos semanais (OS a terminar e material das lacagens) —
 // verifica a cada 5 minutos se há algum por enviar (ver emailReportsService).
 startEmailScheduler();
+
+// Sonda temporária da API do Goldylocks (só com GOLDYLOCKS_PROBE=1).
+void goldylocksProbe();

@@ -23,6 +23,7 @@ export const FEATURES = {
   osSidePanel: "Painel lateral das OS",
   cutPlans: "Otimização de Corte",
   orcamentos: "Orçamentos",
+  compras: "Compras",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

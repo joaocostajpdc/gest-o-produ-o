@@ -19,18 +19,6 @@
   --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
   --r:6px;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0D1116; --surface:#151B22; --surface-2:#1A212A; --sunken:#0F141A; --line:#29323C; --line-2:#3A4550;
-  --fg:#E5EAEF; --muted:#9AA6B2; --faint:#6E7A86;
-  --accent:#7C84FF; --accent-ink:#0A0D2B; --accent-soft:#1F2452; --steel:#070A0D; --steel-fg:#E5EAEF;
-  --ok:#5BCB8B; --ok-soft:#14321F; --warn:#E3A84A; --warn-soft:#3A2A10; --bad:#F2867D; --bad-soft:#3D1815; --info:#82B2E4; --info-soft:#152A40;
-  color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0D1116; --surface:#151B22; --surface-2:#1A212A; --sunken:#0F141A; --line:#29323C; --line-2:#3A4550;
-  --fg:#E5EAEF; --muted:#9AA6B2; --faint:#6E7A86;
-  --accent:#7C84FF; --accent-ink:#0A0D2B; --accent-soft:#1F2452; --steel:#070A0D; --steel-fg:#E5EAEF;
-  --ok:#5BCB8B; --ok-soft:#14321F; --warn:#E3A84A; --warn-soft:#3A2A10; --bad:#F2867D; --bad-soft:#3D1815; --info:#82B2E4; --info-soft:#152A40;
-  color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 img{max-width:100%}
@@ -219,6 +207,20 @@ table.mx td:first-child{text-align:left;white-space:nowrap;font-weight:500}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+/* Dentro da Gestão de Produção: mesmo aspeto do resto do programa */
+:root{--bg:#f3f4f8;--line:#e4e6ed;--line-2:#cfd3de;--fg:#1b2033;--muted:#667085;--accent:#1f3fe0;--accent-soft:#eef1ff;--r:9px;
+  --f-body:"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif;--f-display:"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.top{background:var(--surface);color:var(--fg);border-bottom:1px solid var(--line)}
+.top .brand{display:none}
+.top .wrap{padding-block:8px}
+nav.tabs{gap:4px}
+nav.tabs button{opacity:1;color:var(--muted);text-transform:none;letter-spacing:0;font:600 14px/1 var(--f-body);padding:9px 14px;border-radius:9px}
+nav.tabs button:hover{background:var(--surface-2);color:var(--fg)}
+nav.tabs button[aria-current="page"]{background:var(--accent);color:#fff;box-shadow:none}
+.panel,.tbl-wrap,.sumcard{border-radius:12px;box-shadow:0 1px 2px rgba(20,24,45,.06)}
+.view-head h1{font-size:24px;font-weight:700}
+.qhead .qn{font-size:24px}
+.eyebrow{letter-spacing:.07em}
 </style>
 </head>
 <body>
@@ -452,6 +454,8 @@ function api(method,path,body,rawType){
 const SERVER_DB={ doc(path){ const [col,id]=path.split("/"); const p= col==="config"? "/config/"+id : "/"+encodeURIComponent(id);
   return { set:d=>api("PUT",p,d), update:d=>api("PATCH",p,d), delete:()=>api("DELETE",p) }; } };
 const SERVER_FILES={ upload:(blob,o)=>api("POST","/files",blob,(o&&o.type)||blob.type) };
+/* ler medidas do desenho: o servidor envia as imagens ao modelo de IA */
+S.readDrawing=(desenhos)=>api("POST","/ler-desenho",{fileIds:desenhos.filter(d=>d.assetId).map(d=>d.assetId),imagens:desenhos.filter(d=>!d.assetId&&d.dataUrl).map(d=>d.dataUrl)});
 const SERVER_DL={ save:({filename,data})=>{ const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data])); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000); return Promise.resolve({status:"saved"}); } };
 /* imagens guardadas no servidor: pedem-se com a sessão e mostram-se como blob */
 const fileCache={};
@@ -586,7 +590,8 @@ function renderEditor(){
       <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:14px">${(q.job.formatos||S.P.formatos).map((f,i)=>`<label style="display:flex;gap:6px;align-items:center" class="mono"><input type="checkbox" class="chk" data-fmt="${i}" ${f.on?"checked":""}>${f.c}×${f.l}</label>`).join("")}</div>
       <div class="plans" id="plans"></div></div></div>`:""}
 
-    <div class="panel"><header><h2>Desenho do cliente</h2><span class="hint">Fotografia, imagem ou PDF do desenho. Sai no orçamento em PDF.</span></header><div class="body">
+    <div class="panel"><header><h2>Desenho do cliente</h2><span class="hint">Fotografia, imagem ou PDF do desenho. Sai no orçamento em PDF.</span>${ch&&S.readDrawing?`<button class="btn pri sm" id="bLer" ${q.desenhos.length?"":"disabled"}>${ico("eye")}Ler medidas do desenho</button>`:""}</header><div class="body">
+      <div id="lerMsg" hidden style="margin-bottom:12px"></div>
       <div class="drops" id="drawings"></div><input type="file" id="fileIn" accept="image/*,application/pdf" multiple hidden></div></div>
 
     <div class="panel"><header><h2>Notas para o cliente</h2></header><div class="body">
@@ -600,6 +605,7 @@ function renderEditor(){
       <div class="row"><button class="btn" id="bPrev">${ico("eye")}Pré-visualizar</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div></div>
   </aside></div>`;
   renderLines(); renderDrawings(); refreshCalc(); updSaveState();
+  const bl=$("#bLer"); if(bl) bl.onclick=lerDesenho;
   $("#backL").onclick=()=>go("lista");
   $("#addLine").onclick=()=>{ const last=q.linhas[q.linhas.length-1]; q.linhas.push(ch?linhaChapa(last):linhaPainel(last)); renderLines(); refreshCalc(); markDirty(); const ls=$$("#lines .line"); ls[ls.length-1].querySelector("input").focus(); };
   $("#qEstado").onchange=e=>{ q.estado=e.target.value; markDirty(); };
@@ -749,7 +755,7 @@ async function addFiles(files){
         const rec=await storeCanvas(c); rec.legenda=leg; S.cur.desenhos.push(rec); }
     }catch(e){ console.warn(e); toast("Não foi possível ler "+f.name); }
   }
-  renderDrawings(); markDirty();
+  renderDrawings(); markDirty(); const bl=$("#bLer"); if(bl) bl.disabled=!S.cur.desenhos.length;
 }
 function imgToCanvas(file,max){ return new Promise((res,rej)=>{ const url=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{ const s=Math.min(1,max/Math.max(im.width,im.height)); const c=document.createElement("canvas"); c.width=Math.round(im.width*s); c.height=Math.round(im.height*s); const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height); x.drawImage(im,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c); }; im.onerror=rej; im.src=url; }); }
 function canvasBlob(c,q){ return new Promise(r=>c.toBlob(r,"image/jpeg",q)); }
@@ -767,6 +773,40 @@ function pdfjs(){ if(!pdfjsP){ pdfjsP=(async()=>{ await loadScript("https://cdnj
 async function pdfToCanvases(buf,maxPages,maxPx){ const L=await pdfjs(); const doc=await L.getDocument({data:new Uint8Array(buf),isEvalSupported:false}).promise; const out=[];
   for(let p=1;p<=Math.min(doc.numPages,maxPages);p++){ const pg=await doc.getPage(p); const v0=pg.getViewport({scale:1}); const sc=Math.min(3,maxPx/Math.max(v0.width,v0.height)); const v=pg.getViewport({scale:sc}); const c=document.createElement("canvas"); c.width=Math.round(v.width); c.height=Math.round(v.height); const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:x,viewport:v}).promise; out.push(c); }
   return out; }
+
+/* ---- ler medidas do desenho (IA, no servidor) ---- */
+function matchAcab(txt){ if(!txt) return null; const t=String(txt).toLowerCase(); const A=S.P.acabamentos;
+  if(/brut|natural|sem lac/.test(t)) return (A.find(a=>/bruto/i.test(a.nome))||{}).nome||null;
+  if(/madeira/.test(t)) return (A.find(a=>/madeira/i.test(a.nome))||{}).nome||null;
+  if(/inox|acetinad/.test(t)) return (A.find(a=>/inox/i.test(a.nome))||{}).nome||null;
+  return (A.find(a=>/quinad/i.test(a.nome))||{}).nome||null; }
+async function lerDesenho(){
+  const q=S.cur, b=$("#bLer"), msg=$("#lerMsg"); if(!q||!q.desenhos.length) return;
+  const old=b.innerHTML; b.disabled=true; b.innerHTML=`<span class="spin"></span>A ler o desenho…`;
+  msg.hidden=false; msg.className="hint"; msg.textContent="A analisar o desenho. Pode demorar 20 a 40 segundos.";
+  try{
+    if(S.dirty) await saveQuote();
+    const r=await S.readDrawing(q.desenhos);
+    const pecas=(r.pecas||[]).filter(p=>Array.isArray(p.abas)&&p.abas.length);
+    if(!pecas.length){ msg.className="banner"; msg.textContent="Não consegui identificar peças com medidas neste desenho. "+(r.duvidas||[]).join(" "); return; }
+    const base=q.linhas[q.linhas.length-1]||linhaChapa();
+    const novas=pecas.map(p=>{ const L=linhaChapa(base); L.desc=p.descricao||""; L.abas=p.abas.map(a=>fmt(num(a),num(a)%1?1:0).replace(" ","")).join(" ");
+      const ang=(p.angulos||[]).map(num); L.angs= ang.some(a=>a&&a!==90)? ang.map(a=>a||90).join(" ") : "";
+      if(num(p.comprimento)>0) L.comp=num(p.comprimento); L.qt=Math.max(1,Math.round(num(p.quantidade)||1)); L.cantos=Math.max(0,Math.round(num(p.cortaCantos)||0));
+      if(num(r.espessura)>0) L.esp=num(r.espessura); const ac=matchAcab(r.acabamento); if(ac) L.acab=ac; return L; });
+    const vazias=q.linhas.every(L=>!String(L.abas||"").trim());
+    q.linhas= vazias? novas : q.linhas.concat(novas);
+    if(r.cliente&&!q.cliente.nome) q.cliente.nome=r.cliente;
+    if(r.obra&&!q.obra) q.obra=r.obra;
+    const extra=[r.acabamento?"Cor/acabamento indicado: "+r.acabamento:"", r.observacoes||""].filter(Boolean).join("\n");
+    if(extra&&!String(q.notas||"").includes(extra)) q.notas=(q.notas?q.notas+"\n":"")+extra;
+    renderEditor(); markDirty();
+    const m=$("#lerMsg"); m.hidden=false; m.className="banner"; m.style.background="var(--ok-soft)"; m.style.color="var(--ok)";
+    m.innerHTML=`<b>${novas.length} peça${novas.length>1?"s":""} lida${novas.length>1?"s":""} do desenho.</b> Confirme as abas, comprimentos e quantidades antes de enviar o orçamento.`+((r.duvidas||[]).length?`<br>Dúvidas: ${esc(r.duvidas.join(" · "))}`:"");
+    toast("Medidas lidas do desenho");
+  }catch(e){ msg.hidden=false; msg.className="banner"; msg.textContent="Não foi possível ler o desenho: "+(e.code||e.message||"erro")+"."; }
+  finally{ const bb=$("#bLer"); if(bb){ bb.disabled=false; bb.innerHTML=old; } }
+}
 
 /* ============================== PDF DO ORÇAMENTO ============================== */
 async function srcToDataURL(src){ if(!src) return null; if(src.startsWith("data:")) return src; if(S.blobCache[src]) return S.blobCache[src];

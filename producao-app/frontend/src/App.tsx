@@ -16,6 +16,7 @@ import { ScanPage } from "./pages/ScanPage";
 import { PowderStockPage } from "./pages/PowderStockPage";
 import { GlassOrdersPage } from "./pages/GlassOrdersPage";
 import { OrcamentosPage } from "./pages/OrcamentosPage";
+import { ComprasPage } from "./pages/ComprasPage";
 import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage";
 import { TelegramPage } from "./pages/TelegramPage";
 import { FeaturesProvider } from "./contexts/FeaturesContext";
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/otimizacao-corte/novo" element={<CutPlanNewPage />} />
         <Route path="/otimizacao-corte/:id" element={<CutPlanPage />} />
         <Route path="/orcamentos" element={<OrcamentosPage />} />
+        <Route path="/compras" element={<ComprasPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

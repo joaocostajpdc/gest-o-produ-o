@@ -82,6 +82,16 @@ function IconGlass(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone do "Resumo de Compras" (saco de compras).
+function IconCart(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M6 7h12l-1 13H7z" />
+      <path d="M9 7a3 3 0 0 1 6 0" />
+    </svg>
+  );
+}
+
 // Ícone dos "Orçamentos" (folha com linhas e €).
 function IconFileText(props: SVGProps<SVGSVGElement>) {
   return (
@@ -163,6 +173,7 @@ export function Layout() {
   const cutPlans = useFeature("cutPlans");
   // Orçamentos: acesso restrito (João Costa e David Costa), nunca para todos.
   const orcamentos = useFeature("orcamentos");
+  const compras = useFeature("compras");
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
   // CSS ignora esta flag e o menu está sempre visível.
@@ -209,6 +220,10 @@ export function Layout() {
         </div>
 
         <nav>
+          {/* Menu separado por áreas (pedido do utilizador de 2026-10-20:
+              "separa o que é gestão de produção e orçamentação" e "cria uma
+              aba para compras"). */}
+          <div className="section-label" style={{ marginTop: 4 }}>Produção</div>
           <NavLink to="/" end>
             <IconClipboard /> Ordens de Serviço
           </NavLink>
@@ -218,35 +233,47 @@ export function Layout() {
           <NavLink to="/material-lacagem">
             <IconDroplet /> Material em Lacagem
           </NavLink>
-          <NavLink to="/material-a-pedir">
-            <IconShoppingCart /> Material a Pedir
-          </NavLink>
-          {powderStock.available && (
-            <NavLink to="/po-em-stock">
-              <IconPaintBucket /> Pó em Stock
-              {!powderStock.released && <TestBadge />}
-            </NavLink>
-          )}
-          {glassOrders.available && (
-            <NavLink to="/pedidos-vidros">
-              <IconGlass /> Pedidos de Vidros
-              {!glassOrders.released && <TestBadge />}
-            </NavLink>
-          )}
           {cutPlans.available && (
             <NavLink to="/otimizacao-corte">
               <IconCut /> Otimização de Corte
               {!cutPlans.released && <TestBadge />}
             </NavLink>
           )}
-          {orcamentos.available && (
-            <NavLink to="/orcamentos">
-              <IconFileText /> Orçamentos
-            </NavLink>
-          )}
           <NavLink to="/reports">
             <IconPrinter /> Listagens Imprimíveis
           </NavLink>
+
+          <div className="section-label">Compras</div>
+          {compras.available && (
+            <NavLink to="/compras" end>
+              <IconCart /> Resumo de Compras
+              {!compras.released && <TestBadge />}
+            </NavLink>
+          )}
+          <NavLink to="/material-a-pedir">
+            <IconShoppingCart /> Material a Pedir
+          </NavLink>
+          {glassOrders.available && (
+            <NavLink to="/pedidos-vidros">
+              <IconGlass /> Pedidos de Vidros
+              {!glassOrders.released && <TestBadge />}
+            </NavLink>
+          )}
+          {powderStock.available && (
+            <NavLink to="/po-em-stock">
+              <IconPaintBucket /> Pó em Stock
+              {!powderStock.released && <TestBadge />}
+            </NavLink>
+          )}
+
+          {orcamentos.available && (
+            <>
+              <div className="section-label">Orçamentação</div>
+              <NavLink to="/orcamentos">
+                <IconFileText /> Orçamentos
+              </NavLink>
+            </>
+          )}
 
           {canManageConfig(user?.role) && (
             <>

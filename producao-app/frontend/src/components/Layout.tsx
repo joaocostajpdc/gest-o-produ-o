@@ -200,6 +200,12 @@ export function Layout() {
     setMenuOpen(false);
   }, [location.pathname]);
 
+  // Ecrã inicial: sem menu lateral nem barra do telemóvel; o menu só aparece
+  // depois de entrar numa área (pedido do utilizador de 2026-10-20).
+  if (inicio.available && location.pathname === "/") {
+    return <Outlet />;
+  }
+
   return (
     <div className="app-shell">
       <header className="mobile-topbar">

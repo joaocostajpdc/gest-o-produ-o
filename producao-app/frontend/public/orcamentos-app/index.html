@@ -454,8 +454,6 @@ function api(method,path,body,rawType){
 const SERVER_DB={ doc(path){ const [col,id]=path.split("/"); const p= col==="config"? "/config/"+id : "/"+encodeURIComponent(id);
   return { set:d=>api("PUT",p,d), update:d=>api("PATCH",p,d), delete:()=>api("DELETE",p) }; } };
 const SERVER_FILES={ upload:(blob,o)=>api("POST","/files",blob,(o&&o.type)||blob.type) };
-/* ler medidas do desenho: o servidor envia as imagens ao modelo de IA */
-S.readDrawing=(desenhos)=>api("POST","/ler-desenho",{fileIds:desenhos.filter(d=>d.assetId).map(d=>d.assetId),imagens:desenhos.filter(d=>!d.assetId&&d.dataUrl).map(d=>d.dataUrl)});
 const SERVER_DL={ save:({filename,data})=>{ const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data])); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000); return Promise.resolve({status:"saved"}); } };
 /* imagens guardadas no servidor: pedem-se com a sessão e mostram-se como blob */
 const fileCache={};

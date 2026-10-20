@@ -375,6 +375,9 @@ export function Layout() {
               <NavLink to="/avisos-telegram">
                 <IconSend /> Avisos Telegram
               </NavLink>
+              <NavLink to="/emails-automaticos">
+                <IconSend /> Emails Automáticos
+              </NavLink>
             </>
           )}
         </nav>

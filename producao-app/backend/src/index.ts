@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createApp } from "./app";
 import { ensureCatalog20260907 } from "./scripts/ensureCatalog20260907";
 import { fixVRefOS20260916 } from "./scripts/fixVRefOS20260916";
+import { startEmailScheduler } from "./services/emailReportsService";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -21,3 +22,7 @@ void ensureCatalog20260907();
 // padrão do script acima: corre em todos os arranques, mas só escreve uma
 // vez (a segunda execução em diante não encontra nada para corrigir).
 void fixVRefOS20260916();
+
+// Emails automáticos semanais (OS a terminar e material das lacagens) —
+// verifica a cada 5 minutos se há algum por enviar (ver emailReportsService).
+startEmailScheduler();

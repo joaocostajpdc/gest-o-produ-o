@@ -17,6 +17,7 @@ import { PowderStockPage } from "./pages/PowderStockPage";
 import { GlassOrdersPage } from "./pages/GlassOrdersPage";
 import { OrcamentosPage } from "./pages/OrcamentosPage";
 import { ComprasPage } from "./pages/ComprasPage";
+import { EmailsPage } from "./pages/EmailsPage";
 import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage";
 import { TelegramPage } from "./pages/TelegramPage";
 import { FeaturesProvider, useFeature } from "./contexts/FeaturesContext";
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="/suppliers" element={<SuppliersPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/avisos-telegram" element={<TelegramPage />} />
+        <Route path="/emails-automaticos" element={<EmailsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

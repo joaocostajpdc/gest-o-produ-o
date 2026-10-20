@@ -19,6 +19,7 @@ import { glassOrdersRouter } from "./routes/glassOrders";
 import { cutPlansRouter } from "./routes/cutPlans";
 import { telegramRouter } from "./routes/telegram";
 import { orcamentosRouter } from "./routes/orcamentos";
+import { emailReportsRouter } from "./routes/emailReports";
 import { prisma } from "./config/prisma";
 import { colaboradoresRouter, horasRouter, viaturasRouter } from "./routes/equipaFrota";
 
@@ -60,6 +61,7 @@ export function createApp() {
   app.use("/api/cut-plans", cutPlansRouter);
   app.use("/api/telegram", telegramRouter);
   app.use("/api/orcamentos", orcamentosRouter);
+  app.use("/api/email-reports", emailReportsRouter);
   app.use("/api/colaboradores", colaboradoresRouter);
   app.use("/api/horas", horasRouter);
   app.use("/api/viaturas", viaturasRouter);

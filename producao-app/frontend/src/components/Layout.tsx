@@ -2,6 +2,7 @@ import { SVGProps, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
+import { FeatureTestBanner } from "./FeatureTestBanner";
 import logoMark from "../assets/logo-mark.png";
 import {
   IconBox,
@@ -211,6 +212,10 @@ export function Layout() {
   const inicio = useFeature("inicio");
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
+  // Menu lateral recolhido (só ícones) que abre ao passar o rato — pedido do
+  // utilizador de 2026-10-20 ("esta barra só quero que apareça quando passo
+  // o rato"). Em teste só para o administrador; só em ecrã de computador.
+  const menuHover = useFeature("menuHover");
   const appName = inicio.available ? "Central Minho Ferragens" : "Gestão de Produção";
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
@@ -230,7 +235,7 @@ export function Layout() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${menuHover.available ? " sb-hover" : ""}`}>
       <header className="mobile-topbar">
         <button
           className="mobile-menu-btn"
@@ -386,6 +391,9 @@ export function Layout() {
         </div>
       </aside>
       <main className="main-content">
+        {menuHover.available && !menuHover.released && location.pathname === "/ordens-servico" && (
+          <FeatureTestBanner featureKey="menuHover" label="o menu lateral que abre ao passar o rato" />
+        )}
         <Outlet />
       </main>
     </div>

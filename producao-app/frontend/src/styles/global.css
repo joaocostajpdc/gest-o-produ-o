@@ -2477,3 +2477,66 @@ td > .ef-tag:first-child {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* --------------------------------------------------------------------- */
+/* Menu lateral recolhido que abre ao passar o rato (2026-10-20, em teste). */
+/* Só em computador: fica uma faixa estreita com os ícones; ao passar o     */
+/* rato (ou ao navegar com o teclado) abre por cima do conteúdo.           */
+/* --------------------------------------------------------------------- */
+@media (min-width: 901px) {
+  .app-shell.sb-hover {
+    padding-left: 68px;
+  }
+  .app-shell.sb-hover .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 68px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    transition: width 0.18s ease, box-shadow 0.18s ease;
+  }
+  .app-shell.sb-hover .sidebar:hover,
+  .app-shell.sb-hover .sidebar:focus-within {
+    width: 252px;
+    scrollbar-width: thin;
+    box-shadow: 10px 0 32px rgba(10, 14, 30, 0.28);
+  }
+  .app-shell.sb-hover .sidebar a,
+  .app-shell.sb-hover .sidebar .section-label,
+  .app-shell.sb-hover .sidebar-brand-text,
+  .app-shell.sb-hover .sidebar .user-box-text {
+    white-space: nowrap;
+  }
+  .app-shell.sb-hover .sidebar .section-label,
+  .app-shell.sb-hover .sidebar-brand-text,
+  .app-shell.sb-hover .sidebar .user-box-text,
+  .app-shell.sb-hover .sidebar .user-box button,
+  .app-shell.sb-hover .sidebar a .badge {
+    transition: opacity 0.12s ease;
+  }
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) .section-label,
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) .sidebar-brand-text,
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) .user-box-text,
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) .user-box button,
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) a .badge {
+    opacity: 0;
+  }
+  /* recolhido: o texto dos links fica escondido, só o ícone se vê */
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) a {
+    color: transparent;
+  }
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) a svg {
+    color: #c8cde0;
+  }
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) a.active svg {
+    color: #fff;
+  }
+  .app-shell.sb-hover .main-content {
+    max-width: 1440px;
+  }
+}

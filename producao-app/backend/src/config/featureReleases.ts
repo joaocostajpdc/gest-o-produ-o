@@ -27,6 +27,7 @@ export const FEATURES = {
   inicio: "Ecrã Inicial (Central Minho Ferragens)",
   horas: "Controlo de Horas",
   kmViaturas: "Km das Carrinhas",
+  menuHover: "Menu lateral que abre ao passar o rato",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

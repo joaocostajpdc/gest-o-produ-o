@@ -82,6 +82,17 @@ function IconGlass(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone dos "Orçamentos" (folha com linhas e €).
+function IconFileText(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M9 13h6M9 17h4" />
+    </svg>
+  );
+}
+
 // Ícone da "Otimização de Corte" (chapa com linhas de corte).
 function IconCut(props: SVGProps<SVGSVGElement>) {
   return (
@@ -150,6 +161,8 @@ export function Layout() {
   const powderStock = useFeature("powderStock");
   const glassOrders = useFeature("glassOrders");
   const cutPlans = useFeature("cutPlans");
+  // Orçamentos: acesso restrito (João Costa e David Costa), nunca para todos.
+  const orcamentos = useFeature("orcamentos");
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
   // CSS ignora esta flag e o menu está sempre visível.
@@ -224,6 +237,11 @@ export function Layout() {
             <NavLink to="/otimizacao-corte">
               <IconCut /> Otimização de Corte
               {!cutPlans.released && <TestBadge />}
+            </NavLink>
+          )}
+          {orcamentos.available && (
+            <NavLink to="/orcamentos">
+              <IconFileText /> Orçamentos
             </NavLink>
           )}
           <NavLink to="/reports">

@@ -623,3 +623,32 @@ model AppSetting {
 
   @@map("app_settings")
 }
+
+// ---------------------------------------------------------------------------
+// Orçamentos de chapas quinadas e painéis (pedido do utilizador de
+// 2026-10-20) — substitui a folha Excel "Folha orçamenta painéis e chapas
+// quinadas". Cada orçamento é guardado inteiro em "data" (cliente, linhas,
+// margem, desenhos do cliente…); os cálculos são feitos no próprio ecrã.
+// Acesso restrito: só João Costa e David Costa (ver featureReleases.ts).
+// As tabelas de preços e os dados da empresa ficam em app_settings
+// ("orcamentos.precos" e "orcamentos.empresa").
+// ---------------------------------------------------------------------------
+
+model Orcamento {
+  id        String   @id
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("orcamentos")
+}
+
+// Desenhos do cliente (imagens) e logótipo usados nos orçamentos.
+model OrcamentoFile {
+  id        String   @id @default(cuid())
+  mime      String
+  bytes     Bytes
+  createdAt DateTime @default(now())
+
+  @@map("orcamento_files")
+}

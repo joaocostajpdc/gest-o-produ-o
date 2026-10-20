@@ -275,6 +275,8 @@ export interface FeatureState {
   name: string;
   released: boolean;
   available: boolean;
+  // Acesso restrito (ex.: Orçamentos) — nunca é lançada para todos.
+  restricted?: boolean;
   releasedAt: string | null;
   // Só vem para administradores: utilizadores escolhidos para testar.
   testerUserIds?: string[];

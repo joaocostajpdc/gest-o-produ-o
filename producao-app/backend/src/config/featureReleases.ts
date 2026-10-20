@@ -22,9 +22,16 @@ export const FEATURES = {
   glassOrders: "Pedidos de Vidros",
   osSidePanel: "Painel lateral das OS",
   cutPlans: "Otimização de Corte",
+  orcamentos: "Orçamentos",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;
+
+// Funcionalidades de acesso restrito (pedido do utilizador de 2026-10-20:
+// os Orçamentos são "apenas para João Costa e David Costa"). Nunca são
+// lançadas para todos: só os administradores e os utilizadores escolhidos
+// pelo administrador (testerUserIds) as veem, mesmo depois de aprovadas.
+export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set(["orcamentos"]);
 
 export function isFeatureKey(value: string): value is FeatureKey {
   return Object.prototype.hasOwnProperty.call(FEATURES, value);
@@ -42,6 +49,7 @@ export async function canUseFeature(
   if (!user) return false;
   if (user.role === "ADMINISTRADOR") return true;
   const row = await prisma.featureRelease.findUnique({ where: { key } });
+  if (RESTRICTED_FEATURES.has(key)) return !!row?.testerUserIds.includes(user.id);
   return !!row?.released || !!row?.testerUserIds.includes(user.id);
 }
 

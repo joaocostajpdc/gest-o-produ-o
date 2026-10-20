@@ -217,7 +217,7 @@ export function ServiceOrderDetailPage() {
     setActionError(null);
     try {
       await api.delete(`/service-orders/${id}`);
-      navigate("/");
+      navigate("/ordens-servico");
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Erro ao apagar a Ordem de Serviço.");
       setDeleting(false);

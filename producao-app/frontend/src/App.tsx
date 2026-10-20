@@ -19,7 +19,8 @@ import { OrcamentosPage } from "./pages/OrcamentosPage";
 import { ComprasPage } from "./pages/ComprasPage";
 import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage";
 import { TelegramPage } from "./pages/TelegramPage";
-import { FeaturesProvider } from "./contexts/FeaturesContext";
+import { FeaturesProvider, useFeature } from "./contexts/FeaturesContext";
+import { HomePage } from "./pages/HomePage";
 
 function ProtectedArea() {
   const { user, loading } = useAuth();
@@ -32,12 +33,21 @@ function ProtectedArea() {
   );
 }
 
+// "/" mostra o novo ecrã inicial a quem já o tem (em teste: só o
+// administrador); os restantes continuam a ver as Ordens de Serviço.
+function RootPage() {
+  const inicio = useFeature("inicio");
+  if (inicio.loading) return null;
+  return inicio.available ? <HomePage /> : <ServiceOrdersListPage />;
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedArea />}>
-        <Route path="/" element={<ServiceOrdersListPage />} />
+        <Route path="/" element={<RootPage />} />
+        <Route path="/ordens-servico" element={<ServiceOrdersListPage />} />
         <Route path="/scan" element={<ScanPage />} />
         <Route path="/service-orders/:id" element={<ServiceOrderDetailPage />} />
         <Route path="/material-lacagem" element={<MaterialLacagemPage />} />

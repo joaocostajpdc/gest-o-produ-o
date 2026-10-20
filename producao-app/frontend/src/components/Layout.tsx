@@ -143,6 +143,16 @@ function IconSend(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone do "Início" (casa).
+function IconHome(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 11 12 4l9 7" />
+      <path d="M5 10v10h14V10M10 20v-6h4v6" />
+    </svg>
+  );
+}
+
 // Marca "Teste" ao lado de uma aba ainda não aprovada pelo administrador.
 function TestBadge() {
   return (
@@ -174,6 +184,11 @@ export function Layout() {
   // Orçamentos: acesso restrito (João Costa e David Costa), nunca para todos.
   const orcamentos = useFeature("orcamentos");
   const compras = useFeature("compras");
+  // Ecrã inicial "Central Minho Ferragens" (em teste só para o administrador):
+  // quem o tem vê o novo nome e uma entrada "Início"; as OS passam para
+  // /ordens-servico. Os restantes continuam exatamente como estavam.
+  const inicio = useFeature("inicio");
+  const appName = inicio.available ? "Central Minho Ferragens" : "Gestão de Produção";
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
   // CSS ignora esta flag e o menu está sempre visível.
@@ -196,7 +211,7 @@ export function Layout() {
           <IconMenu />
         </button>
         <img src={logoMark} alt="Minho Ferragens" className="mobile-topbar-logo" />
-        <span className="mobile-topbar-title">Gestão de Produção</span>
+        <span className="mobile-topbar-title">{appName}</span>
       </header>
 
       {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
@@ -207,8 +222,8 @@ export function Layout() {
             <img src={logoMark} alt="Minho Ferragens" />
           </div>
           <div className="sidebar-brand-text">
-            <div className="sidebar-brand-name">Minho Ferragens</div>
-            <div className="sidebar-brand-sub">Gestão de Produção</div>
+            <div className="sidebar-brand-name">{inicio.available ? "Central" : "Minho Ferragens"}</div>
+            <div className="sidebar-brand-sub">{inicio.available ? "Minho Ferragens" : "Gestão de Produção"}</div>
           </div>
           <button
             className="sidebar-close-btn"
@@ -223,8 +238,14 @@ export function Layout() {
           {/* Menu separado por áreas (pedido do utilizador de 2026-10-20:
               "separa o que é gestão de produção e orçamentação" e "cria uma
               aba para compras"). */}
+          {inicio.available && (
+            <NavLink to="/" end>
+              <IconHome /> Início
+              {!inicio.released && <TestBadge />}
+            </NavLink>
+          )}
           <div className="section-label" style={{ marginTop: 4 }}>Produção</div>
-          <NavLink to="/" end>
+          <NavLink to={inicio.available ? "/ordens-servico" : "/"} end>
             <IconClipboard /> Ordens de Serviço
           </NavLink>
           <NavLink to="/scan">

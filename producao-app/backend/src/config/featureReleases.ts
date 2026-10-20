@@ -24,6 +24,7 @@ export const FEATURES = {
   cutPlans: "Otimização de Corte",
   orcamentos: "Orçamentos",
   compras: "Compras",
+  inicio: "Ecrã Inicial (Central Minho Ferragens)",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

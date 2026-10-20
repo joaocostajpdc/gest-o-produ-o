@@ -652,3 +652,83 @@ model OrcamentoFile {
 
   @@map("orcamento_files")
 }
+
+// ---------------------------------------------------------------------------
+// Equipa e Frota (pedido do utilizador de 2026-10-20): controlo de horas dos
+// colaboradores e quilómetros das carrinhas, com resumos por carrinha e por
+// condutor (cada condutor tem por norma a sua carrinha, mas às vezes trocam,
+// por isso cada registo de km guarda a carrinha E quem conduziu).
+// ---------------------------------------------------------------------------
+model Colaborador {
+  id          String   @id @default(cuid())
+  name        String
+  funcao      String?
+  dailyHours  Float    @default(8)
+  active      Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  timeEntries     TimeEntry[]
+  vehiclesHabituais Vehicle[]   @relation("CondutorHabitual")
+  trips           VehicleTrip[]
+
+  @@map("colaboradores")
+}
+
+model TimeEntry {
+  id            String      @id @default(cuid())
+  colaboradorId String
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+  date          DateTime    @db.Date
+  tipo          String      @default("TRABALHO") // TRABALHO | FALTA | FERIAS | BAIXA | FERIADO
+  startTime     String?     // "08:00"
+  endTime       String?     // "17:30"
+  breakMinutes  Int         @default(0)
+  notes         String?
+  createdById   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([colaboradorId, date])
+  @@index([date])
+  @@map("time_entries")
+}
+
+model Vehicle {
+  id              String       @id @default(cuid())
+  plate           String       @unique
+  name            String?
+  defaultDriverId String?
+  defaultDriver   Colaborador? @relation("CondutorHabitual", fields: [defaultDriverId], references: [id], onDelete: SetNull)
+  initialKm       Int          @default(0)
+  active          Boolean      @default(true)
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  trips VehicleTrip[]
+
+  @@map("vehicles")
+}
+
+model VehicleTrip {
+  id          String       @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driverId    String?
+  driver      Colaborador? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  date        DateTime     @db.Date
+  kmStart     Int
+  kmEnd       Int
+  destination String?
+  notes       String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([vehicleId, date])
+  @@index([driverId, date])
+  @@index([date])
+  @@map("vehicle_trips")
+}

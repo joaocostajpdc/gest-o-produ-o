@@ -1782,7 +1782,7 @@ form .field textarea {
 }
 .home-areas {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
   gap: 18px;
   align-items: start;
 }
@@ -2204,5 +2204,276 @@ form .field textarea {
   .cl-main {
     align-items: flex-start;
     padding: 36px 20px;
+  }
+}
+
+/* ===== Equipa e Frota: Controlo de Horas e Km das Carrinhas ===== */
+.ef-period {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ef-period input[type="month"] {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 14px;
+  background: #fff;
+}
+.ef-seg {
+  display: inline-flex;
+  background: #eceef4;
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+.ef-seg button {
+  border: 0;
+  background: transparent;
+  padding: 6px 14px;
+  min-height: 32px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.ef-seg button.active {
+  background: #fff;
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+.ef-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.ef-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.ef-kpi-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+.ef-kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.ef-kpi-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.ef-kpi-sub:first-letter {
+  text-transform: uppercase;
+}
+.ef-two {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.ef-form h3,
+.ef-table-head h3,
+.ef-sum-head h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.ef-form .field select,
+.ef-form .field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.ef-form input[type="date"],
+.ef-form input[type="time"] {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 14px;
+  background: #fff;
+  min-height: 38px;
+}
+.ef-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ef-row-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.ef-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ef-form-actions .btn {
+  min-height: 40px;
+}
+.ef-preview {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  font-size: 13.5px;
+}
+.ef-hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: #b54708;
+}
+.ef-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ef-table-card {
+  padding: 16px 0 6px;
+  min-width: 0;
+}
+.ef-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 18px 12px;
+}
+.ef-table-head h3 {
+  margin: 0;
+}
+.ef-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ef-scroll {
+  overflow-x: auto;
+}
+.ef-scroll table,
+.ef-sum-card table {
+  width: 100%;
+}
+.ef-scroll th:first-child,
+.ef-scroll td:first-child {
+  padding-left: 18px;
+}
+.ef-scroll th:last-child,
+.ef-scroll td:last-child {
+  padding-right: 18px;
+}
+.ef-table-card th.num,
+.ef-table-card td.num,
+.ef-sum-card th.num,
+.ef-sum-card td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ef-nowrap {
+  white-space: nowrap;
+}
+.ef-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.ef-row-actions .btn {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  margin-left: 4px;
+}
+.ef-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+td > .ef-tag:first-child {
+  margin-left: 0;
+}
+.ef-tag-own {
+  color: #047857;
+}
+.ef-tag-swap {
+  color: #b54708;
+}
+.ef-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+}
+.ef-sum-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.ef-sum-head h3 {
+  margin: 0 0 2px;
+}
+.ef-sum-head p {
+  margin: 0;
+  font-size: 13px;
+}
+.ef-sum-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+.ef-sum-total strong {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.ef-sum-total span {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.ef-bar {
+  display: inline-block;
+  width: 60px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: #eceef4;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.ef-bar span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 999px;
+}
+@media (max-width: 900px) {
+  .ef-two {
+    grid-template-columns: 1fr;
+  }
+  .ef-cards {
+    grid-template-columns: 1fr;
   }
 }

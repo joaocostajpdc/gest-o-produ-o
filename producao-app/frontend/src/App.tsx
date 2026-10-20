@@ -21,6 +21,8 @@ import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage"
 import { TelegramPage } from "./pages/TelegramPage";
 import { FeaturesProvider, useFeature } from "./contexts/FeaturesContext";
 import { HomePage } from "./pages/HomePage";
+import { HorasPage } from "./pages/HorasPage";
+import { KmPage } from "./pages/KmPage";
 
 function ProtectedArea() {
   const { user, loading } = useAuth();
@@ -59,6 +61,8 @@ export default function App() {
         <Route path="/otimizacao-corte/:id" element={<CutPlanPage />} />
         <Route path="/orcamentos" element={<OrcamentosPage />} />
         <Route path="/compras" element={<ComprasPage />} />
+        <Route path="/controlo-horas" element={<HorasPage />} />
+        <Route path="/km-carrinhas" element={<KmPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

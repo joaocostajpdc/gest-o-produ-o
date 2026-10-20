@@ -19,6 +19,7 @@ import { cutPlansRouter } from "./routes/cutPlans";
 import { telegramRouter } from "./routes/telegram";
 import { orcamentosRouter } from "./routes/orcamentos";
 import { prisma } from "./config/prisma";
+import { colaboradoresRouter, horasRouter, viaturasRouter } from "./routes/equipaFrota";
 
 export function createApp() {
   const app = express();
@@ -55,6 +56,9 @@ export function createApp() {
   app.use("/api/cut-plans", cutPlansRouter);
   app.use("/api/telegram", telegramRouter);
   app.use("/api/orcamentos", orcamentosRouter);
+  app.use("/api/colaboradores", colaboradoresRouter);
+  app.use("/api/horas", horasRouter);
+  app.use("/api/viaturas", viaturasRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

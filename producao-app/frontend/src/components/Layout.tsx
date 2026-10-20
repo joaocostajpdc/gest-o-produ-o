@@ -143,6 +143,27 @@ function IconSend(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícones da "Equipa e Frota" (relógio e carrinha).
+function IconClock(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+function IconVan(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M2 17V7a1 1 0 0 1 1-1h11v11" />
+      <path d="M14 9h4l4 4v4h-2" />
+      <circle cx="7" cy="17.5" r="2" />
+      <circle cx="17" cy="17.5" r="2" />
+      <path d="M9 17.5h6" />
+    </svg>
+  );
+}
+
 // Ícone do "Início" (casa).
 function IconHome(props: SVGProps<SVGSVGElement>) {
   return (
@@ -188,6 +209,8 @@ export function Layout() {
   // quem o tem vê o novo nome e uma entrada "Início"; as OS passam para
   // /ordens-servico. Os restantes continuam exatamente como estavam.
   const inicio = useFeature("inicio");
+  const horas = useFeature("horas");
+  const kmViaturas = useFeature("kmViaturas");
   const appName = inicio.available ? "Central Minho Ferragens" : "Gestão de Produção";
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
@@ -291,6 +314,24 @@ export function Layout() {
               <IconPaintBucket /> Pó em Stock
               {!powderStock.released && <TestBadge />}
             </NavLink>
+          )}
+
+          {(horas.available || kmViaturas.available) && (
+            <>
+              <div className="section-label">Equipa e Frota</div>
+              {horas.available && (
+                <NavLink to="/controlo-horas">
+                  <IconClock /> Controlo de Horas
+                  {!horas.released && <TestBadge />}
+                </NavLink>
+              )}
+              {kmViaturas.available && (
+                <NavLink to="/km-carrinhas">
+                  <IconVan /> Km das Carrinhas
+                  {!kmViaturas.released && <TestBadge />}
+                </NavLink>
+              )}
+            </>
           )}
 
           {orcamentos.available && (

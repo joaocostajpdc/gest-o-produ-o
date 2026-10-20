@@ -37,6 +37,8 @@ const icons = {
   vidros: <svg {...S}><rect x="4" y="3" width="16" height="18" rx="1" /><path d="M9 3v18M15 3v18" /></svg>,
   po: <svg {...S}><path d="M5 7h14l-1.5 12.5a1.5 1.5 0 0 1-1.5 1.5H8a1.5 1.5 0 0 1-1.5-1.5L5 7Z" /><ellipse cx="12" cy="7" rx="7" ry="2.5" /></svg>,
   orcamentos: <svg {...S}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></svg>,
+  horas: <svg {...S}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
+  carrinha: <svg {...S}><path d="M2 17V7a1 1 0 0 1 1-1h11v11" /><path d="M14 9h4l4 4v4h-2" /><circle cx="7" cy="17.5" r="2" /><circle cx="17" cy="17.5" r="2" /><path d="M9 17.5h6" /></svg>,
   lock: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>,
   arrow: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>,
   logout: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" /></svg>,
@@ -80,6 +82,7 @@ const today = () =>
 const areaIcons = {
   producao: <svg {...S}><path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z" /><path d="M7 17h2M12 17h2M17 17h1" /></svg>,
   compras: <svg {...S}><path d="M3 4h2l2.5 11h11L21 7H7" /><circle cx="9" cy="19.5" r="1.5" /><circle cx="17" cy="19.5" r="1.5" /></svg>,
+  equipa: <svg {...S}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14a5 5 0 0 1 6 5" /></svg>,
   orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
 };
 
@@ -109,9 +112,15 @@ export function HomePage() {
   const glassOrders = useFeature("glassOrders");
   const powderStock = useFeature("powderStock");
   const orcamentos = useFeature("orcamentos");
+  const horas = useFeature("horas");
+  const kmViaturas = useFeature("kmViaturas");
 
   const ordensEmCurso = useCount<{ status: string }>("/service-orders", (r) => r.filter((o) => ABERTAS.includes(o.status)).length);
   const materialAPedir = useCount<{ status: string }>("/material-requests", (r) => r.filter((m) => m.status === "A_PEDIR").length);
+  const colaboradoresAtivos = useCount<{ active: boolean }>(
+    horas.available || kmViaturas.available ? "/colaboradores" : null,
+    (r) => r.filter((c) => c.active).length
+  );
   const totalOrcamentos = useCount<unknown>(orcamentos.available ? "/orcamentos/lista" : null, (r) => r.length);
 
   const areas: Area[] = [
@@ -147,6 +156,21 @@ export function HomePage() {
       ],
     },
   ];
+  if (horas.available || kmViaturas.available) {
+    areas.push({
+      key: "equipa",
+      title: "Equipa e Frota",
+      desc: "Horas dos colaboradores e carrinhas",
+      icon: areaIcons.equipa,
+      color: "#6d28d9",
+      soft: "#f1ebff",
+      metric: { value: colaboradoresAtivos, label: "colaboradores ativos", to: horas.available ? "/controlo-horas" : "/km-carrinhas" },
+      tiles: [
+        ...(horas.available ? [{ to: "/controlo-horas", title: "Controlo de Horas", sub: "Entradas, saídas, extras e ausências", icon: icons.horas }] : []),
+        ...(kmViaturas.available ? [{ to: "/km-carrinhas", title: "Km das Carrinhas", sub: "Resumos por carrinha e por condutor", icon: icons.carrinha }] : []),
+      ],
+    });
+  }
   if (orcamentos.available) {
     areas.push({
       key: "orcamentacao",

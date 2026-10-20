@@ -25,6 +25,8 @@ export const FEATURES = {
   orcamentos: "Orçamentos",
   compras: "Compras",
   inicio: "Ecrã Inicial (Central Minho Ferragens)",
+  horas: "Controlo de Horas",
+  kmViaturas: "Km das Carrinhas",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

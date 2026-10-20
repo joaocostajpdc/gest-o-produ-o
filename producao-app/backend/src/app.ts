@@ -18,6 +18,7 @@ import { glassOrdersRouter } from "./routes/glassOrders";
 import { cutPlansRouter } from "./routes/cutPlans";
 import { telegramRouter } from "./routes/telegram";
 import { orcamentosRouter } from "./routes/orcamentos";
+import { prisma } from "./config/prisma";
 
 export function createApp() {
   const app = express();
@@ -26,6 +27,17 @@ export function createApp() {
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+
+  // Público (antes do login): diz se o novo visual "Central Minho Ferragens"
+  // já foi aprovado para todos, para o ecrã de entrada saber qual mostrar.
+  app.get("/api/public/ui", async (_req, res) => {
+    try {
+      const row = await prisma.featureRelease.findUnique({ where: { key: "inicio" } });
+      res.json({ central: !!row?.released });
+    } catch {
+      res.json({ central: false });
+    }
+  });
 
   app.use("/api/auth", authRouter);
   app.use("/api/products", productsRouter);

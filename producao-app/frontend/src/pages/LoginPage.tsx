@@ -1,8 +1,9 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ApiError } from "../api/client";
 import logoMark from "../assets/logo-mark.png";
+import { CENTRAL_UI_KEY } from "./HomePage";
 
 // Se a app redirecionou para aqui automaticamente por o token ter expirado
 // (ver handleUnauthorized em api/client.ts), mostra um aviso claro em vez de
@@ -11,13 +12,64 @@ function wasSessionExpired(): boolean {
   return new URLSearchParams(window.location.search).get("sessao_expirada") === "1";
 }
 
+// Novo visual "Central Minho Ferragens" (pedido de 2026-10-20). Enquanto o
+// ecrã inicial novo está em teste, o login novo só aparece nos computadores
+// onde um administrador já entrou (marca em localStorage); depois de aprovado
+// (GET /api/public/ui), aparece para todos.
+function hasCentralFlag(): boolean {
+  try {
+    return localStorage.getItem(CENTRAL_UI_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+const areas = [
+  {
+    title: "Produção",
+    sub: "Ordens de serviço, corte e lacagem",
+    icon: <path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z" />,
+  },
+  {
+    title: "Compras",
+    sub: "Fornecedores, material e stock",
+    icon: (
+      <>
+        <path d="M3 4h2l2.5 11h11L21 7H7" />
+        <circle cx="9" cy="19.5" r="1.5" />
+        <circle cx="17" cy="19.5" r="1.5" />
+      </>
+    ),
+  },
+  {
+    title: "Orçamentação",
+    sub: "Orçamentos a clientes",
+    icon: (
+      <>
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" />
+      </>
+    ),
+  },
+];
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessionExpired] = useState(wasSessionExpired);
+  const [central, setCentral] = useState(hasCentralFlag);
+
+  useEffect(() => {
+    if (central) return;
+    fetch("/api/public/ui")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.central && setCentral(true))
+      .catch(() => undefined);
+  }, [central]);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -34,44 +86,129 @@ export function LoginPage() {
     }
   }
 
+  if (!central) {
+    return (
+      <div className="login-page">
+        <form className="login-card" onSubmit={handleSubmit}>
+          <img src={logoMark} alt="Minho Ferragens" className="login-logo" />
+          <h1>Gestão de Produção</h1>
+          <p className="muted">Inicia sessão para aceder à aplicação.</p>
+
+          {sessionExpired && <p className="error-text">A sua sessão expirou. Inicie sessão novamente.</p>}
+
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Palavra-passe</label>
+            <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </div>
+
+          {error && <p className="error-text">{error}</p>}
+
+          <button className="btn" type="submit" disabled={submitting} style={{ width: "100%" }}>
+            {submitting ? "A entrar..." : "Entrar"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
-    <div className="login-page">
-      <form className="login-card" onSubmit={handleSubmit}>
-        <img src={logoMark} alt="Minho Ferragens" className="login-logo" />
-        <h1>Gestão de Produção</h1>
-        <p className="muted">Inicia sessão para aceder à aplicação.</p>
-
-        {sessionExpired && (
-          <p className="error-text">A sua sessão expirou. Inicie sessão novamente.</p>
-        )}
-
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="password">Palavra-passe</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+    <div className="cl-page">
+      <aside className="cl-side">
+        <div className="cl-brand">
+          <span className="cl-brand-logo">
+            <img src={logoMark} alt="" />
+          </span>
+          <span className="cl-brand-text">
+            <strong>Central</strong>
+            <span>Minho Ferragens</span>
+          </span>
         </div>
 
-        {error && <p className="error-text">{error}</p>}
+        <div className="cl-pitch">
+          <h1>Toda a operação da empresa num só lugar.</h1>
+          <ul className="cl-areas">
+            {areas.map((a) => (
+              <li key={a.title}>
+                <span className="cl-area-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    {a.icon}
+                  </svg>
+                </span>
+                <span>
+                  <strong>{a.title}</strong>
+                  <span>{a.sub}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <button className="btn" type="submit" disabled={submitting} style={{ width: "100%" }}>
-          {submitting ? "A entrar..." : "Entrar"}
-        </button>
-      </form>
+        <p className="cl-legal">JPDC - Mynhoferragens, Lda. · Ponte da Barca</p>
+      </aside>
+
+      <main className="cl-main">
+        <form className="cl-form" onSubmit={handleSubmit}>
+          <h2>Iniciar sessão</h2>
+          <p className="cl-form-sub">Entra com a tua conta da empresa.</p>
+
+          {sessionExpired && <p className="cl-alert">A sessão expirou. Inicia sessão novamente.</p>}
+
+          <div className="cl-field">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              placeholder="nome@minhoferragens.pt"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="cl-field">
+            <label htmlFor="password">Palavra-passe</label>
+            <div className="cl-password">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="cl-eye"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Esconder palavra-passe" : "Mostrar palavra-passe"}
+                aria-pressed={showPassword}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                  {showPassword && <path d="M4 4l16 16" />}
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <p className="cl-alert" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button className="cl-submit" type="submit" disabled={submitting}>
+            {submitting ? "A entrar..." : "Entrar"}
+          </button>
+
+          <p className="cl-help">Sem acesso ou esqueceste a palavra-passe? Fala com o administrador.</p>
+        </form>
+      </main>
     </div>
   );
 }

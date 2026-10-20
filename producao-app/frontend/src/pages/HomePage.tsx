@@ -53,8 +53,11 @@ interface Tile {
 interface Area {
   key: string;
   title: string;
+  desc: string;
+  icon: ReactNode;
   color: string;
   soft: string;
+  metric: { value: number | null; label: string; to: string };
   tiles: Tile[];
 }
 
@@ -74,6 +77,30 @@ function greeting() {
 const today = () =>
   new Date().toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
+const areaIcons = {
+  producao: <svg {...S}><path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z" /><path d="M7 17h2M12 17h2M17 17h1" /></svg>,
+  compras: <svg {...S}><path d="M3 4h2l2.5 11h11L21 7H7" /><circle cx="9" cy="19.5" r="1.5" /><circle cx="17" cy="19.5" r="1.5" /></svg>,
+  orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
+};
+
+// Conta sem rebentar o ecrã se a API falhar ou a área não estiver disponível.
+function useCount<T>(path: string | null, count: (rows: T[]) => number) {
+  const [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    api
+      .get<T[]>(path)
+      .then((rows) => setN(count(rows)))
+      .catch(() => setN(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path]);
+  return n;
+}
+
+export const CENTRAL_UI_KEY = "central_ui";
+
+const ABERTAS = ["NAO_INICIADA", "EM_PRODUCAO", "SUSPENSA"];
+
 export function HomePage() {
   const { user, logout } = useAuth();
   const inicio = useFeature("inicio");
@@ -82,27 +109,20 @@ export function HomePage() {
   const glassOrders = useFeature("glassOrders");
   const powderStock = useFeature("powderStock");
   const orcamentos = useFeature("orcamentos");
-  const [counts, setCounts] = useState<{ total: number; producao: number; espera: number; suspensas: number } | null>(null);
 
-  useEffect(() => {
-    api
-      .get<{ status: string }[]>("/service-orders")
-      .then((list) => {
-        const n = (s: string) => list.filter((o) => o.status === s).length;
-        const espera = n("NAO_INICIADA");
-        const producao = n("EM_PRODUCAO");
-        const suspensas = n("SUSPENSA");
-        setCounts({ total: espera + producao + suspensas, producao, espera, suspensas });
-      })
-      .catch(() => setCounts(null));
-  }, []);
+  const ordensEmCurso = useCount<{ status: string }>("/service-orders", (r) => r.filter((o) => ABERTAS.includes(o.status)).length);
+  const materialAPedir = useCount<{ status: string }>("/material-requests", (r) => r.filter((m) => m.status === "A_PEDIR").length);
+  const totalOrcamentos = useCount<unknown>(orcamentos.available ? "/orcamentos/lista" : null, (r) => r.length);
 
   const areas: Area[] = [
     {
       key: "producao",
       title: "Produção",
+      desc: "Ordens de serviço, corte e lacagem",
+      icon: areaIcons.producao,
       color: "#1d4ed8",
       soft: "#e8eeff",
+      metric: { value: ordensEmCurso, label: "ordens em curso", to: "/ordens-servico" },
       tiles: [
         { to: "/ordens-servico", title: "Ordens de Serviço", sub: "Lançar OS, prioridades e prazos", icon: icons.os },
         { to: "/scan", title: "Ler Código", sub: "Entradas e saídas por código", icon: icons.scan },
@@ -114,12 +134,15 @@ export function HomePage() {
     {
       key: "compras",
       title: "Compras",
+      desc: "Fornecedores, material e stock",
+      icon: areaIcons.compras,
       color: "#c2410c",
       soft: "#fdeee5",
+      metric: { value: materialAPedir, label: "materiais por pedir", to: "/material-a-pedir" },
       tiles: [
         ...(compras.available ? [{ to: "/compras", title: "Resumo de Compras", sub: "Tudo o que está por pedir", icon: icons.compras }] : []),
         { to: "/material-a-pedir", title: "Material a Pedir", sub: "Pedidos a fornecedores", icon: icons.pedir },
-        ...(glassOrders.available ? [{ to: "/pedidos-vidros", title: "Pedidos de Vidros", sub: "Vidros encomendados e a receber", icon: icons.vidros }] : []),
+        ...(glassOrders.available ? [{ to: "/pedidos-vidros", title: "Pedidos de Vidros", sub: "Encomendados e a receber", icon: icons.vidros }] : []),
         ...(powderStock.available ? [{ to: "/po-em-stock", title: "Pó em Stock", sub: "Tintas em pó por RAL e local", icon: icons.po }] : []),
       ],
     },
@@ -128,15 +151,18 @@ export function HomePage() {
     areas.push({
       key: "orcamentacao",
       title: "Orçamentação",
+      desc: "Orçamentos a clientes",
+      icon: areaIcons.orcamentacao,
       color: "#047857",
       soft: "#e3f5ee",
+      metric: { value: totalOrcamentos, label: "orçamentos registados", to: "/orcamentos" },
       tiles: [
         {
           to: "/orcamentos",
           title: "Orçamentos",
           sub: "Painéis e chapas quinadas",
           icon: icons.orcamentos,
-          badge: <span className="home-lock" title="Acesso restrito">{icons.lock} Restrito</span>,
+          badge: <span className="home-lock" title="Só para João Costa e David Costa">{icons.lock} Restrito</span>,
         },
       ],
     });
@@ -157,12 +183,15 @@ export function HomePage() {
 
   const firstName = user?.name?.split(" ")[0];
 
-  const kpis = [
-    { label: "Ordens em curso", value: counts?.total, tone: "#4f6bff" },
-    { label: "Em produção", value: counts?.producao, tone: "#16a34a" },
-    { label: "Por iniciar", value: counts?.espera, tone: "#94a3b8" },
-    { label: "Suspensas", value: counts?.suspensas, tone: "#f59e0b" },
-  ];
+  // Lembra neste computador que já há acesso ao novo visual, para o ecrã de
+  // entrada também aparecer novo aqui enquanto está em teste.
+  useEffect(() => {
+    try {
+      localStorage.setItem(CENTRAL_UI_KEY, "1");
+    } catch {
+      /* sem armazenamento: não faz mal */
+    }
+  }, []);
 
   return (
     <div className="home">
@@ -190,35 +219,13 @@ export function HomePage() {
         </header>
 
         <section className="home-hero">
-          <div className="home-hero-text">
-            <p className="home-date">{today()}</p>
-            <h1>
-              {greeting()}
-              {firstName ? `, ${firstName}` : ""}
-            </h1>
-            <p className="home-company">JPDC - Mynhoferragens, Lda. · Produção, compras e orçamentação</p>
-          </div>
-          <div className="home-actions">
-            <Link to="/ordens-servico" className="home-action primary">
-              {icons.os} Ordens de Serviço
-            </Link>
-            <Link to="/scan" className="home-action">
-              {icons.scan} Ler Código
-            </Link>
-          </div>
+          <p className="home-date">{today()}</p>
+          <h1>
+            {greeting()}
+            {firstName ? `, ${firstName}` : ""}
+          </h1>
+          <p className="home-company">Escolhe a área em que vais trabalhar.</p>
         </section>
-
-        <div className="home-kpis">
-          {kpis.map((k) => (
-            <Link key={k.label} to="/ordens-servico" className="home-kpi">
-              <span className="home-kpi-label">
-                <span className="home-kpi-dot" style={{ background: k.tone }} />
-                {k.label}
-              </span>
-              <span className="home-kpi-value">{k.value ?? "—"}</span>
-            </Link>
-          ))}
-        </div>
       </div>
 
       <div className="home-body">
@@ -228,42 +235,47 @@ export function HomePage() {
           </div>
         )}
 
-        {areas.map((area) => (
-          <section key={area.key} className="home-area" aria-labelledby={`area-${area.key}`}>
-            <div className="home-area-head">
-              <h2 id={`area-${area.key}`}>{area.title}</h2>
-              <span className="home-area-count">
-                {area.tiles.length} {area.tiles.length === 1 ? "módulo" : "módulos"}
-              </span>
-            </div>
-            <div className="home-grid">
-              {area.tiles.map((t) => (
-                <Link
-                  key={t.to}
-                  to={t.to}
-                  className="home-card"
-                  style={{ ["--accent" as string]: area.color, ["--accent-soft" as string]: area.soft }}
-                >
-                  <span className="home-card-icon">{t.icon}</span>
-                  <span className="home-card-text">
-                    <span className="home-card-title">
-                      {t.title}
-                      {t.badge}
+        <div className="home-areas">
+          {areas.map((area) => (
+            <section
+              key={area.key}
+              className="home-panel"
+              aria-labelledby={`area-${area.key}`}
+              style={{ ["--accent" as string]: area.color, ["--accent-soft" as string]: area.soft }}
+            >
+              <div className="home-panel-head">
+                <span className="home-panel-icon">{area.icon}</span>
+                <div className="home-panel-title">
+                  <h2 id={`area-${area.key}`}>{area.title}</h2>
+                  <p>{area.desc}</p>
+                </div>
+              </div>
+              <Link to={area.metric.to} className="home-panel-metric">
+                <span className="home-panel-metric-value">{area.metric.value ?? "—"}</span>
+                <span className="home-panel-metric-label">{area.metric.label}</span>
+              </Link>
+              <nav className="home-panel-links" aria-label={area.title}>
+                {area.tiles.map((t) => (
+                  <Link key={t.to} to={t.to} className="home-link">
+                    <span className="home-link-icon">{t.icon}</span>
+                    <span className="home-link-text">
+                      <span className="home-link-title">
+                        {t.title}
+                        {t.badge}
+                      </span>
+                      <span className="home-link-sub">{t.sub}</span>
                     </span>
-                    <span className="home-card-sub">{t.sub}</span>
-                  </span>
-                  <span className="home-card-arrow">{icons.arrow}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))}
+                    <span className="home-link-arrow">{icons.arrow}</span>
+                  </Link>
+                ))}
+              </nav>
+            </section>
+          ))}
+        </div>
 
         {config.length > 0 && (
-          <section className="home-area" aria-labelledby="area-config">
-            <div className="home-area-head">
-              <h2 id="area-config">Configuração</h2>
-            </div>
+          <section className="home-config-wrap" aria-labelledby="area-config">
+            <h2 id="area-config">Configuração</h2>
             <div className="home-config">
               {config.map((c) => (
                 <Link key={c.to} to={c.to} className="home-chip">
@@ -274,7 +286,7 @@ export function HomePage() {
           </section>
         )}
 
-        <footer className="home-foot">Central Minho Ferragens</footer>
+        <footer className="home-foot">Central Minho Ferragens · JPDC - Mynhoferragens, Lda.</footer>
       </div>
     </div>
   );

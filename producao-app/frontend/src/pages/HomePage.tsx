@@ -54,6 +54,7 @@ interface Area {
   key: string;
   title: string;
   color: string;
+  soft: string;
   tiles: Tile[];
 }
 
@@ -101,6 +102,7 @@ export function HomePage() {
       key: "producao",
       title: "Produção",
       color: "#1d4ed8",
+      soft: "#e8eeff",
       tiles: [
         { to: "/ordens-servico", title: "Ordens de Serviço", sub: "Lançar OS, prioridades e prazos", icon: icons.os },
         { to: "/scan", title: "Ler Código", sub: "Entradas e saídas por código", icon: icons.scan },
@@ -113,6 +115,7 @@ export function HomePage() {
       key: "compras",
       title: "Compras",
       color: "#c2410c",
+      soft: "#fdeee5",
       tiles: [
         ...(compras.available ? [{ to: "/compras", title: "Resumo de Compras", sub: "Tudo o que está por pedir", icon: icons.compras }] : []),
         { to: "/material-a-pedir", title: "Material a Pedir", sub: "Pedidos a fornecedores", icon: icons.pedir },
@@ -126,13 +129,14 @@ export function HomePage() {
       key: "orcamentacao",
       title: "Orçamentação",
       color: "#047857",
+      soft: "#e3f5ee",
       tiles: [
         {
           to: "/orcamentos",
           title: "Orçamentos",
           sub: "Painéis e chapas quinadas",
           icon: icons.orcamentos,
-          badge: <span className="home-lock">{icons.lock} Acesso restrito</span>,
+          badge: <span className="home-lock" title="Acesso restrito">{icons.lock} Restrito</span>,
         },
       ],
     });
@@ -153,10 +157,17 @@ export function HomePage() {
 
   const firstName = user?.name?.split(" ")[0];
 
+  const kpis = [
+    { label: "Ordens em curso", value: counts?.total, tone: "#4f6bff" },
+    { label: "Em produção", value: counts?.producao, tone: "#16a34a" },
+    { label: "Por iniciar", value: counts?.espera, tone: "#94a3b8" },
+    { label: "Suspensas", value: counts?.suspensas, tone: "#f59e0b" },
+  ];
+
   return (
     <div className="home">
-      <header className="home-topbar">
-        <div className="home-topbar-inner">
+      <div className="home-band">
+        <header className="home-topbar">
           <div className="home-brand">
             <span className="home-brand-logo">
               <img src={logoMark} alt="" />
@@ -176,61 +187,72 @@ export function HomePage() {
               {icons.logout}
             </button>
           </div>
-        </div>
-      </header>
-
-      <div className="home-body">
-        {!inicio.released && (
-          <div style={{ marginBottom: 20 }}>
-            <FeatureTestBanner featureKey="inicio" label="o novo ecrã inicial" />
-          </div>
-        )}
+        </header>
 
         <section className="home-hero">
-          <div>
+          <div className="home-hero-text">
             <p className="home-date">{today()}</p>
             <h1>
               {greeting()}
               {firstName ? `, ${firstName}` : ""}
             </h1>
-            <p className="home-company">JPDC - Mynhoferragens, Lda.</p>
+            <p className="home-company">JPDC - Mynhoferragens, Lda. · Produção, compras e orçamentação</p>
           </div>
-          <Link to="/ordens-servico" className="home-stats" aria-label="Ver ordens de serviço">
-            <span className="home-stat home-stat-main">
-              <span className="home-stat-value">{counts?.total ?? "—"}</span>
-              <span className="home-stat-label">Ordens em curso</span>
-            </span>
-            <span className="home-stat">
-              <span className="home-stat-value">{counts?.producao ?? "—"}</span>
-              <span className="home-stat-label">Em produção</span>
-            </span>
-            <span className="home-stat">
-              <span className="home-stat-value">{counts?.espera ?? "—"}</span>
-              <span className="home-stat-label">Por iniciar</span>
-            </span>
-            <span className="home-stat">
-              <span className="home-stat-value">{counts?.suspensas ?? "—"}</span>
-              <span className="home-stat-label">Suspensas</span>
-            </span>
-          </Link>
+          <div className="home-actions">
+            <Link to="/ordens-servico" className="home-action primary">
+              {icons.os} Ordens de Serviço
+            </Link>
+            <Link to="/scan" className="home-action">
+              {icons.scan} Ler Código
+            </Link>
+          </div>
         </section>
+
+        <div className="home-kpis">
+          {kpis.map((k) => (
+            <Link key={k.label} to="/ordens-servico" className="home-kpi">
+              <span className="home-kpi-label">
+                <span className="home-kpi-dot" style={{ background: k.tone }} />
+                {k.label}
+              </span>
+              <span className="home-kpi-value">{k.value ?? "—"}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="home-body">
+        {!inicio.released && (
+          <div style={{ marginBottom: 24 }}>
+            <FeatureTestBanner featureKey="inicio" label="o novo ecrã inicial" />
+          </div>
+        )}
 
         {areas.map((area) => (
           <section key={area.key} className="home-area" aria-labelledby={`area-${area.key}`}>
-            <h2 id={`area-${area.key}`} className="home-area-title">
-              <span className="home-area-dot" style={{ background: area.color }} />
-              {area.title}
-            </h2>
+            <div className="home-area-head">
+              <h2 id={`area-${area.key}`}>{area.title}</h2>
+              <span className="home-area-count">
+                {area.tiles.length} {area.tiles.length === 1 ? "módulo" : "módulos"}
+              </span>
+            </div>
             <div className="home-grid">
               {area.tiles.map((t) => (
-                <Link key={t.to} to={t.to} className="home-tile" style={{ background: area.color }}>
-                  <span className="home-tile-top">
-                    <span className="home-tile-icon">{t.icon}</span>
-                    {t.badge}
+                <Link
+                  key={t.to}
+                  to={t.to}
+                  className="home-card"
+                  style={{ ["--accent" as string]: area.color, ["--accent-soft" as string]: area.soft }}
+                >
+                  <span className="home-card-icon">{t.icon}</span>
+                  <span className="home-card-text">
+                    <span className="home-card-title">
+                      {t.title}
+                      {t.badge}
+                    </span>
+                    <span className="home-card-sub">{t.sub}</span>
                   </span>
-                  <span className="home-tile-title">{t.title}</span>
-                  <span className="home-tile-sub">{t.sub}</span>
-                  <span className="home-tile-arrow">{icons.arrow}</span>
+                  <span className="home-card-arrow">{icons.arrow}</span>
                 </Link>
               ))}
             </div>
@@ -239,10 +261,9 @@ export function HomePage() {
 
         {config.length > 0 && (
           <section className="home-area" aria-labelledby="area-config">
-            <h2 id="area-config" className="home-area-title">
-              <span className="home-area-dot" style={{ background: "#64748b" }} />
-              Configuração
-            </h2>
+            <div className="home-area-head">
+              <h2 id="area-config">Configuração</h2>
+            </div>
             <div className="home-config">
               {config.map((c) => (
                 <Link key={c.to} to={c.to} className="home-chip">
@@ -253,7 +274,7 @@ export function HomePage() {
           </section>
         )}
 
-        <footer className="home-foot">Central Minho Ferragens · Produção, compras e orçamentação</footer>
+        <footer className="home-foot">Central Minho Ferragens</footer>
       </div>
     </div>
   );

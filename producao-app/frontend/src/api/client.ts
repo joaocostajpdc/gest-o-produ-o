@@ -61,6 +61,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (res.status === 401 && path !== "/auth/login") {
       handleUnauthorized();
     }
+    // Período de manutenção (23:00–07:00): quem não é administrador volta
+    // ao ecrã de entrada com o aviso.
+    if (res.status === 503 && isJson && body?.maintenance && path !== "/auth/login") {
+      setToken(null);
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?manutencao=1";
+      }
+    }
     const message = isJson && body?.error ? body.error : `Erro ${res.status}`;
     throw new ApiError(message, res.status, isJson ? body?.details : undefined);
   }

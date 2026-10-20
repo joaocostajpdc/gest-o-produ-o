@@ -8,6 +8,11 @@ import { CENTRAL_UI_KEY } from "./HomePage";
 // Se a app redirecionou para aqui automaticamente por o token ter expirado
 // (ver handleUnauthorized em api/client.ts), mostra um aviso claro em vez de
 // deixar a pessoa sem perceber porque é que "de repente" foi para o login.
+// Período de manutenção (23:00–07:00, só o administrador entra).
+function wasMaintenance(): boolean {
+  return new URLSearchParams(window.location.search).get("manutencao") === "1";
+}
+
 function wasSessionExpired(): boolean {
   return new URLSearchParams(window.location.search).get("sessao_expirada") === "1";
 }
@@ -61,6 +66,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessionExpired] = useState(wasSessionExpired);
+  const [maintenance] = useState(wasMaintenance);
   const [central, setCentral] = useState(hasCentralFlag);
 
   useEffect(() => {
@@ -95,6 +101,7 @@ export function LoginPage() {
           <p className="muted">Inicia sessão para aceder à aplicação.</p>
 
           {sessionExpired && <p className="error-text">A sua sessão expirou. Inicie sessão novamente.</p>}
+          {maintenance && <p className="error-text">O programa está em manutenção das 23:00 às 07:00. Volte a entrar a partir das 07:00.</p>}
 
           <div className="field">
             <label htmlFor="email">Email</label>
@@ -156,6 +163,7 @@ export function LoginPage() {
           <p className="cl-form-sub">Entra com a tua conta da empresa.</p>
 
           {sessionExpired && <p className="cl-alert">A sessão expirou. Inicia sessão novamente.</p>}
+          {maintenance && <p className="cl-alert">O programa está em manutenção das 23:00 às 07:00. Volta a entrar a partir das 07:00.</p>}
 
           <div className="cl-field">
             <label htmlFor="email">Email</label>

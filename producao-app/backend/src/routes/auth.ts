@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { requireAuth, signToken } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
+import { inMaintenanceWindow, MAINTENANCE_MESSAGE } from "../middleware/maintenance";
 
 export const authRouter = Router();
 
@@ -25,6 +26,10 @@ authRouter.post(
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       return res.status(401).json({ error: "Credenciais inválidas." });
+    }
+
+    if (user.role !== "ADMINISTRADOR" && inMaintenanceWindow()) {
+      return res.status(503).json({ error: MAINTENANCE_MESSAGE, maintenance: true });
     }
 
     const token = signToken({ id: user.id, email: user.email, name: user.name, role: user.role });

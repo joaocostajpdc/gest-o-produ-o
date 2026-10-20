@@ -1,4 +1,5 @@
 import express, { NextFunction, Request, Response } from "express";
+import { maintenanceGuard } from "./middleware/maintenance";
 import cors from "cors";
 import { ZodError } from "zod";
 import path from "path";
@@ -28,6 +29,9 @@ export function createApp() {
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+
+  // Das 23:00 às 07:00 só o administrador usa o programa (ver middleware/maintenance.ts).
+  app.use("/api", maintenanceGuard);
 
   // Público (antes do login): diz se o novo visual "Central Minho Ferragens"
   // já foi aprovado para todos, para o ecrã de entrada saber qual mostrar.

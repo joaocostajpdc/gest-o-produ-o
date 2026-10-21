@@ -141,6 +141,7 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .fadd{all:unset;box-sizing:border-box;cursor:pointer;width:100%;min-height:138px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--line-2);border-radius:6px;color:var(--muted);font-size:12px;text-align:center;padding:10px}
 .fadd:hover,.fadd:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
 .fadd b{font-size:13px;color:var(--fg)}
+.pocli span{color:var(--accent);font-weight:600}
 .gt{width:100%;border-collapse:collapse;font-size:13px}
 .gt th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
 .gt td{padding:7px 8px;border-bottom:1px solid var(--line)}
@@ -416,6 +417,7 @@ function calcChapas(q,P){
   return finalizar(q,P,out,{grupos:G,m2Tot,moEur,trEur,outEur});
 }
 /* ---- orçamento de painéis ---- */
+function usaPoCliente(L){ return /p[oó]\s*cliente/i.test(String(L.acab1||""))||/p[oó]\s*cliente/i.test(String(L.acab2||"")); }
 function calcPainelLinha(L,P,margemQ){
   const m=P.matriz[L.tipo]||{}; const on=k=>(m[k]===undefined?1:m[k])?1:0;
   const m2=num(L.larg)*num(L.alt)/1e6; const qt=Math.max(0,Math.round(num(L.qt)));
@@ -438,7 +440,9 @@ function calcPainelLinha(L,P,margemQ){
     puxEmb:num(L.puxEmb)*num(P.unit.puxEmb)*on("puxEmb"),
     led:num(L.led)*num(P.unit.led)*on("led"),
     fechadura:num(L.fechadura)*num(P.unit.fechadura)*on("fechadura"),
-    extras:num(L.extras)};
+    extras:num(L.extras),
+    // Pó do cliente (pedido de 2026-10-21): preço total do pó para esta linha, repartido pelas unidades.
+    po: usaPoCliente(L)&&qt? num(L.poPreco)/qt : 0};
   const custo=Object.values(c).reduce((s,v)=>s+v,0);
   const mg=(L.margem===""||L.margem===undefined||L.margem===null)? margemQ : num(L.margem)/100;
   const venda=custo*(1+mg)*qt;
@@ -458,7 +462,7 @@ function finalizar(q,P,linhas,extra){
   return {linhas,custo,sub,descEur,base,iva,total,margemEur:base-custo,brk,...extra};
 }
 function calcQuote(q,P){ return q.tipo==="paineis"? calcPaineis(q,P) : calcChapas(q,P); }
-const BRK_LABEL={chapa:"Chapa",acab:"Acabamento",lacagem:"Lacagem",corte:"Corte",quin:"Quinagem",cantos:"Corta-cantos",mo:"Mão de obra",emb:"Embalagem",transp:"Transporte",outros:"Outros",enchimento:"Enchimento",cola:"Cola",fresagem:"Fresagem",alunox:"Alunox",vidro:"Vidro",aro:"Aro",cilindro:"Cilindro",puxador:"Puxador",puxEmb:"Puxador embutido",led:"LED",fechadura:"Fechadura",extras:"Extras"};
+const BRK_LABEL={po:"Pó do cliente",chapa:"Chapa",acab:"Acabamento",lacagem:"Lacagem",corte:"Corte",quin:"Quinagem",cantos:"Corta-cantos",mo:"Mão de obra",emb:"Embalagem",transp:"Transporte",outros:"Outros",enchimento:"Enchimento",cola:"Cola",fresagem:"Fresagem",alunox:"Alunox",vidro:"Vidro",aro:"Aro",cilindro:"Cilindro",puxador:"Puxador",puxEmb:"Puxador embutido",led:"LED",fechadura:"Fechadura",extras:"Extras"};
 const BRK_COL=["#1420E6","#5B8DEF","#2BB3A3","#E0A030","#D2553F","#8E5BD9","#6B7785","#A9B4C0","#3F7F4F","#C77DBA","#B5892F","#4A9BD1"];
 
 if(typeof module!=="undefined") module.exports={DEFAULT_P,calcQuote,calcPainelLinha,planoCorte,perfilLayout,num,fmt};
@@ -658,15 +662,15 @@ function setPath(o,p,v){ const k=p.split("."); let x=o; for(let i=0;i<k.length-1
 function renderLines(){
   const q=S.cur, box=$("#lines"); const ch=q.tipo==="chapas"; const P=S.P;
   box.innerHTML=q.linhas.map((L,i)=>ch? lineChapaHTML(L,i,P) : linePainelHTML(L,i,P)).join("") || `<div class="hint">Sem linhas.</div>`;
-  box.oninput=e=>{ const t=e.target, card=t.closest(".line"); if(!card) return;
+  box.oninput=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line"); if(!card) return;
     if(t.dataset.m){ const L=q.linhas[+card.dataset.i]; const M=garantirMedidas(L); M[+t.closest(".med").dataset.k][t.dataset.m]=t.value; syncMedidas(L); refreshCalc(); markDirty(); return; }
     if(!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
     if(ch&&(t.dataset.l==="abas"||t.dataset.l==="angs")){ $(".pv .svgh",card).innerHTML=perfilSVG(L.abas,L.angs); }
     refreshCalc(); markDirty(); };
-  box.onchange=e=>{ const t=e.target, card=t.closest(".line");
+  box.onchange=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line");
     if(card&&t.dataset.foto!==undefined&&t.files&&t.files[0]){ fotoPainel(q.linhas[+card.dataset.i],t.files[0],card); t.value=""; return; }
     if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
-    if(!ch&&t.dataset.l==="tipo"){ renderLines(); } refreshCalc(); markDirty(); };
+    if(!ch&&(t.dataset.l==="tipo"||t.dataset.l==="acab1"||t.dataset.l==="acab2")){ renderLines(); if(usaPoCliente(L)&&(t.dataset.l==="acab1"||t.dataset.l==="acab2")){ const c=$$("#lines .line")[+card.dataset.i]; const pi=c&&c.querySelector('[data-l="poPreco"]'); if(pi) pi.focus(); } } refreshCalc(); markDirty(); };
   box.onclick=e=>{ const b=e.target.closest("[data-act]"); if(!b) return; const i=+b.closest(".line").dataset.i;
     if(b.dataset.act==="del"){ q.linhas.splice(i,1); } if(b.dataset.act==="dup"){ const n=clone(q.linhas[i]); n.id=uid(); q.linhas.splice(i+1,0,n); }
     if(b.dataset.act==="foto"){ b.closest(".line").querySelector("input[data-foto]").click(); return; }
@@ -725,6 +729,7 @@ function linePainelHTML(L,i,P){
     <label class="f"><span>Extras (€)</span><input class="i num" inputmode="decimal" data-l="extras" value="${esc(L.extras)}"></label>
     <label class="f w3"><span>Acabamento face 1</span><select class="i" data-l="acab1" ${off("acab1")}>${opts(P.acabamentos,L.acab1,x=>x.nome,x=>x.nome)}</select></label>
     <label class="f w3"><span>Acabamento face 2</span><select class="i" data-l="acab2" ${off("acab2")}>${opts(P.acabamentos,L.acab2,x=>x.nome,x=>x.nome)}</select></label>
+    ${usaPoCliente(L)?`<label class="f w2 pocli"><span>Preço do pó (€, total desta linha)</span><input class="i num" inputmode="decimal" data-l="poPreco" value="${esc(L.poPreco??"")}" placeholder="ex.: 85"></label>`:""}
     <label class="f w2"><span>Vidro</span><select class="i" data-l="vidro" ${off("vidro")}>${opts(P.vidros,L.vidro,x=>x.nome,x=>x.nome)}</select></label>
     <label class="f"><span>Vidro (m²)</span><input class="i num" inputmode="decimal" data-l="vidroM2" value="${esc(L.vidroM2)}" ${off("vidro")}></label>
     <label class="f w2"><span>Ref. Alunox</span><select class="i" data-l="alunoxRef" ${off("alunox")}><option value="">—</option>${opts(ali,L.alunoxRef)}</select></label>
@@ -742,6 +747,7 @@ function linePainelHTML(L,i,P){
 function refreshCalc(){
   const q=S.cur; if(!q||S.view!=="editor") return; const r=calcQuote(q,S.P); S.lastCalc=r; const ch=q.tipo==="chapas";
   $$("#lines .line").forEach(card=>{ const x=r.linhas[+card.dataset.i]; if(!x) return; const o=k=>card.querySelector(`[data-o="${k}"]`);
+    if(ch&&!o("dv")) return; if(!ch&&!o("kg")) return;
     if(ch){ o("dv").textContent= x.dv? `desenv. ${fmt(x.dv,0)} mm` : ""; o("m2").textContent=fmt(x.m2,2); o("pecas").textContent=x.qt; o("quin").textContent=x.quin; o("custo").textContent=eur(x.custo); o("tot").textContent=eur(x.venda);
       x.med.forEach((m,k)=>{ const u=o("mu"+k), t=o("mt"+k); if(u) u.textContent= m.comp&&m.qt? eur(m.unit) : "—"; if(t) t.textContent= m.comp&&m.qt? eur(m.venda) : "—"; });
       o("warn").innerHTML= !x.dv? `<span class="warnchip">Falta indicar as abas</span>` : (!x.comp?`<span class="warnchip">Falta o comprimento</span>`:""); }

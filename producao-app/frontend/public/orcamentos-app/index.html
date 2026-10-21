@@ -134,6 +134,13 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .line .fields .w2{grid-column:span 2}.line .fields .w3{grid-column:span 3}.line .fields .w4{grid-column:span 4}.line .fields .w6{grid-column:span 6}
 @media (max-width:900px){.line .fields{grid-template-columns:repeat(4,minmax(0,1fr))}.line .fields .w6{grid-column:span 4}.line .fields .w3{grid-column:span 2}}
 @media (max-width:480px){.line .fields{grid-template-columns:repeat(2,minmax(0,1fr))}.line .fields .w2,.line .fields .w3,.line .fields .w4,.line .fields .w6{grid-column:span 2}}
+.line .pv.foto{justify-content:center;gap:6px;min-height:150px;align-self:start}
+.line .pv.foto .fimg{width:100%;max-height:200px;object-fit:contain;border-radius:4px;background:#fff}
+.line .pv.foto .frow{display:flex;gap:4px;justify-content:center}
+.line .pv.foto .frow svg,.line .pv.foto .fadd svg{width:18px;height:18px;flex:none}
+.fadd{all:unset;box-sizing:border-box;cursor:pointer;width:100%;min-height:138px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--line-2);border-radius:6px;color:var(--muted);font-size:12px;text-align:center;padding:10px}
+.fadd:hover,.fadd:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+.fadd b{font-size:13px;color:var(--fg)}
 .gt{width:100%;border-collapse:collapse;font-size:13px}
 .gt th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
 .gt td{padding:7px 8px;border-bottom:1px solid var(--line)}
@@ -656,10 +663,14 @@ function renderLines(){
     if(!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
     if(ch&&(t.dataset.l==="abas"||t.dataset.l==="angs")){ $(".pv .svgh",card).innerHTML=perfilSVG(L.abas,L.angs); }
     refreshCalc(); markDirty(); };
-  box.onchange=e=>{ const t=e.target, card=t.closest(".line"); if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
+  box.onchange=e=>{ const t=e.target, card=t.closest(".line");
+    if(card&&t.dataset.foto!==undefined&&t.files&&t.files[0]){ fotoPainel(q.linhas[+card.dataset.i],t.files[0],card); t.value=""; return; }
+    if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
     if(!ch&&t.dataset.l==="tipo"){ renderLines(); } refreshCalc(); markDirty(); };
   box.onclick=e=>{ const b=e.target.closest("[data-act]"); if(!b) return; const i=+b.closest(".line").dataset.i;
     if(b.dataset.act==="del"){ q.linhas.splice(i,1); } if(b.dataset.act==="dup"){ const n=clone(q.linhas[i]); n.id=uid(); q.linhas.splice(i+1,0,n); }
+    if(b.dataset.act==="foto"){ b.closest(".line").querySelector("input[data-foto]").click(); return; }
+    if(b.dataset.act==="fotodel"){ delete q.linhas[i].foto; renderLines(); markDirty(); return; }
     if(b.dataset.act==="addm"){ const L=q.linhas[i]; const M=garantirMedidas(L); M.push({comp:"",qt:1}); syncMedidas(L); renderLines(); refreshCalc(); markDirty(); const c=$$("#lines .line")[i]; const ins=c.querySelectorAll('[data-m="comp"]'); ins[ins.length-1].focus(); return; }
     if(b.dataset.act==="delm"){ const L=q.linhas[i]; const M=garantirMedidas(L); if(M.length>1) M.splice(+b.dataset.k,1); syncMedidas(L); }
     if(b.dataset.act==="up"&&i>0){ [q.linhas[i-1],q.linhas[i]]=[q.linhas[i],q.linhas[i-1]]; }
@@ -692,7 +703,11 @@ function lineChapaHTML(L,i,P){
 function linePainelHTML(L,i,P){
   const m=P.matriz[L.tipo]||{}; const off=k=>(m[k]===undefined?1:m[k])?"":"disabled";
   const ali=P.alunox.map(alunoxLabel);
-  return `<div class="line" data-i="${i}" style="grid-template-columns:minmax(0,1fr)">${lnHead(i,"Painel")}
+  return `<div class="line" data-i="${i}">${lnHead(i,"Painel")}
+   <div class="pv foto">${L.foto? `<img class="fimg" alt="Foto do painel ${i+1}" ${imgAttr(drawSrc(L.foto))}>
+      <div class="frow"><button class="btn sm ghost" data-act="foto">${ico("upload")}Trocar</button><button class="btn sm ghost danger" data-act="fotodel" aria-label="Remover foto">${ico("trash")}</button></div>`
+     : `<button class="fadd" data-act="foto">${ico("upload")}<b>Adicionar foto</b><span>JPG ou PNG</span></button>`}
+     <input type="file" accept="image/*" data-foto hidden></div>
    <div><div class="fields">
     <label class="f w2"><span>Tipo de painel</span><select class="i" data-l="tipo">${opts(P.tiposPainel,L.tipo)}</select></label>
     <label class="f w4"><span>Modelo / descrição</span><input class="i" data-l="modelo" value="${esc(L.modelo)}" placeholder="Ex.: LR9i 2000×800×28 8014 Mate"></label>
@@ -769,6 +784,14 @@ function sheetSVG(s,i){ const W=300, H=W*s.Lg/s.C;
 
 /* ---- desenhos do cliente ---- */
 function drawSrc(d){ return d.assetId? "fid:"+d.assetId : (d.dataUrl||""); }
+// Foto de cada painel (pedido de 2026-10-21) — guardada no servidor como os desenhos.
+async function fotoPainel(L,file,card){
+  if(!file.type.startsWith("image/")){ toast("Escolha uma imagem (JPG ou PNG)."); return; }
+  const box=card&&card.querySelector(".pv.foto"); if(box) box.innerHTML=`<span class="spin"></span><span class="hint">A carregar foto…</span>`;
+  try{ const c=await imgToCanvas(file,1600); L.foto=await storeCanvas(c); toast("Foto adicionada"); }
+  catch(e){ console.warn(e); toast("Não foi possível ler a foto"); }
+  renderLines(); refreshCalc(); markDirty();
+}
 function renderDrawings(){
   const q=S.cur, box=$("#drawings"); if(!box) return;
   box.innerHTML=q.desenhos.map((d,i)=>`<div class="drawing"><div class="img"><img alt="${esc(d.legenda||"Desenho do cliente")}" ${imgAttr(drawSrc(d))}></div>
@@ -862,6 +885,7 @@ async function buildPDF(q){
   const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4",compress:true});
   const W=210,H=297,M=15; const A=[20,32,230], INK=[18,24,32], MUT=[95,105,118], LN=[205,211,219], SOFT=[238,240,253];
   const logo=await srcToDataURL(logoSrc()); const logoDim=logo? await imgSize(logo):null;
+  const fotos=[]; for(const L of (q.linhas||[])){ if(!ch&&L.foto){ const u=await srcToDataURL(drawSrc(L.foto)); fotos.push(u? {u,dim:await imgSize(u)} : null); } else fotos.push(null); }
   const draws=[]; for(const d of (q.desenhos||[])){ const u=await srcToDataURL(drawSrc(d)); if(u) draws.push({u,leg:d.legenda,dim:await imgSize(u)}); }
   const T=(t,x,y,o={})=>{ t=PT(t); const fs=o.s||9; doc.setFont("helvetica",o.b?"bold":"normal"); doc.setFontSize(fs); doc.setTextColor(...(o.c||INK));
     if(!t.includes("\u00b2")){ doc.text(t,x,y,{align:o.a||"left",maxWidth:o.w}); return; }
@@ -921,15 +945,18 @@ async function buildPDF(q){
       xx+=cols[4].w+cols[5].w+cols[6].w;
       T(eur(x.venda),xx+cols[7].w-2,y+5.5,{s:8.5,b:1,a:"right"});
     } else {
-      const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.modelo||L.tipo),cols[1].w-4);
+      const F=fotos[i]; const fw=F? 22 : 0;
+      const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.modelo||L.tipo),cols[1].w-4-fw);
       const specArr=[L.tipo]; const m=P.matriz[L.tipo]||{}; const on=k=>(m[k]===undefined?1:m[k]);
       if(on("enchimento")) specArr.push(`enchimento ${L.espEnch} mm`); if(on("acab1")) specArr.push(L.acab1===L.acab2||!on("acab2")?L.acab1:`${L.acab1} / ${L.acab2}`); if(on("vidro")&&L.vidro&&L.vidro!=="Sem vidro") specArr.push("vidro "+L.vidro);
-      const spec=doc.setFontSize(7.5).splitTextToSize(PTL(specArr.join(" · ")),cols[1].w-4);
-      rh=Math.max(11,5+desc.length*3.8+spec.length*3.4);
+      const spec=doc.setFontSize(7.5).splitTextToSize(PTL(specArr.join(" · ")),cols[1].w-4-fw);
+      rh=Math.max(F?24:11,5+desc.length*3.8+spec.length*3.4);
       if(need(rh)) thead();
       if(i%2===1){ doc.setFillColor(247,248,250); doc.rect(M,y,tw,rh,"F"); }
       let xx=M; T(String(i+1),xx+2,y+5.5,{s:8.5,b:1,c:A}); xx+=cols[0].w;
-      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(desc,xx+2,y+5.5); doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.text(spec,xx+2,y+5.5+desc.length*3.8); xx+=cols[1].w;
+      if(F){ const bw=20, bh=rh-4; const r=Math.min(bw/F.dim[0],bh/F.dim[1]); const iw=F.dim[0]*r, ih=F.dim[1]*r;
+        doc.addImage(F.u,F.u.startsWith("data:image/png")?"PNG":"JPEG",xx+2+(bw-iw)/2,y+2+(bh-ih)/2,iw,ih); doc.setDrawColor(...LN); doc.setLineWidth(.2); doc.rect(xx+2,y+2,bw,bh); }
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(desc,xx+2+fw,y+5.5); doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.text(spec,xx+2+fw,y+5.5+desc.length*3.8); xx+=cols[1].w;
       T(`${fmt(num(L.larg),0)} × ${fmt(num(L.alt),0)}`,xx+cols[2].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[2].w;
       T(fmt(x.m2,2),xx+cols[3].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[3].w;
       T(String(x.qt),xx+cols[4].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[4].w;

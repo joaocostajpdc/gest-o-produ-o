@@ -1269,38 +1269,22 @@ export async function streamPowderLabelPdf(res: Response, data: PowderLabelData,
 }
 
 // ============================================================================
-// Nova Etiqueta do Produto — Painéis (pedido do utilizador de 2026-10-21:
-// "é preciso melhorar as etiquetas"). Em teste só para o administrador
-// (feature "etiquetaPainel") até ser aprovada; os outros continuam a receber
-// a etiqueta anterior (renderProductLabelPage).
-//
-// O que muda em relação à anterior:
-//  - cabeçalho compacto (logótipo à esquerda, empresa e data à direita), em
-//    vez do logótipo grande ao centro — sobra espaço para o que importa;
-//  - hierarquia: Modelo e Medida em letra grande, os restantes campos numa
-//    grelha de duas colunas com rótulo pequeno por cima do valor;
-//  - corrige linhas "Enchimento: XPS; Vidro: s/ vidro; …" vindas do
-//    Goldylocks, que repetiam o vidro dentro do enchimento (OS 2026/546);
-//    valores só com traços ("Vidro: ------") deixam de sair;
-//  - Encomenda do cliente e V/Ref. destacadas numa faixa própria;
-//  - "Unidade 2 de 3" quando a linha tem várias unidades, em vez de
-//    "Quant.: 1" em todas;
-//  - o código de barras leva o rótulo "Ordem de Serviço".
+// Etiqueta do Produto — Painéis, leitura de dados melhorada (pedido do
+// utilizador de 2026-10-21: "quero o mesmo género como estava mas que
+// melhores a leitura dos dados"). Mesmo desenho da etiqueta anterior
+// (logótipo ao centro, linhas "Rótulo: valor", código de barras + QR); muda
+// só a forma como os dados são lidos e escritos:
+//  - separa pares "Rótulo: valor" escritos na mesma linha com ";" — a OS
+//    2026/546 trazia "Enchimento: XPS; Vidro: s/ vidro; Chapa 3mm + 2mm;"
+//    e a etiqueta repetia o vidro dentro do enchimento;
+//  - valores só com traços ("Vidro: ------") e ";"/"," finais deixam de sair;
+//  - medida escrita sempre da mesma forma ("2195X860" -> "2195 x 860");
+//  - rótulo em letra normal e valor a negrito, para se ler o valor de relance;
+//  - valores compridos passam para uma segunda linha em vez de serem
+//    cortados com "…".
+// Em teste só para o administrador (feature "etiquetaPainel"); os outros
+// continuam a receber a etiqueta anterior (streamProductLabelPdf).
 // ============================================================================
-
-const NP_M = 14;
-const NP_W = PRODUCT_LABEL_WIDTH - NP_M * 2;
-const NP_LABEL_SIZE = 6.5;
-const NP_LABEL_H = 9;
-const NP_CODE_H = 54;
-
-interface PanelLabelFields {
-  modelo?: string;
-  medida?: string;
-  details: { label: string; value: string }[];
-  encomenda?: string;
-  vref?: string;
-}
 
 function cleanSpecValue(v?: string): string | undefined {
   if (!v) return undefined;
@@ -1309,19 +1293,15 @@ function cleanSpecValue(v?: string): string | undefined {
   return s;
 }
 
-/**
- * Como parseSpecLines, mas separa pares "Rótulo: valor" escritos na mesma
- * linha com ";" (ex.: "Enchimento: XPS; Vidro: s/ vidro; Chapa 3mm + 2mm;"
- * -> enchimento = XPS, vidro = "s/ vidro; Chapa 3mm + 2mm").
- */
+/** Como parseSpecLines, mas separa pares "Rótulo: valor" na mesma linha com ";". */
 function parseSpecLinesSmart(text: string): Record<string, string> {
   const map: Record<string, string> = {};
   for (const rawLine of text.split("\n")) {
     const m = rawLine.match(/^([^:]{1,40}):\s*(.*)$/);
     if (!m) continue;
     const parts = m[2].split(/;\s*(?=[A-Za-zÀ-ÿ/.][^:;]{0,30}:\s)/);
-    const first = cleanSpecValue(parts[0]);
     const key = m[1].trim().toLowerCase();
+    const first = cleanSpecValue(parts[0]);
     if (first && !map[key]) map[key] = first;
     for (const extra of parts.slice(1)) {
       const em = extra.match(/^([^:]+):\s*(.*)$/);
@@ -1346,172 +1326,95 @@ function splitArticleBlocksSmart(specifications?: string | null): Record<string,
 }
 
 function formatMedida(v: string): string {
-  return v.replace(/\s*[xX×*]\s*/g, " × ").replace(/\s+mm\s*$/i, "").trim();
+  return v.replace(/\s*[xX×*]\s*/g, " x ").trim();
 }
 
-function buildPanelLabelFields(specs: Record<string, string>, referencia: string | undefined): PanelLabelFields {
-  const get = (...keys: string[]) => keys.map((k) => specs[k]).find((v) => !!v);
-  const details: { label: string; value: string }[] = [];
-  const add = (label: string, ...keys: string[]) => {
-    const v = get(...keys);
-    if (v) details.push({ label, value: v });
-  };
-  add("Acabamento", "acabamento");
-  add("Enchimento", "enchimento");
-  add("Vidro", "vidro");
-  add("Espessura", "espessura");
-  const medida = get("medida", "dimensões", "dimensoes");
-  const enc = cleanSpecValue(referencia ?? get("referente a", "n/ref", "n/ref.", "nossa ref", "nossa referência"));
-  return {
-    modelo: get("modelo"),
-    medida: medida ? formatMedida(medida) : undefined,
-    details,
-    encomenda: enc ? enc.replace(/^Encomenda\s+(de\s+)?Cliente\s*/i, "").trim() : undefined,
-    vref: get("v/ref", "v/ref.", "vossa ref", "vossa referência"),
-  };
+const PL2_FONT = 11;
+const PL2_EXTRA_LINE = 13; // altura de cada linha a mais quando o valor passa para 2 linhas
+
+/** Quantas linhas (1 ou 2) ocupa um campo, medido com a mesma letra do desenho. */
+function fieldLines(m: PDFKit.PDFDocument, f: { label: string | null; value: string }, width: number): number {
+  m.font("Helvetica-Bold").fontSize(PL2_FONT);
+  const text = f.label ? `${f.label}: ${f.value}` : f.value;
+  return m.heightOfString(text, { width }) > m.currentLineHeight(true) * 1.5 ? 2 : 1;
 }
 
-/**
- * Desenha (draw = true) ou só mede (draw = false) uma página da nova
- * etiqueta. Devolve a altura total — a mesma função serve para calcular a
- * altura da página antes de a criar, para nunca divergir do desenho.
- */
-function layoutPanelLabel(
+function renderProductLabelPageV2(
   doc: PDFKit.PDFDocument,
-  f: PanelLabelFields,
-  opts: { draw: boolean; barcode?: Buffer; qr?: Buffer; createdAt: string; tag: string | null }
-): number {
-  const { draw } = opts;
-  const X = NP_M;
-  let y = NP_M;
+  fields: { label: string | null; value: string; lines: number }[],
+  barcodePng: Buffer,
+  siteQrPng: Buffer,
+  createdAt: string,
+  pageLabel: string | null
+) {
+  const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
+  const logoX = PL_MARGIN + (width - PL_LOGO_SIZE) / 2;
+  doc.image(LOGO_PNG, logoX, PL_MARGIN, { width: PL_LOGO_SIZE, height: PL_LOGO_SIZE });
 
-  const label = (text: string, x: number, yy: number, w: number) => {
-    doc.font("Helvetica-Bold").fontSize(NP_LABEL_SIZE).fillColor(COLORS.muted);
-    if (draw) doc.text(text.toUpperCase(), x, yy, { width: w, characterSpacing: 0.5, lineBreak: false });
-  };
-  const value = (text: string, x: number, yy: number, w: number, size: number, maxLines: number): number => {
-    doc.font("Helvetica-Bold").fontSize(size).fillColor(COLORS.ink);
-    const lineH = doc.currentLineHeight(true);
-    const h = Math.min(doc.heightOfString(text, { width: w }), lineH * maxLines + 0.5);
-    if (draw) doc.text(text, x, yy, { width: w, height: h, ellipsis: true });
-    return h;
-  };
-
-  // --- Cabeçalho compacto ---
-  const logo = 28;
-  if (draw) doc.image(LOGO_PNG, X, y, { width: logo, height: logo });
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(COLORS.ink);
-  if (draw) doc.text("MINHO FERRAGENS", X + logo + 8, y + 3, { width: NP_W - logo - 90, lineBreak: false });
-  doc.font("Helvetica").fontSize(7).fillColor(COLORS.muted);
-  if (draw) doc.text("JPDC - Mynhoferragens, Lda", X + logo + 8, y + 17, { width: NP_W - logo - 90, lineBreak: false });
-  doc.font("Helvetica").fontSize(8).fillColor(COLORS.muted);
-  if (draw) doc.text(formatDate(opts.createdAt), X, y + 3, { width: NP_W, align: "right", lineBreak: false });
-  if (opts.tag) {
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(COLORS.primary);
-    if (draw) doc.text(opts.tag, X, y + 16, { width: NP_W, align: "right", lineBreak: false });
+  let y = PL_MARGIN + PL_LOGO_SIZE + 8;
+  doc.fontSize(13).fillColor(COLORS.ink).font("Helvetica-Bold").text("MINHO FERRAGENS", PL_MARGIN, y, { width, align: "center" });
+  y += PL_TITLE_LINE_HEIGHT;
+  doc.fontSize(8).fillColor(COLORS.muted).font("Helvetica-Oblique").text("JPDC - MYNHOFERRAGENS, LDA", PL_MARGIN, y, { width, align: "center" });
+  y += PL_SUBTITLE_LINE_HEIGHT;
+  if (pageLabel) {
+    doc.fontSize(8).fillColor(COLORS.primary).font("Helvetica-Bold").text(pageLabel, PL_MARGIN, y, { width, align: "center" });
+    y += PL_PAGE_LABEL_HEIGHT;
   }
-  y += logo + 8;
-  if (draw) doc.moveTo(X, y).lineTo(X + NP_W, y).strokeColor(COLORS.border).lineWidth(1).stroke();
-  y += 10;
+  doc.moveTo(PL_MARGIN, y).lineTo(PRODUCT_LABEL_WIDTH - PL_MARGIN, y).strokeColor(COLORS.border).lineWidth(1).stroke();
+  y += PL_DIVIDER_GAP;
 
-  // --- Modelo ---
-  if (f.modelo) {
-    label("Modelo", X, y, NP_W);
-    y += NP_LABEL_H;
-    y += value(f.modelo, X, y, NP_W, 17, 2) + 8;
+  for (const f of fields) {
+    const h = PL_FIELD_LINE_HEIGHT + (f.lines - 1) * PL2_EXTRA_LINE;
+    if (f.label) {
+      doc.font("Helvetica").fontSize(PL2_FONT).fillColor(COLORS.ink)
+        .text(`${f.label}: `, PL_MARGIN, y, { width, height: h, continued: true });
+      doc.font("Helvetica-Bold").fillColor(COLORS.ink).text(f.value, { width, height: h, ellipsis: true });
+    } else {
+      doc.font("Helvetica-Bold").fontSize(PL2_FONT).fillColor(COLORS.ink).text(f.value, PL_MARGIN, y, { width, height: h, ellipsis: true });
+    }
+    y += h;
   }
 
-  // --- Medida em destaque ---
-  if (f.medida) {
-    const boxH = 42;
-    if (draw) doc.roundedRect(X, y, NP_W, boxH, 6).fill(COLORS.specBg);
-    label("Medida (mm)", X + 10, y + 7, NP_W - 20);
-    doc.font("Helvetica-Bold").fontSize(20).fillColor(COLORS.ink);
-    if (draw) doc.text(f.medida, X + 10, y + 17, { width: NP_W - 20, height: 22, ellipsis: true, lineBreak: false });
-    y += boxH + 10;
-  }
-
-  // --- Restantes campos, em duas colunas ---
-  const colGap = 12;
-  const colW = (NP_W - colGap) / 2;
-  for (let i = 0; i < f.details.length; i += 2) {
-    const row = f.details.slice(i, i + 2);
-    let rowH = 0;
-    const w = row.length === 1 ? NP_W : colW;
-    row.forEach((d, j) => {
-      const cx = X + j * (colW + colGap);
-      label(d.label, cx, y, w);
-      rowH = Math.max(rowH, value(d.value, cx, y + NP_LABEL_H, w, 10.5, 2));
-    });
-    y += NP_LABEL_H + rowH + 8;
-  }
-
-  // --- Referências do cliente ---
-  if (f.encomenda || f.vref) {
-    y += 2;
-    const refs = [
-      f.encomenda ? { l: "Encomenda", v: f.encomenda } : null,
-      f.vref ? { l: "V/Ref.", v: f.vref } : null,
-    ].filter(Boolean) as { l: string; v: string }[];
-    const pad = 8;
-    const w = refs.length === 2 ? (NP_W - pad * 2 - colGap) / 2 : NP_W - pad * 2;
-    let h = 0;
-    refs.forEach((r) => {
-      doc.font("Helvetica-Bold").fontSize(11);
-      h = Math.max(h, Math.min(doc.heightOfString(r.v, { width: w }), doc.currentLineHeight(true) * 2 + 0.5));
-    });
-    const boxH = pad + NP_LABEL_H + h + pad;
-    if (draw) doc.roundedRect(X, y, NP_W, boxH, 6).lineWidth(1).strokeColor(COLORS.border).stroke();
-    refs.forEach((r, j) => {
-      const cx = X + pad + j * (w + colGap);
-      label(r.l, cx, y + pad, w);
-      value(r.v, cx, y + pad + NP_LABEL_H, w, 11, 2);
-    });
-    y += boxH + 10;
-  }
-
-  // --- Códigos ---
-  const qrSize = NP_CODE_H;
-  const codesGap = 12;
-  const barW = NP_W - qrSize - codesGap;
-  label("Ordem de Serviço", X, y, barW);
-  y += NP_LABEL_H + 1;
-  if (draw && opts.barcode) doc.image(opts.barcode, X, y, { fit: [barW, NP_CODE_H] });
-  if (draw && opts.qr) doc.image(opts.qr, X + NP_W - qrSize, y - NP_LABEL_H - 1, { width: qrSize, height: qrSize });
-  doc.font("Helvetica").fontSize(6.5).fillColor(COLORS.muted);
-  if (draw) doc.text("Siga-nos", X + NP_W - qrSize, y - NP_LABEL_H - 1 + qrSize + 2, { width: qrSize, align: "center", lineBreak: false });
-  y += NP_CODE_H;
-
-  return y + NP_M;
+  const qrSize = PL_QR_SIZE;
+  const barcodeColWidth = width - qrSize - 10;
+  const qrY = y + PL_CODES_TOP_GAP;
+  doc.fontSize(8.5).fillColor(COLORS.muted).font("Helvetica").text(formatDate(createdAt), PL_MARGIN, qrY - 14, { width, align: "right" });
+  doc.image(barcodePng, PL_MARGIN, qrY, { fit: [barcodeColWidth, qrSize], align: "center" });
+  const qr2X = PL_MARGIN + width - qrSize;
+  doc.image(siteQrPng, qr2X, qrY, { width: qrSize, height: qrSize });
+  doc.fontSize(6.5).fillColor(COLORS.muted).font("Helvetica")
+    .text("Minho Ferragens", qr2X, qrY + qrSize + PL_CAPTION_GAP, { width: qrSize, height: PL_CAPTION_HEIGHT, align: "center", ellipsis: true });
 }
 
 export async function streamPanelLabelPdfV2(res: Response, data: LabelOrderData) {
   const [barcodePng, siteQrPng] = await Promise.all([generateBarcode(data.externalId), generateQrCode(SITE_QR_URL)]);
   const blocks = splitArticleBlocksSmart(data.specifications);
-  const referencia = extractSharedReferencia(data.specifications);
-
-  // Documento à parte só para medir o texto (o pdfkit precisa de uma
-  // página para medir) — as fontes são as mesmas, por isso as medidas batem
-  // certo com o desenho final.
+  const referencia = cleanSpecValue(extractSharedReferencia(data.specifications));
+  const width = PRODUCT_LABEL_WIDTH - PL_MARGIN * 2;
+  // Documento à parte só para medir o texto (o pdfkit precisa de uma página
+  // para medir); a letra é a mesma, por isso a medida bate certo com o desenho.
   const measurer = new PDFDocument({ size: [PRODUCT_LABEL_WIDTH, 2000], margin: 0 });
 
-  const doc = new PDFDocument({ margin: NP_M, autoFirstPage: false });
+  const doc = new PDFDocument({ margin: PL_MARGIN, autoFirstPage: false });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Disposition", `attachment; filename="etiqueta-produto-${sanitizeFilename(data.externalId)}.pdf"`);
   doc.pipe(res);
 
   blocks.forEach((block, i) => {
-    const f = buildPanelLabelFields(block, referencia);
+    const specs = { ...block };
+    for (const k of ["medida", "dimensões", "dimensoes"]) if (specs[k]) specs[k] = formatMedida(specs[k]);
+    const fields = buildProductLabelFieldsForBlock(specs, referencia, data.externalId).map((f) => ({
+      ...f,
+      lines: fieldLines(measurer, f, width),
+    }));
+    const pageLabel = blocks.length > 1 ? `Artigo ${i + 1} de ${blocks.length}` : null;
+    const extra = fields.reduce((s, f) => s + (f.lines - 1) * PL2_EXTRA_LINE, 0);
+    const pageHeight = productLabelPageHeight(fields.length, !!pageLabel) + extra;
     const count = unitCountFromSpecs(block);
     for (let u = 0; u < count; u++) {
-      const tagParts: string[] = [];
-      if (blocks.length > 1) tagParts.push(`Artigo ${i + 1}/${blocks.length}`);
-      if (count > 1) tagParts.push(`Unidade ${u + 1} de ${count}`);
-      const tag = tagParts.length ? tagParts.join(" · ") : null;
-      const height = layoutPanelLabel(measurer, f, { draw: false, createdAt: data.createdAt, tag });
-      doc.addPage({ size: [PRODUCT_LABEL_WIDTH, height], margin: 0 });
-      layoutPanelLabel(doc, f, { draw: true, barcode: barcodePng, qr: siteQrPng, createdAt: data.createdAt, tag });
+      doc.addPage({ size: [PRODUCT_LABEL_WIDTH, pageHeight] });
+      renderProductLabelPageV2(doc, fields, barcodePng, siteQrPng, data.createdAt, pageLabel);
     }
   });
 

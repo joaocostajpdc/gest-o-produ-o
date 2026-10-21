@@ -92,6 +92,28 @@ function extractVRefArtigo(blockText: string): string | undefined {
 }
 
 /**
+ * Todas as outras linhas do bloco de um artigo que não são campos já lidos à
+ * parte (Modelo, Dimensões, Acabamento, Enchimento, Espessura, Vidro, V/Ref.,
+ * Larg./Alt.). Ex.: "Soleira reduzida Acetinado natural", "FECHADURA M2
+ * BAIXA…", "Cilindro: c/ cilindro botão", "Interior: Preto Mate" (OS
+ * 2026/530, pedido do utilizador de 2026-10-21). Pára no rodapé do documento
+ * (Referente a / Observações / Local Carga / ATCUD / totais).
+ */
+const KNOWN_LINE_RE = /^(modelo|dimens[õo]es|acabamento|enchimento|espessura|vidro|larg\.)\b|^v\s*\/\s*(ref|enc)/i;
+const FOOTER_RE = /^(referente a|observa[çc][õo]es|local carga|local descarga|atcud|base\b|total|desconto|este documento|goldylocks|powered by|\d+ \d{4}\/\d+ - p[áa]gina)/i;
+function extractOtherLines(blockText: string): string[] {
+  const out: string[] = [];
+  for (const raw of blockText.split("\n")) {
+    const line = raw.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (FOOTER_RE.test(line)) break;
+    if (KNOWN_LINE_RE.test(line)) continue;
+    out.push(line);
+  }
+  return out;
+}
+
+/**
  * Algumas linhas de artigo (ex.: mosquiteiras) não têm um rótulo
  * "Dimensões:" — em vez disso, a largura e a altura vêm impressas sem
  * rótulo, no formato "Larg. 1370 * Alt. 1000" (ver OS 2026/432 real,
@@ -122,6 +144,8 @@ interface ParsedArtigo {
   vidro?: string;
   quantidade?: string;
   unidade?: string;
+  /** Restantes linhas do artigo, sem rótulo próprio (ver extractOtherLines). */
+  outras?: string[];
   /**
    * "V/Ref." ou "V/Enc." (o Goldylocks usa um ou outro consoante a Ordem de
    * Serviço — ver extractVRefArtigo) impressa a seguir aos campos deste
@@ -226,6 +250,7 @@ function parseText(text: string): ParsedOrdemServico {
       espessura: extractAfterLabel(blockText, "Espessura:"),
       vidro: extractAfterLabel(blockText, "Vidro:"),
       vRefArtigo: extractVRefArtigo(blockText),
+      outras: extractOtherLines(blockText),
     };
   });
 
@@ -255,6 +280,10 @@ function buildArtigoParts(a: ParsedArtigo): string[] {
   if (a.dimensoes) parts.push(`Dimensões: ${a.dimensoes}`);
   if (a.quantidade) parts.push(`Quant.: ${a.quantidade}${a.unidade ? ` ${a.unidade}` : ""}`);
   if (a.vRefArtigo) parts.push(`V/Ref.: ${a.vRefArtigo}`);
+  // Restantes linhas do artigo (Soleira, Fechadura, Cilindro, Puxador,
+  // Interior, …), tal como vêm na OS — pedido do utilizador de 2026-10-21
+  // com a OS 2026/530, que perdia estas linhas.
+  for (const l of a.outras ?? []) parts.push(l);
   return parts;
 }
 

@@ -134,6 +134,20 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .line .fields .w2{grid-column:span 2}.line .fields .w3{grid-column:span 3}.line .fields .w4{grid-column:span 4}.line .fields .w6{grid-column:span 6}
 @media (max-width:900px){.line .fields{grid-template-columns:repeat(4,minmax(0,1fr))}.line .fields .w6{grid-column:span 4}.line .fields .w3{grid-column:span 2}}
 @media (max-width:480px){.line .fields{grid-template-columns:repeat(2,minmax(0,1fr))}.line .fields .w2,.line .fields .w3,.line .fields .w4,.line .fields .w6{grid-column:span 2}}
+.gt{width:100%;border-collapse:collapse;font-size:13px}
+.gt th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+.gt td{padding:7px 8px;border-bottom:1px solid var(--line)}
+.gt tfoot td{font-weight:700;border-bottom:0}
+.gt .r{text-align:right}.gt .mono{font-family:var(--f-mono)}
+.meds{margin-top:12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:8px 10px}
+.meds-h,.med{display:grid;grid-template-columns:90px 14px minmax(110px,170px) minmax(80px,1fr) minmax(80px,1fr) 34px;gap:8px;align-items:center}
+.meds-h{font-size:12px;color:var(--muted);padding:0 0 4px}
+.med+.med{margin-top:6px}
+.med .x{color:var(--muted);text-align:center}
+.meds .r{text-align:right}
+.med .mono{font-family:var(--f-mono);font-size:13px}
+.meds .addm{margin-top:8px}
+@media (max-width:620px){.meds-h{display:none}.med{grid-template-columns:70px 14px minmax(0,1fr) 34px}.med [data-o^="mu"],.med [data-o^="mt"]{display:none}}
 .line .out{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line-2);font-size:13px;color:var(--muted)}
 .line .out b{color:var(--fg);font-family:var(--f-mono);font-weight:500}
 .line .out .tot{margin-left:auto;font-size:15px}
@@ -364,12 +378,19 @@ function planoCorte(pieces,formatos){
 }
 
 /* ---- orçamento de chapas quinadas ---- */
+function medidasDe(L){ return Array.isArray(L.medidas)&&L.medidas.length? L.medidas : [{comp:L.comp,qt:L.qt}]; }
+function garantirMedidas(L){ if(!Array.isArray(L.medidas)||!L.medidas.length) L.medidas=[{comp:L.comp??"",qt:L.qt??1}]; return L.medidas; }
+function syncMedidas(L){ const m=garantirMedidas(L); L.comp=m[0].comp; L.qt=m.reduce((s,x)=>s+Math.max(0,Math.round(num(x.qt))),0); }
 function calcChapas(q,P){
   const J=q.job||{}; const margem=num(q.margem);
-  const linhas=q.linhas.map((L,idx)=>{ const dv=desenvolvimento(P,L); const comp=num(L.comp), qt=Math.max(0,Math.round(num(L.qt))); const nAbas=perfilGeom(L.abas,L.angs).abas.length;
-    return {L,idx,dv,comp,qt,nAbas,m2:dv*comp*qt/1e6,quin:Math.max(0,nAbas-1)*qt,cantos:num(L.cantos)*qt,grp:(num(L.esp)+"|"+String(L.liga))}; });
+  const linhas=q.linhas.map((L,idx)=>{ const dv=desenvolvimento(P,L); const nAbas=perfilGeom(L.abas,L.angs).abas.length;
+    // Vários comprimentos na mesma peça (mesmas abas) — pedido de 2026-10-21.
+    const med=medidasDe(L).map(m=>({comp:num(m.comp),qt:Math.max(0,Math.round(num(m.qt)))}));
+    const qt=med.reduce((s,m)=>s+m.qt,0); const comp=med.some(m=>m.comp>0&&m.qt>0)? (med.find(m=>m.comp>0)||{}).comp : 0;
+    const m2=med.reduce((s,m)=>s+dv*m.comp*m.qt/1e6,0);
+    return {L,idx,dv,comp,qt,med,nAbas,m2,quin:Math.max(0,nAbas-1)*qt,cantos:num(L.cantos)*qt,grp:(num(L.esp)+"|"+String(L.liga))}; });
   const grupos={};
-  linhas.forEach(r=>{ (grupos[r.grp] ||= {key:r.grp,esp:num(r.L.esp),liga:String(r.L.liga),rows:[],pieces:[]}).rows.push(r); for(let k=0;k<r.qt;k++) r.dv>0&&r.comp>0&&grupos[r.grp].pieces.push({w:r.dv,l:r.comp,ln:r.idx+1}); });
+  linhas.forEach(r=>{ (grupos[r.grp] ||= {key:r.grp,esp:num(r.L.esp),liga:String(r.L.liga),rows:[],pieces:[]}).rows.push(r); r.med.forEach(m=>{ for(let k=0;k<m.qt;k++) r.dv>0&&m.comp>0&&grupos[r.grp].pieces.push({w:r.dv,l:m.comp,ln:r.idx+1}); }); });
   const fmts=(J.formatos&&J.formatos.length? J.formatos : P.formatos);
   const G=Object.values(grupos).map(g=>{ const plan=planoCorte(g.pieces,fmts); const ov=num((J.override||{})[g.key]); const m2Chapa= ov>0? ov : plan.m2Chapa;
     const ovc=(J.overrideCortes||{})[g.key]; const cortes= ovc!==undefined&&ovc!==""? num(ovc) : plan.cortes;
@@ -381,7 +402,10 @@ function calcChapas(q,P){
   const out=linhas.map(r=>{ const g=G.find(x=>x.key===r.grp); const sh=g.m2Obra? r.m2/g.m2Obra : 0; const shT=m2Tot? r.m2/m2Tot : 0;
     const c={chapa:g.chapa*sh, acab:r.m2*acabM2(P,r.L.acab), corte:g.corteEur*sh, quin:r.quin*num(P.quinagem), cantos:r.cantos*num(P.canto), mo:moEur*shT, emb:r.m2*embM, transp:trEur*shT, outros:outEur*shT};
     const custo=Object.values(c).reduce((s,v)=>s+v,0); const venda=custo*(1+margem);
-    return {...r,c,custo,venda,unit:r.qt? venda/r.qt:0}; });
+    // Preço de cada comprimento: custos por área repartidos pelos m², quinagens e corta-cantos por peça.
+    const porPeca=c.quin+c.cantos, porArea=custo-porPeca;
+    const med=r.med.map(m=>{ const m2m=r.dv*m.comp*m.qt/1e6; const cm=porArea*(r.m2? m2m/r.m2:0)+porPeca*(r.qt? m.qt/r.qt:0); const vm=cm*(1+margem); return {...m,m2:m2m,venda:vm,unit:m.qt? vm/m.qt:0}; });
+    return {...r,med,c,custo,venda,unit:r.qt? venda/r.qt:0}; });
   return finalizar(q,P,out,{grupos:G,m2Tot,moEur,trEur,outEur});
 }
 /* ---- orçamento de painéis ---- */
@@ -542,7 +566,7 @@ function renderLista(){
   const bi=$("#busca",el); bi.oninput=()=>{ S.busca=bi.value; const pos=bi.selectionStart; renderLista(); const n=$("#busca"); n.focus(); n.setSelectionRange(pos,pos); };
 }
 function proximoNum(){ const y=new Date().getFullYear(); const pre=(S.P.prefixo||"ORC")+"-"+y+"-"; let mx=0; S.quotes.forEach(q=>{ if(String(q.num).startsWith(pre)){ mx=Math.max(mx,parseInt(String(q.num).slice(pre.length))||0); } }); return pre+String(mx+1).padStart(3,"0"); }
-function linhaChapa(prev){ return {id:uid(),desc:"",abas:"",angs:"",comp:3000,qt:1,esp:prev?prev.esp:1.5,liga:prev?prev.liga:(S.P.ligas[0]&&S.P.ligas[0].liga)||"1050",acab:prev?prev.acab:(S.P.acabamentos.find(a=>/quinad/i.test(a.nome))||S.P.acabamentos[0]||{}).nome||"",cantos:0}; }
+function linhaChapa(prev){ return {id:uid(),desc:"",abas:"",angs:"",comp:3000,qt:1,medidas:[{comp:3000,qt:1}],esp:prev?prev.esp:1.5,liga:prev?prev.liga:(S.P.ligas[0]&&S.P.ligas[0].liga)||"1050",acab:prev?prev.acab:(S.P.acabamentos.find(a=>/quinad/i.test(a.nome))||S.P.acabamentos[0]||{}).nome||"",cantos:0}; }
 function linhaPainel(prev){ const p=prev||{}; return {id:uid(),tipo:p.tipo||"Liso",modelo:"",larg:2000,alt:800,espEnch:p.espEnch||24,espChapa:p.espChapa||1.5,liga:p.liga||"1050",nChapas:2,chComp:"",chLarg:"",acab1:p.acab1||"Lacado standard",acab2:p.acab2||"Lacado standard",vidro:"Sem vidro",alunoxRef:p.alunoxRef||"",alunoxM2:0,vidroM2:0,fresMin:S.P.fresagemMinDefault,moMin:S.P.moMinPainelDefault,aroM2:0,cilindro:0,puxador:0,puxEmb:0,led:0,fechadura:0,extras:0,qt:1,margem:""}; }
 function novo(tipo){ if(S.dirty) saveQuote();
   const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
@@ -577,6 +601,7 @@ function renderEditor(){
     <div class="panel"><header><h2>${ch?"Peças":"Painéis"}</h2><span class="hint">${ch?"Abas em mm separadas por espaço (ex.: 20 120 20). Ângulos opcionais (90 por defeito; negativo vira para o outro lado).":"Os campos a cinzento não se aplicam ao tipo de painel escolhido."}</span></header>
       <div class="body"><div id="lines"></div><button class="btn" id="addLine" style="margin-top:12px">${ico("plus")}${ch?"Adicionar peça":"Adicionar painel"}</button></div></div>
 
+    ${ch?`<div class="panel"><header><h2>Tabela para o Goldylocks</h2><span class="hint">Medidas e quantidades de todas as peças, uma linha por comprimento.</span><button class="btn sm" id="bCopy">${ico("copy")}Copiar tabela</button></header><div class="body" id="goldy"></div></div>`:""}
     ${ch?`<div class="panel"><header><h2>Plano de corte e trabalho</h2><span class="hint">Calculado automaticamente; pode substituir m² de chapa ou nº de cortes à mão.</span></header><div class="body">
       <div class="grid g4" style="margin-bottom:14px">
         <label class="f"><span>Mão de obra (min)</span><input class="i num" inputmode="decimal" data-q="job.moMin" value="${esc(q.job.moMin)}"></label>
@@ -599,8 +624,11 @@ function renderEditor(){
     <div class="panel sum"><div class="grid g2">
       <label class="f"><span>Margem %</span><input class="i num" inputmode="decimal" id="qMargem" value="${esc(fmt(num(q.margem)*100,num(q.margem)*100%1?1:0))}"></label>
       <label class="f"><span>Desconto ao cliente %</span><input class="i num" inputmode="decimal" data-q="desconto" value="${esc(q.desconto)}"></label></div></div>
-    <div class="actions"><button class="btn pri" id="bPdf" style="justify-content:center">${ico("down")}Descarregar orçamento PDF</button>
-      <div class="row"><button class="btn" id="bPrev">${ico("eye")}Pré-visualizar</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div></div>
+    <div class="actions">${ch?`<button class="btn pri" id="bFolha" style="justify-content:center">${ico("down")}Descarregar folha de desenho</button>
+      <div class="row"><button class="btn" id="bFolhaPrev">${ico("eye")}Ver folha de desenho</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>
+      <div class="row"><button class="btn" id="bPdf">${ico("down")}Orçamento PDF</button><button class="btn" id="bPrev">${ico("eye")}Ver orçamento</button></div>`
+      :`<button class="btn pri" id="bPdf" style="justify-content:center">${ico("down")}Descarregar orçamento PDF</button>
+      <div class="row"><button class="btn" id="bPrev">${ico("eye")}Pré-visualizar</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>`}</div>
   </aside></div>`;
   renderLines(); renderDrawings(); refreshCalc(); updSaveState();
   const bl=$("#bLer"); if(bl) bl.onclick=lerDesenho;
@@ -611,6 +639,7 @@ function renderEditor(){
   $("#bSave").onclick=async()=>{ await saveQuote(); toast(S.db?"Orçamento guardado":"Sem ligação: não foi guardado"); };
   $("#bPdf").onclick=()=>descarregarPDF();
   $("#bPrev").onclick=()=>preVisualizar();
+  if(ch){ $("#bFolha").onclick=descarregarFolha; $("#bFolhaPrev").onclick=()=>preVisualizar(buildFolhaDesenho); $("#bCopy").onclick=copiarGoldy; }
   el.oninput=e=>{ const t=e.target; if(t.dataset.q){ setPath(q,t.dataset.q,t.dataset.bool?t.value==="1":t.value); refreshCalc(); markDirty(); } };
   el.onchange=e=>{ const t=e.target; if(t.dataset.q&&t.tagName==="SELECT"){ setPath(q,t.dataset.q,t.dataset.bool?t.value==="1":t.value); refreshCalc(); markDirty(); }
     if(t.dataset.fmt!==undefined){ q.job.formatos ||= clone(S.P.formatos); q.job.formatos[+t.dataset.fmt].on=t.checked; refreshCalc(); markDirty(); }
@@ -622,13 +651,17 @@ function setPath(o,p,v){ const k=p.split("."); let x=o; for(let i=0;i<k.length-1
 function renderLines(){
   const q=S.cur, box=$("#lines"); const ch=q.tipo==="chapas"; const P=S.P;
   box.innerHTML=q.linhas.map((L,i)=>ch? lineChapaHTML(L,i,P) : linePainelHTML(L,i,P)).join("") || `<div class="hint">Sem linhas.</div>`;
-  box.oninput=e=>{ const t=e.target, card=t.closest(".line"); if(!card||!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
+  box.oninput=e=>{ const t=e.target, card=t.closest(".line"); if(!card) return;
+    if(t.dataset.m){ const L=q.linhas[+card.dataset.i]; const M=garantirMedidas(L); M[+t.closest(".med").dataset.k][t.dataset.m]=t.value; syncMedidas(L); refreshCalc(); markDirty(); return; }
+    if(!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
     if(ch&&(t.dataset.l==="abas"||t.dataset.l==="angs")){ $(".pv .svgh",card).innerHTML=perfilSVG(L.abas,L.angs); }
     refreshCalc(); markDirty(); };
-  box.onchange=e=>{ const t=e.target, card=t.closest(".line"); if(!card||!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
+  box.onchange=e=>{ const t=e.target, card=t.closest(".line"); if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
     if(!ch&&t.dataset.l==="tipo"){ renderLines(); } refreshCalc(); markDirty(); };
   box.onclick=e=>{ const b=e.target.closest("[data-act]"); if(!b) return; const i=+b.closest(".line").dataset.i;
     if(b.dataset.act==="del"){ q.linhas.splice(i,1); } if(b.dataset.act==="dup"){ const n=clone(q.linhas[i]); n.id=uid(); q.linhas.splice(i+1,0,n); }
+    if(b.dataset.act==="addm"){ const L=q.linhas[i]; const M=garantirMedidas(L); M.push({comp:"",qt:1}); syncMedidas(L); renderLines(); refreshCalc(); markDirty(); const c=$$("#lines .line")[i]; const ins=c.querySelectorAll('[data-m="comp"]'); ins[ins.length-1].focus(); return; }
+    if(b.dataset.act==="delm"){ const L=q.linhas[i]; const M=garantirMedidas(L); if(M.length>1) M.splice(+b.dataset.k,1); syncMedidas(L); }
     if(b.dataset.act==="up"&&i>0){ [q.linhas[i-1],q.linhas[i]]=[q.linhas[i],q.linhas[i-1]]; }
     renderLines(); refreshCalc(); markDirty(); };
 }
@@ -640,13 +673,20 @@ function lineChapaHTML(L,i,P){
     <label class="f w3"><span>Descrição / referência</span><input class="i" data-l="desc" value="${esc(L.desc)}" placeholder="Ex.: Rufo de platibanda"></label>
     <label class="f w2"><span>Abas (mm)</span><input class="i mono" data-l="abas" value="${esc(L.abas)}" placeholder="20 120 20"></label>
     <label class="f"><span>Ângulos</span><input class="i mono" data-l="angs" value="${esc(L.angs)}" placeholder="90 90"></label>
-    <label class="f"><span>Comprimento (mm)</span><input class="i num" inputmode="decimal" data-l="comp" value="${esc(L.comp)}"></label>
-    <label class="f"><span>Quant.</span><input class="i num" inputmode="numeric" data-l="qt" value="${esc(L.qt)}"></label>
     <label class="f"><span>Esp. (mm)</span><input class="i num" inputmode="decimal" data-l="esp" value="${esc(L.esp)}" list="dlEsp"></label>
     <label class="f"><span>Liga</span><select class="i" data-l="liga">${opts(P.ligas,L.liga,x=>x.liga,x=>x.liga)}</select></label>
     <label class="f w2"><span>Acabamento</span><select class="i" data-l="acab">${opts(P.acabamentos,L.acab,x=>x.nome,x=>x.nome)}</select></label>
     <label class="f"><span>Corta-cantos /peça</span><input class="i num" inputmode="numeric" data-l="cantos" value="${esc(L.cantos)}"></label>
-   </div><div class="out"><span>m² <b data-o="m2"></b></span><span>Quinagens <b data-o="quin"></b></span><span>Custo <b data-o="custo"></b></span><span>Preço un. <b data-o="unit"></b></span><span class="tot">Total <b data-o="tot"></b></span></div></div>
+   </div>
+   <div class="meds"><div class="meds-h"><span>Quant.</span><span></span><span>Comprimento (mm)</span><span class="r">Preço un.</span><span class="r">Total</span><span></span></div>
+    ${medidasDe(L).map((m,k)=>`<div class="med" data-k="${k}">
+      <input class="i num" inputmode="numeric" data-m="qt" value="${esc(m.qt)}" aria-label="Quantidade ${k+1}">
+      <span class="x">×</span>
+      <input class="i num" inputmode="decimal" data-m="comp" value="${esc(m.comp)}" aria-label="Comprimento ${k+1} (mm)">
+      <span class="r mono" data-o="mu${k}"></span><span class="r mono" data-o="mt${k}"></span>
+      <button class="btn sm ghost danger" data-act="delm" data-k="${k}" title="Remover comprimento" aria-label="Remover comprimento ${k+1}" ${medidasDe(L).length<2?"disabled":""}>${ico("x")}</button></div>`).join("")}
+    <button class="btn sm ghost addm" data-act="addm">${ico("plus")} Outro comprimento com as mesmas abas</button></div>
+   <div class="out"><span>m² <b data-o="m2"></b></span><span>Peças <b data-o="pecas"></b></span><span>Quinagens <b data-o="quin"></b></span><span>Custo <b data-o="custo"></b></span><span class="tot">Total <b data-o="tot"></b></span></div></div>
    <datalist id="dlEsp"><option value="0.8"><option value="1"><option value="1.2"><option value="1.5"><option value="2"><option value="3"></datalist></div>`;
 }
 function linePainelHTML(L,i,P){
@@ -687,11 +727,12 @@ function linePainelHTML(L,i,P){
 function refreshCalc(){
   const q=S.cur; if(!q||S.view!=="editor") return; const r=calcQuote(q,S.P); S.lastCalc=r; const ch=q.tipo==="chapas";
   $$("#lines .line").forEach(card=>{ const x=r.linhas[+card.dataset.i]; if(!x) return; const o=k=>card.querySelector(`[data-o="${k}"]`);
-    if(ch){ o("dv").textContent= x.dv? `desenv. ${fmt(x.dv,0)} mm` : ""; o("m2").textContent=fmt(x.m2,2); o("quin").textContent=x.quin; o("custo").textContent=eur(x.custo); o("unit").textContent=eur(x.unit); o("tot").textContent=eur(x.venda);
+    if(ch){ o("dv").textContent= x.dv? `desenv. ${fmt(x.dv,0)} mm` : ""; o("m2").textContent=fmt(x.m2,2); o("pecas").textContent=x.qt; o("quin").textContent=x.quin; o("custo").textContent=eur(x.custo); o("tot").textContent=eur(x.venda);
+      x.med.forEach((m,k)=>{ const u=o("mu"+k), t=o("mt"+k); if(u) u.textContent= m.comp&&m.qt? eur(m.unit) : "—"; if(t) t.textContent= m.comp&&m.qt? eur(m.venda) : "—"; });
       o("warn").innerHTML= !x.dv? `<span class="warnchip">Falta indicar as abas</span>` : (!x.comp?`<span class="warnchip">Falta o comprimento</span>`:""); }
     else { o("m2").textContent=fmt(x.m2,2); o("kg").textContent=fmt(x.kg,2)+" kg"; o("custo").textContent=eur(x.custoUn); o("unit").textContent=eur(x.unit); o("tot").textContent=eur(x.venda);
       o("warn").innerHTML= x.falta.length? `<span class="warnchip" title="${esc(x.falta.join(", "))}">${x.falta.length} gasto${x.falta.length>1?"s":""} a 0: ${esc(x.falta.slice(0,3).join(", "))}${x.falta.length>3?"…":""}</span>` : ""; } });
-  if(ch) renderPlans(r);
+  if(ch){ renderPlans(r); renderGoldy(); }
   const keys=Object.keys(r.brk).filter(k=>r.brk[k]>0.0049).sort((a,b)=>r.brk[b]-r.brk[a]);
   const tot=keys.reduce((s,k)=>s+r.brk[k],0)||1;
   $("#sumBox").innerHTML=`<h3>Resumo</h3>
@@ -790,7 +831,7 @@ async function lerDesenho(){
     const base=q.linhas[q.linhas.length-1]||linhaChapa();
     const novas=pecas.map(p=>{ const L=linhaChapa(base); L.desc=p.descricao||""; L.abas=p.abas.map(a=>fmt(num(a),num(a)%1?1:0).replace(" ","")).join(" ");
       const ang=(p.angulos||[]).map(num); L.angs= ang.some(a=>a&&a!==90)? ang.map(a=>a||90).join(" ") : "";
-      if(num(p.comprimento)>0) L.comp=num(p.comprimento); L.qt=Math.max(1,Math.round(num(p.quantidade)||1)); L.cantos=Math.max(0,Math.round(num(p.cortaCantos)||0));
+      if(num(p.comprimento)>0) L.comp=num(p.comprimento); L.qt=Math.max(1,Math.round(num(p.quantidade)||1)); L.medidas=[{comp:L.comp,qt:L.qt}]; L.cantos=Math.max(0,Math.round(num(p.cortaCantos)||0));
       if(num(r.espessura)>0) L.esp=num(r.espessura); const ac=matchAcab(r.acabamento); if(ac) L.acab=ac; return L; });
     const vazias=q.linhas.every(L=>!String(L.abas||"").trim());
     q.linhas= vazias? novas : q.linhas.concat(novas);
@@ -861,7 +902,8 @@ async function buildPDF(q){
     const L=x.L; let rows, rh;
     if(ch){ const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.desc||"Chapa quinada"),cols[2].w-4); const spec=doc.setFontSize(7.5).splitTextToSize(PTL(`${fmt(num(L.esp),num(L.esp)%1?1:0)} mm · liga ${L.liga} · ${L.acab}`),cols[2].w-4);
       const ab=doc.setFontSize(8).splitTextToSize(PTL(perfilGeom(L.abas,L.angs).abas.map(a=>fmt(a,a%1?1:0)).join(" / ")),cols[3].w-4);
-      rh=Math.max(24,6+desc.length*3.8+spec.length*3.4+2);
+      const MD=x.med.filter(m=>m.comp>0&&m.qt>0); const nMed=Math.max(1,MD.length);
+      rh=Math.max(24,6+desc.length*3.8+spec.length*3.4+2, 9+nMed*4.2+4);
       if(need(rh)) thead();
       if(i%2===1){ doc.setFillColor(247,248,250); doc.rect(M,y,tw,rh,"F"); }
       let xx=M; T(String(i+1),xx+2,y+5.5,{s:8.5,b:1,c:A}); xx+=cols[0].w;
@@ -873,9 +915,10 @@ async function buildPDF(q){
       xx+=cols[1].w;
       doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(desc,xx+2,y+5.5); doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.text(spec,xx+2,y+5.5+desc.length*3.8);
       xx+=cols[2].w; doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...INK); doc.text(ab,xx+2,y+5.5); xx+=cols[3].w;
-      T(`${fmt(x.dv,0)} × ${fmt(x.comp,0)}`,xx+cols[4].w-2,y+5.5,{s:8.5,a:"right"}); T(`${fmt(x.m2,2)} m²`,xx+cols[4].w-2,y+9.5,{s:7,c:MUT,a:"right"}); xx+=cols[4].w;
-      T(String(x.qt),xx+cols[5].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[5].w;
-      T(eur(x.unit),xx+cols[6].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[6].w;
+      const ML= MD.length? MD : [{comp:x.comp,qt:x.qt,unit:x.unit}];
+      ML.forEach((m,k)=>{ const yy=y+5.5+k*4.2; T(`${fmt(x.dv,0)} × ${fmt(m.comp,0)}`,xx+cols[4].w-2,yy,{s:8.5,a:"right"}); T(String(m.qt),xx+cols[4].w+cols[5].w-2,yy,{s:8.5,a:"right"}); T(eur(m.unit),xx+cols[4].w+cols[5].w+cols[6].w-2,yy,{s:8.5,a:"right"}); });
+      T(`${fmt(x.m2,2)} m²`,xx+cols[4].w-2,y+5.5+ML.length*4.2,{s:7,c:MUT,a:"right"});
+      xx+=cols[4].w+cols[5].w+cols[6].w;
       T(eur(x.venda),xx+cols[7].w-2,y+5.5,{s:8.5,b:1,a:"right"});
     } else {
       const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.modelo||L.tipo),cols[1].w-4);
@@ -922,6 +965,120 @@ async function buildPDF(q){
     if(E.responsavel) T(`Proposta preparada por ${E.responsavel}${E.email?" · "+E.email:""}`,M,H-6,{s:7,c:MUT}); }
   return doc;
 }
+/* ======================= FOLHA DE DESENHO (2026-10-21) =======================
+   Pedido do utilizador: "para já apenas quero que saia uma folha de desenho —
+   o orçamento vai ser feito no Goldylocks; preciso que me forneça uma tabela
+   com medidas e quantidades para pôr lá". Sem preços. */
+function abasTxt(L){ return perfilGeom(L.abas,L.angs).abas.map(a=>fmt(a,a%1?1:0)).join(" / "); }
+function angsTxt(L){ const g=perfilGeom(L.abas,L.angs); if(g.abas.length<2) return ""; const a=[]; for(let i=0;i<g.abas.length-1;i++) a.push((g.angs[i]||90)+"°"); return a.every(x=>x==="90°")? "90° em todas" : a.join(" / "); }
+function descGoldy(L){ const parts=[L.desc||"Chapa quinada", "abas "+abasTxt(L).replace(/ \/ /g,"/"), fmt(num(L.esp),num(L.esp)%1?1:0)+" mm", L.acab].filter(Boolean); return parts.join(" · "); }
+function tabelaGoldy(q){
+  const P=S.P; const rows=[];
+  q.linhas.forEach((L,i)=>{ const dv=desenvolvimento(P,L); medidasDe(L).forEach(m=>{ const comp=num(m.comp), qt=Math.max(0,Math.round(num(m.qt))); if(!comp||!qt) return;
+    rows.push({n:i+1,desc:descGoldy(L),dv,comp,qt,m2:dv*comp*qt/1e6}); }); });
+  return rows;
+}
+function renderGoldy(){
+  const box=$("#goldy"); if(!box||!S.cur||S.cur.tipo!=="chapas") return;
+  const rows=tabelaGoldy(S.cur);
+  if(!rows.length){ box.innerHTML=`<div class="hint">Preencha as abas e os comprimentos das peças para aparecer a tabela.</div>`; return; }
+  const tq=rows.reduce((s,r)=>s+r.qt,0), tm=rows.reduce((s,r)=>s+r.m2,0);
+  box.innerHTML=`<div style="overflow-x:auto"><table class="gt"><thead><tr><th>Peça</th><th>Descrição</th><th class="r">Desenv. (mm)</th><th class="r">Comprimento (mm)</th><th class="r">Quant.</th><th class="r">m²</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.n}</td><td>${esc(r.desc)}</td><td class="r mono">${fmt(r.dv,0)}</td><td class="r mono">${fmt(r.comp,0)}</td><td class="r mono">${r.qt}</td><td class="r mono">${fmt(r.m2,2)}</td></tr>`).join("")}
+    </tbody><tfoot><tr><td colspan="4">Total</td><td class="r mono">${tq}</td><td class="r mono">${fmt(tm,2)}</td></tr></tfoot></table></div>`;
+}
+async function copiarGoldy(){
+  const rows=tabelaGoldy(S.cur); if(!rows.length){ toast("A tabela está vazia."); return; }
+  const n=v=>String(v).replace(".",",");
+  const tsv=["Descrição\tDesenv. (mm)\tComprimento (mm)\tQuant.\tm²"].concat(rows.map(r=>[r.desc,Math.round(r.dv),Math.round(r.comp),r.qt,n(r.m2.toFixed(2))].join("\t"))).join("\n");
+  try{ await navigator.clipboard.writeText(tsv); toast("Tabela copiada — cole no Goldylocks ou no Excel"); }
+  catch(_){ const ta=document.createElement("textarea"); ta.value=tsv; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); toast("Tabela copiada"); }catch(e){ toast("Não foi possível copiar"); } ta.remove(); }
+}
+async function buildFolhaDesenho(q){
+  const P=S.P, E=S.E;
+  const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4",compress:true});
+  const W=210,H=297,M=14; const A=[20,32,230], INK=[18,24,32], MUT=[95,105,118], LN=[205,211,219], SOFT=[238,240,253];
+  const logo=await srcToDataURL(logoSrc()); const logoDim=logo? await imgSize(logo):null;
+  const T=(t,x,y,o={})=>{ doc.setFont("helvetica",o.b?"bold":"normal"); doc.setFontSize(o.s||9); doc.setTextColor(...(o.c||INK)); doc.text(PT(t).replace(/²/g,"2"),x,y,{align:o.a||"left",maxWidth:o.w}); };
+  let y=0, page=1;
+  function header(){
+    let lx=M;
+    if(logo){ const h=12, w=Math.min(45,h*logoDim[0]/logoDim[1]); doc.addImage(logo,logo.startsWith("data:image/png")?"PNG":"JPEG",M,M-2,w,h); lx=M+w+4; }
+    T((E.nome||"Minho Ferragens").toUpperCase(),lx,M+3,{b:1,s:11,c:A}); T(E.razao||"",lx,M+8,{s:7.5,c:MUT});
+    T("FOLHA DE DESENHO",W-M,M+3,{b:1,s:13,a:"right"}); T(q.num+" · "+dataPT(q.data),W-M,M+8.5,{s:8.5,c:MUT,a:"right"});
+    y=M+14; doc.setDrawColor(...LN); doc.setLineWidth(.3); doc.line(M,y,W-M,y); y+=5;
+    if(page===1){
+      const info=[["Cliente",q.cliente&&q.cliente.nome],["Obra / ref.",q.obra],["Contacto",q.cliente&&q.cliente.contacto]].filter(x=>x[1]);
+      info.forEach(([l,v],k)=>{ T(l.toUpperCase(),M+k*62,y+1,{s:6.5,b:1,c:MUT}); T(v,M+k*62,y+5.5,{s:9.5,b:1,w:58}); }); if(info.length) y+=11;
+    }
+  }
+  function footer(){ T(`${q.num} · página ${page}`,W-M,H-7,{s:7,c:MUT,a:"right"}); }
+  function need(h){ if(y+h>H-14){ footer(); doc.addPage(); page++; header(); } }
+  header();
+
+  // --- Peças ---
+  const boxW=78, boxH=52;
+  q.linhas.forEach((L,i)=>{
+    const meds=medidasDe(L).map(m=>({comp:num(m.comp),qt:Math.max(0,Math.round(num(m.qt)))})).filter(m=>m.comp&&m.qt);
+    const blockH=Math.max(boxH, 30+Math.max(1,meds.length)*5.2)+8;
+    need(blockH);
+    const y0=y;
+    doc.setDrawColor(...LN); doc.setLineWidth(.3); doc.roundedRect(M,y0,W-2*M,blockH-4,2,2,"S");
+    // desenho do perfil
+    const bx=M+3, by=y0+3;
+    doc.setFillColor(250,250,252); doc.rect(bx,by,boxW,boxH-6,"F");
+    T("PEÇA "+(i+1),bx+2,by+4.5,{s:8,b:1,c:A});
+    const Lay=perfilLayout(L.abas,L.angs,boxW*4,(boxH-6)*4,40);
+    if(Lay){ doc.setDrawColor(...INK); doc.setLineWidth(.9); const pts=Lay.pts.map(p=>[bx+p[0]/4,by+p[1]/4]);
+      for(let k=0;k<pts.length-1;k++) doc.line(pts[k][0],pts[k][1],pts[k+1][0],pts[k+1][1]);
+      doc.setFillColor(...A); pts.forEach(p=>doc.circle(p[0],p[1],.55,"F"));
+      Lay.labels.forEach(l=>T(l.t,bx+l.x/4,by+l.y/4+1.2,{s:8.5,b:1,a:"center"}));
+      Lay.angLbl.forEach(l=>T(l.t,bx+l.x/4,by+l.y/4+1,{s:7,c:[154,91,0],a:"center"})); }
+    else T("Sem abas indicadas",bx+boxW/2,by+(boxH-6)/2,{s:8,c:MUT,a:"center"});
+    // dados da peça
+    const dx=bx+boxW+6, dw=W-M-3-dx;
+    T(L.desc||"Chapa quinada",dx,y0+7,{s:11,b:1,w:dw});
+    const dv=desenvolvimento(P,L);
+    const kv=[["Abas (mm)",abasTxt(L)||"—"],["Ângulos",angsTxt(L)||"—"],["Desenvolvimento",dv? fmt(dv,0)+" mm":"—"],["Espessura / liga",fmt(num(L.esp),num(L.esp)%1?1:0)+" mm · "+L.liga],["Acabamento",L.acab||"—"],["Corta-cantos /peça",String(num(L.cantos)||0)]];
+    let ky=y0+13;
+    kv.forEach(([l,v],k)=>{ const cx=dx+(k%2)*(dw/2), cy=ky+Math.floor(k/2)*8; T(l.toUpperCase(),cx,cy,{s:6.3,b:1,c:MUT}); T(v,cx,cy+3.8,{s:8.8,b:1,w:dw/2-3}); });
+    // comprimentos
+    let ty=ky+3*8+1;
+    doc.setFillColor(...SOFT); doc.rect(dx,ty-3.6,dw,5,"F");
+    T("QUANT.",dx+2,ty,{s:6.5,b:1,c:MUT}); T("COMPRIMENTO (MM)",dx+22,ty,{s:6.5,b:1,c:MUT}); T("M²",dx+dw-2,ty,{s:6.5,b:1,c:MUT,a:"right"});
+    ty+=5;
+    (meds.length? meds : [{comp:0,qt:0}]).forEach(m=>{ T(m.qt? String(m.qt):"—",dx+2,ty,{s:9.5,b:1}); T(m.comp? fmt(m.comp,0):"—",dx+22,ty,{s:9.5,b:1}); T(m.comp&&m.qt? fmt(dv*m.comp*m.qt/1e6,2):"",dx+dw-2,ty,{s:8.5,c:MUT,a:"right"}); ty+=5.2; });
+    y=y0+blockH;
+  });
+
+  // --- Tabela de medidas para o Goldylocks ---
+  const rows=tabelaGoldy(q);
+  need(22+rows.length*6);
+  T("TABELA DE MEDIDAS E QUANTIDADES",M,y+3,{s:10,b:1}); y+=7;
+  const cols=[{h:"Peça",w:12},{h:"Descrição",w:92},{h:"Desenv.",w:20,a:"right"},{h:"Comprimento",w:26,a:"right"},{h:"Quant.",w:16,a:"right"},{h:"m²",w:16,a:"right"}];
+  const tw=W-2*M; const sc=tw/cols.reduce((s,c)=>s+c.w,0); cols.forEach(c=>c.w*=sc);
+  const th=()=>{ doc.setFillColor(...INK); doc.rect(M,y,tw,6.5,"F"); let x=M; cols.forEach(c=>{ T(c.h.toUpperCase(),c.a?x+c.w-2:x+2,y+4.4,{s:7,b:1,c:[255,255,255],a:c.a||"left"}); x+=c.w; }); y+=6.5; };
+  th();
+  rows.forEach((r,k)=>{ const d=doc.setFontSize(8.5).splitTextToSize(PT(r.desc),cols[1].w-4); const rh=Math.max(6.5,2.5+d.length*3.7);
+    if(y+rh>H-16){ footer(); doc.addPage(); page++; header(); th(); }
+    if(k%2) { doc.setFillColor(247,248,250); doc.rect(M,y,tw,rh,"F"); }
+    let x=M; const vals=[String(r.n),null,fmt(r.dv,0),fmt(r.comp,0),String(r.qt),fmt(r.m2,2)];
+    cols.forEach((c,j)=>{ if(j===1){ doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(d,x+2,y+4.4); } else T(vals[j],c.a?x+c.w-2:x+2,y+4.4,{s:8.5,b:j===4,a:c.a||"left"}); x+=c.w; });
+    y+=rh; doc.setDrawColor(...LN); doc.setLineWidth(.2); doc.line(M,y,W-M,y); });
+  const tq=rows.reduce((s,r)=>s+r.qt,0), tm=rows.reduce((s,r)=>s+r.m2,0);
+  y+=5; T(`Total: ${tq} peças · ${fmt(tm,2)} m²`,W-M,y,{s:9,b:1,a:"right"});
+  if(q.notas){ y+=8; need(14); T("NOTAS",M,y,{s:6.5,b:1,c:MUT}); T(q.notas,M,y+4.5,{s:8.5,w:tw}); }
+  footer();
+  return doc;
+}
+async function descarregarFolha(){
+  const b=$("#bFolha"); const old=b.innerHTML; b.disabled=true; b.innerHTML=`<span class="spin"></span>A gerar…`;
+  try{ if(S.dirty) await saveQuote(); const doc=await buildFolhaDesenho(S.cur); const buf=doc.output("arraybuffer");
+    if(!S.downloads){ toast("Descarregar não está disponível nesta vista. Use Pré-visualizar."); return; }
+    await S.downloads.save({filename:"Desenho_"+nomeFicheiro(S.cur),data:new Blob([buf],{type:"application/pdf"})}); toast("Folha de desenho pronta");
+  }catch(e){ if(e&&e.code==="declined") toast("Descarga cancelada"); else { console.warn(e); toast("Não foi possível gerar a folha de desenho"); } }
+  finally{ b.disabled=false; b.innerHTML=old; }
+}
 function nomeFicheiro(q){ return (q.num+" "+(q.cliente&&q.cliente.nome||"")).trim().replace(/[\\/:*?"<>|]+/g,"").replace(/\s+/g,"_")+".pdf"; }
 async function descarregarPDF(){
   const b=$("#bPdf"); const old=b.innerHTML; b.disabled=true; b.innerHTML=`<span class="spin"></span>A gerar PDF…`;
@@ -931,11 +1088,11 @@ async function descarregarPDF(){
   }catch(e){ if(e&&e.code==="declined") toast("Descarga cancelada"); else { console.warn(e); toast("Não foi possível gerar o PDF"+(e&&e.code?" ("+e.code+")":"")); } }
   finally{ b.disabled=false; b.innerHTML=old; }
 }
-async function preVisualizar(){
+async function preVisualizar(builder){ builder=builder||buildPDF; const folha=builder===buildFolhaDesenho;
   const host=$("#ovHost"); host.innerHTML=`<div class="ov" role="dialog" aria-label="Pré-visualização do orçamento"><div class="bar2"><b>${esc(S.cur.num)} · pré-visualização</b><button class="btn" id="ovPdf">${ico("down")}Descarregar PDF</button><button class="btn" id="ovX">Fechar</button></div><div class="pages" id="ovPages"><div style="color:#fff;display:flex;gap:10px;align-items:center"><span class="spin"></span>A preparar…</div></div></div>`;
   const close=()=>{ host.innerHTML=""; document.removeEventListener("keydown",esc_); }; const esc_=e=>{ if(e.key==="Escape") close(); };
-  document.addEventListener("keydown",esc_); $("#ovX").onclick=close; $("#ovPdf").onclick=()=>{ close(); descarregarPDF(); }; $("#ovX").focus();
-  try{ const doc=await buildPDF(S.cur); const buf=doc.output("arraybuffer"); window.__lastPdf=buf.slice(0); const L=await pdfjs(); const pdf=await L.getDocument({data:new Uint8Array(buf),isEvalSupported:false}).promise;
+  document.addEventListener("keydown",esc_); $("#ovX").onclick=close; $("#ovPdf").onclick=()=>{ close(); folha? descarregarFolha() : descarregarPDF(); }; $("#ovX").focus();
+  try{ const doc=await builder(S.cur); const buf=doc.output("arraybuffer"); window.__lastPdf=buf.slice(0); const L=await pdfjs(); const pdf=await L.getDocument({data:new Uint8Array(buf),isEvalSupported:false}).promise;
     const box=$("#ovPages"); if(!box) return; box.innerHTML="";
     for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const v=pg.getViewport({scale:2}); const c=document.createElement("canvas"); c.width=v.width; c.height=v.height; c.style.width=Math.min(820,v.width/2)+"px"; box.appendChild(c); await pg.render({canvasContext:c.getContext("2d"),viewport:v}).promise; }
   }catch(e){ console.warn(e); const box=$("#ovPages"); if(box) box.innerHTML=`<div style="color:#fff">Não foi possível mostrar a pré-visualização. Pode descarregar o PDF.</div>`; }

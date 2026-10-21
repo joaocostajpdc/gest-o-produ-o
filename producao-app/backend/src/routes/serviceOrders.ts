@@ -387,6 +387,46 @@ serviceOrdersRouter.post(
     }
     const goldOrder = await parseOrdemServicoPdf(req.body);
     const result = await importSingleGoldylocksOrder(goldOrder, req.user?.id);
+
+    // Guarda o próprio PDF da Ordem Serviço dentro da OS (separador Anexos e
+    // botão "Ordem Serviço (PDF)") — pedido do utilizador de 2026-10-21:
+    // "quero que a nossa ordem em PDF fique guardada dentro da ordem". Também
+    // quando a OS já existia (importar de novo junta-lhe o PDF, se ainda não
+    // o tiver). Uma falha aqui não estraga a importação.
+    try {
+      const order = await prisma.serviceOrder.findUnique({
+        where: { externalId: goldOrder.externalId },
+        select: { id: true },
+      });
+      if (order) {
+        const filename = `Ordem Serviço ${goldOrder.externalId.replace("/", "-")}.pdf`;
+        const exists = await prisma.attachment.findFirst({
+          where: { serviceOrderId: order.id, filename, observationId: null },
+          select: { id: true },
+        });
+        if (!exists) {
+          await prisma.attachment.create({
+            data: {
+              serviceOrderId: order.id,
+              filename,
+              mimeType: "application/pdf",
+              size: req.body.length,
+              data: req.body,
+              uploadedById: req.user?.id,
+            },
+          });
+          await logHistoryEvent({
+            serviceOrderId: order.id,
+            type: "OUTRA_ALTERACAO",
+            description: `PDF da Ordem Serviço guardado nos anexos: "${filename}".`,
+            userId: req.user?.id,
+          });
+        }
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[import-pdf] não foi possível guardar o PDF na OS:", (err as Error).message);
+    }
     res.json(result);
   })
 );

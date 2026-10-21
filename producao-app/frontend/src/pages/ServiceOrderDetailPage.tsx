@@ -265,6 +265,25 @@ export function ServiceOrderDetailPage() {
                 Avançar etapa
               </button>
             )}
+            {(() => {
+              // PDF original da Ordem Serviço (guardado ao importar) — 2026-10-21.
+              const osPdf = attachments.find((a) => !a.observationId && /^Ordem Servi[çc]o /i.test(a.filename) && a.mimeType === "application/pdf");
+              if (!osPdf) return null;
+              return (
+                <button
+                  className="btn secondary"
+                  onClick={async () => {
+                    const w = window.open("", "_blank");
+                    const blob = await api.getBlob(`/service-orders/${id}/attachments/${osPdf.id}`);
+                    const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+                    if (w) w.location.href = url;
+                    else downloadBlob(blob, osPdf.filename);
+                  }}
+                >
+                  Ordem Serviço (PDF)
+                </button>
+              );
+            })()}
             <button className="btn secondary" disabled={downloadingPdf} onClick={downloadTravelerPdf}>
               {downloadingPdf ? "A gerar..." : "Ficha de Produção (PDF)"}
             </button>

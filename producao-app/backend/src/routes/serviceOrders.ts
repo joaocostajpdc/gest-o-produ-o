@@ -5,6 +5,7 @@ import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { asyncHandler } from "../utils/asyncHandler";
+import { canUseFeature } from "../config/featureReleases";
 import { comparePriority, computePriority, PRIORITY_COLORS, PRIORITY_LABELS } from "../services/priorityService";
 import { getCurrentProductionMinutes, getStageResidenceMinutes, startProduction } from "../services/timeTrackingService";
 import {
@@ -27,6 +28,7 @@ import { streamServiceOrderTravelerPdf, TravelerData } from "../services/service
 import {
   streamBarcodeLabelPdf,
   streamProductLabelPdf,
+  streamPanelLabelPdfV2,
   streamMosquiteiraLabelPdf,
   LabelOrderData,
 } from "../services/labelPdfService";
@@ -347,6 +349,11 @@ serviceOrdersRouter.get(
   asyncHandler(async (req, res) => {
     const data = await loadLabelOrderData(req.params.id);
     if ("error" in data) return res.status(data.status).json({ error: data.error });
+    // Nova etiqueta dos painéis (2026-10-21): em teste só para o administrador.
+    if (data.category === "Painéis" && (await canUseFeature("etiquetaPainel", req.user))) {
+      await streamPanelLabelPdfV2(res, data);
+      return;
+    }
     await streamProductLabelPdf(res, data);
   })
 );

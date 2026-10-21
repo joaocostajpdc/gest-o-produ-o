@@ -4,6 +4,7 @@ import { api, downloadBlob } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
 import { GlassOrdersPanel } from "../components/GlassOrdersPanel";
 import { CutPlansPanel } from "../components/CutPlansPanel";
+import { FeatureTestBanner } from "../components/FeatureTestBanner";
 import {
   Attachment,
   HistoryEvent,
@@ -105,6 +106,8 @@ export function ServiceOrderDetailPage() {
   const { user } = useAuth();
   const glassOrdersFeature = useFeature("glassOrders");
   const cutPlansFeature = useFeature("cutPlans");
+  // Nova etiqueta dos painéis (2026-10-21): em teste só para o administrador.
+  const etiquetaPainelFeature = useFeature("etiquetaPainel");
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -318,6 +321,11 @@ export function ServiceOrderDetailPage() {
               </button>
             )}
           </div>
+          {order.product.category === "Painéis" && etiquetaPainelFeature.available && !etiquetaPainelFeature.released && (
+            <div style={{ marginTop: 12 }}>
+              <FeatureTestBanner featureKey="etiquetaPainel" label="a nova Etiqueta do Produto dos painéis" />
+            </div>
+          )}
 
           {((order.status === "NAO_INICIADA" || order.status === "EM_PRODUCAO" || order.status === "SUSPENSA") ||
             canDeleteServiceOrders(user?.role)) && (

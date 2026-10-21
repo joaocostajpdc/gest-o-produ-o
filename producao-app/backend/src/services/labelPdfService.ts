@@ -1476,7 +1476,7 @@ function layoutPanelLabel(
   const barW = NP_W - qrSize - codesGap;
   label("Ordem de Serviço", X, y, barW);
   y += NP_LABEL_H + 1;
-  if (draw && opts.barcode) doc.image(opts.barcode, X, y, { fit: [barW, NP_CODE_H], align: "left" });
+  if (draw && opts.barcode) doc.image(opts.barcode, X, y, { fit: [barW, NP_CODE_H] });
   if (draw && opts.qr) doc.image(opts.qr, X + NP_W - qrSize, y - NP_LABEL_H - 1, { width: qrSize, height: qrSize });
   doc.font("Helvetica").fontSize(6.5).fillColor(COLORS.muted);
   if (draw) doc.text("Siga-nos", X + NP_W - qrSize, y - NP_LABEL_H - 1 + qrSize + 2, { width: qrSize, align: "center", lineBreak: false });

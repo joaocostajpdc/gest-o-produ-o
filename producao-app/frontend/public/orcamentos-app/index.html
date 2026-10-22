@@ -161,6 +161,8 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .line .out .tot{margin-left:auto;font-size:15px}
 .line .out .tot b{font-size:16px;font-weight:600}
 .line .ln{font:700 13px/1 var(--f-display);color:var(--accent);letter-spacing:.06em}
+.f .auto{font-style:normal;font-weight:600;color:var(--accent,#1f3fe0);font-size:11px}
+.i.autov{color:#667085}
 .warnchip{font-size:12px;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:4px}
 .lnhead{display:flex;align-items:center;gap:8px;grid-column:1/-1;margin-bottom:-4px}
 .lnhead .sp{margin-left:auto;display:flex;gap:4px}
@@ -314,7 +316,14 @@ function enchM2(P,esp){ const E=P.enchimento; const r=E.tabela.find(x=>num(x.esp
 function alunoxLabel(a){ return a.medida+" | "+fmt(num(a.esp),1)+" mm"; }
 function alunoxM2(P,ref){ const a=P.alunox.find(x=>alunoxLabel(x)===ref); if(!a) return 0; const [c,l]=String(a.medida).split(/[*x×]/i).map(num); return c&&l? num(a.preco)*(1-num(a.desc))/(c*l/1e6) : 0; }
 function vidroPreco(P,nome){ const v=P.vidros.find(x=>x.nome===nome); return v? num(v.preco):0; }
-function aroPreco(P,tipo){ const a=P.aros.find(x=>x.tipo===tipo); return a? num(a.preco) : num(P.aroDefault); }
+// Preço do aro pelo tipo de painel. Aceita também nomes parecidos na tabela
+// (ex.: "Folha oculta 1 folha" serve para o tipo "Folha oculta") — 2026-10-22.
+function aroRow(P,tipo){ const t=String(tipo||"").trim().toLowerCase(); if(!t) return null;
+  return P.aros.find(x=>String(x.tipo||"").trim().toLowerCase()===t)
+    || P.aros.find(x=>{ const a=String(x.tipo||"").trim().toLowerCase(); return a&&(a.startsWith(t)||t.startsWith(a)); }) || null; }
+function aroPreco(P,tipo){ const a=aroRow(P,tipo); return a? num(a.preco) : num(P.aroDefault); }
+// Aro (pedido de 2026-10-22): por omissão usa os m² da porta; só conta outro valor se for escrito à mão.
+function aroM2Auto(L){ return !(num(L.aroM2)>0); }
 
 /* ---- perfil quinado ---- */
 function perfilGeom(abasStr,angStr){
@@ -434,7 +443,7 @@ function calcPainelLinha(L,P,margemQ){
     mo:num(L.moMin)/60*num(P.moHora)*on("mo"),
     alunox:num(L.alunoxM2)*alunoxM2(P,L.alunoxRef)*on("alunox"),
     vidro:semV?0:Math.max(num(L.vidroM2),num(P.vidroMin))*vidroPreco(P,L.vidro)*on("vidro"),
-    aro:(num(L.aroM2)>0?num(L.aroM2):m2)*aroPreco(P,L.tipo)*on("aro"),
+    aro:(aroM2Auto(L)?m2:num(L.aroM2))*aroPreco(P,L.tipo)*on("aro"),
     cilindro:num(L.cilindro)*num(P.unit.cilindro)*on("cilindro"),
     puxador:num(L.puxador)*num(P.unit.puxador)*on("puxador"),
     puxEmb:num(L.puxEmb)*num(P.unit.puxEmb)*on("puxEmb"),
@@ -578,7 +587,7 @@ function renderLista(){
 }
 function proximoNum(){ const y=new Date().getFullYear(); const pre=(S.P.prefixo||"ORC")+"-"+y+"-"; let mx=0; S.quotes.forEach(q=>{ if(String(q.num).startsWith(pre)){ mx=Math.max(mx,parseInt(String(q.num).slice(pre.length))||0); } }); return pre+String(mx+1).padStart(3,"0"); }
 function linhaChapa(prev){ return {id:uid(),desc:"",abas:"",angs:"",comp:3000,qt:1,medidas:[{comp:3000,qt:1}],esp:prev?prev.esp:1.5,liga:prev?prev.liga:(S.P.ligas[0]&&S.P.ligas[0].liga)||"1050",acab:prev?prev.acab:(S.P.acabamentos.find(a=>/quinad/i.test(a.nome))||S.P.acabamentos[0]||{}).nome||"",cantos:0}; }
-function linhaPainel(prev){ const p=prev||{}; return {id:uid(),tipo:p.tipo||"Liso",modelo:"",larg:2000,alt:800,espEnch:p.espEnch||24,espChapa:p.espChapa||1.5,liga:p.liga||"1050",nChapas:2,chComp:"",chLarg:"",acab1:p.acab1||"Lacado standard",acab2:p.acab2||"Lacado standard",vidro:"Sem vidro",alunoxRef:p.alunoxRef||"",alunoxM2:0,vidroM2:0,fresMin:S.P.fresagemMinDefault,moMin:S.P.moMinPainelDefault,aroM2:0,cilindro:0,puxador:0,puxEmb:0,led:0,fechadura:0,extras:0,qt:1,margem:""}; }
+function linhaPainel(prev){ const p=prev||{}; return {id:uid(),tipo:p.tipo||"Liso",modelo:"",larg:2000,alt:800,espEnch:p.espEnch||24,espChapa:p.espChapa||1.5,liga:p.liga||"1050",nChapas:2,chComp:"",chLarg:"",acab1:p.acab1||"Lacado standard",acab2:p.acab2||"Lacado standard",vidro:"Sem vidro",alunoxRef:p.alunoxRef||"",alunoxM2:0,vidroM2:0,fresMin:S.P.fresagemMinDefault,moMin:S.P.moMinPainelDefault,aroM2:"",cilindro:0,puxador:0,puxEmb:0,led:0,fechadura:0,extras:0,qt:1,margem:""}; }
 function novo(tipo){ if(S.dirty) saveQuote();
   const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
     margem:num(S.P.margem),desconto:0,notas:"",validade:num(S.P.validadeDias)||30,desenhos:[],
@@ -665,11 +674,13 @@ function renderLines(){
   box.oninput=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line"); if(!card) return;
     if(t.dataset.m){ const L=q.linhas[+card.dataset.i]; const M=garantirMedidas(L); M[+t.closest(".med").dataset.k][t.dataset.m]=t.value; syncMedidas(L); refreshCalc(); markDirty(); return; }
     if(!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
+    if(t.dataset.l==="aroM2") t.classList.toggle("autov", aroM2Auto(L));
     if(ch&&(t.dataset.l==="abas"||t.dataset.l==="angs")){ $(".pv .svgh",card).innerHTML=perfilSVG(L.abas,L.angs); }
     refreshCalc(); markDirty(); };
   box.onchange=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line");
     if(card&&t.dataset.foto!==undefined&&t.files&&t.files[0]){ fotoPainel(q.linhas[+card.dataset.i],t.files[0],card); t.value=""; return; }
     if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
+    if(!ch&&t.dataset.l==="aroM2"){ if(aroM2Auto(L)) L.aroM2=""; renderLines(); refreshCalc(); markDirty(); return; }
     if(!ch&&(t.dataset.l==="tipo"||t.dataset.l==="acab1"||t.dataset.l==="acab2")){ renderLines(); if(usaPoCliente(L)&&(t.dataset.l==="acab1"||t.dataset.l==="acab2")){ const c=$$("#lines .line")[+card.dataset.i]; const pi=c&&c.querySelector('[data-l="poPreco"]'); if(pi) pi.focus(); } } refreshCalc(); markDirty(); };
   box.onclick=e=>{ const b=e.target.closest("[data-act]"); if(!b) return; const i=+b.closest(".line").dataset.i;
     if(b.dataset.act==="del"){ q.linhas.splice(i,1); } if(b.dataset.act==="dup"){ const n=clone(q.linhas[i]); n.id=uid(); q.linhas.splice(i+1,0,n); }
@@ -734,7 +745,7 @@ function linePainelHTML(L,i,P){
     <label class="f"><span>Vidro (m²)</span><input class="i num" inputmode="decimal" data-l="vidroM2" value="${esc(L.vidroM2)}" ${off("vidro")}></label>
     <label class="f w2"><span>Ref. Alunox</span><select class="i" data-l="alunoxRef" ${off("alunox")}><option value="">—</option>${opts(ali,L.alunoxRef)}</select></label>
     <label class="f"><span>Alunox (m²)</span><input class="i num" inputmode="decimal" data-l="alunoxM2" value="${esc(L.alunoxM2)}" ${off("alunox")}></label>
-    <label class="f"><span>Aro (m²)</span><input class="i num" inputmode="decimal" data-l="aroM2" value="${esc(L.aroM2)}" placeholder="= m² painel" ${off("aro")}></label>
+    <label class="f"><span>Aro (m²)${aroM2Auto(L)?' <em class="auto" data-o="aroAuto">= porta</em>':""}</span><input class="i num${aroM2Auto(L)?" autov":""}" inputmode="decimal" data-l="aroM2" value="${esc(aroM2Auto(L)? fmt(num(L.larg)*num(L.alt)/1e6,2) : L.aroM2)}" title="Por omissão = m² da porta (largura × altura). Escreve outro valor para mudar; apaga para voltar aos m² da porta." ${off("aro")}></label>
     <label class="f"><span>Cilindro (un.)</span><input class="i num" inputmode="numeric" data-l="cilindro" value="${esc(L.cilindro)}" ${off("cilindro")}></label>
     <label class="f"><span>Puxador (un.)</span><input class="i num" inputmode="numeric" data-l="puxador" value="${esc(L.puxador)}" ${off("puxador")}></label>
     <label class="f"><span>Pux. embutido (m)</span><input class="i num" inputmode="decimal" data-l="puxEmb" value="${esc(L.puxEmb)}" ${off("puxEmb")}></label>
@@ -751,7 +762,9 @@ function refreshCalc(){
     if(ch){ o("dv").textContent= x.dv? `desenv. ${fmt(x.dv,0)} mm` : ""; o("m2").textContent=fmt(x.m2,2); o("pecas").textContent=x.qt; o("quin").textContent=x.quin; o("custo").textContent=eur(x.custo); o("tot").textContent=eur(x.venda);
       x.med.forEach((m,k)=>{ const u=o("mu"+k), t=o("mt"+k); if(u) u.textContent= m.comp&&m.qt? eur(m.unit) : "—"; if(t) t.textContent= m.comp&&m.qt? eur(m.venda) : "—"; });
       o("warn").innerHTML= !x.dv? `<span class="warnchip">Falta indicar as abas</span>` : (!x.comp?`<span class="warnchip">Falta o comprimento</span>`:""); }
-    else { o("m2").textContent=fmt(x.m2,2); o("kg").textContent=fmt(x.kg,2)+" kg"; o("custo").textContent=eur(x.custoUn); o("unit").textContent=eur(x.unit); o("tot").textContent=eur(x.venda);
+    else { const ai=card.querySelector('[data-l="aroM2"]');
+      if(ai&&ai.classList.contains("autov")&&document.activeElement!==ai) ai.value=fmt(x.m2,2);
+      o("m2").textContent=fmt(x.m2,2); o("kg").textContent=fmt(x.kg,2)+" kg"; o("custo").textContent=eur(x.custoUn); o("unit").textContent=eur(x.unit); o("tot").textContent=eur(x.venda);
       o("warn").innerHTML= x.falta.length? `<span class="warnchip" title="${esc(x.falta.join(", "))}">${x.falta.length} gasto${x.falta.length>1?"s":""} a 0: ${esc(x.falta.slice(0,3).join(", "))}${x.falta.length>3?"…":""}</span>` : ""; } });
   if(ch){ renderPlans(r); renderGoldy(); }
   const keys=Object.keys(r.brk).filter(k=>r.brk[k]>0.0049).sort((a,b)=>r.brk[b]-r.brk[a]);

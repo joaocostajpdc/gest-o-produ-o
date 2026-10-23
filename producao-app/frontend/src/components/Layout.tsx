@@ -212,6 +212,7 @@ export function Layout() {
   const inicio = useFeature("inicio");
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
+  const goldylocks = useFeature("goldylocks");
   // Menu lateral recolhido (só ícones) que abre ao passar o rato — pedido do
   // utilizador de 2026-10-20 ("esta barra só quero que apareça quando passo
   // o rato"). Em teste só para o administrador; só em ecrã de computador.
@@ -276,6 +277,12 @@ export function Layout() {
             <NavLink to="/" end>
               <IconHome /> Início
               {!inicio.released && <TestBadge />}
+            </NavLink>
+          )}
+          {goldylocks.available && (
+            <NavLink to="/goldylocks">
+              <IconFileText /> Goldylocks
+              {!goldylocks.released && <TestBadge />}
             </NavLink>
           )}
           <div className="section-label" style={{ marginTop: 4 }}>Produção</div>

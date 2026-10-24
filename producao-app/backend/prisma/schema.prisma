@@ -770,3 +770,30 @@ model ChatFile {
 
   @@map("chat_files")
 }
+
+// ---------------------------------------------------------------------------
+// Financeiro — Cheques passados (pedido do utilizador de 2026-10-24: "cria
+// uma parte para o financeiro já, apenas eu" → "cheques passados").
+// Cheques emitidos pela empresa: a quem, quanto, banco e quando vão ser
+// descontados. Só o administrador vê (feature "financeiro", restrita).
+// ---------------------------------------------------------------------------
+model Cheque {
+  id            String    @id @default(cuid())
+  numero        String
+  banco         String
+  beneficiario  String
+  valor         Decimal   @db.Decimal(12, 2)
+  dataEmissao   DateTime  @db.Date
+  dataCheque    DateTime  @db.Date
+  estado        String    @default("POR_DESCONTAR") // POR_DESCONTAR | DESCONTADO | ANULADO
+  descontadoEm  DateTime? @db.Date
+  referencia    String?
+  notas         String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([dataCheque])
+  @@index([estado])
+  @@map("cheques")
+}

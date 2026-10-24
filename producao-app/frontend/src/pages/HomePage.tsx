@@ -81,6 +81,7 @@ const areaIcons = {
   producao: <svg {...S}><path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z" /><path d="M7 17h2M12 17h2M17 17h1" /></svg>,
   compras: <svg {...S}><path d="M3 4h2l2.5 11h11L21 7H7" /><circle cx="9" cy="19.5" r="1.5" /><circle cx="17" cy="19.5" r="1.5" /></svg>,
   equipa: <svg {...S}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14a5 5 0 0 1 6 5" /></svg>,
+  financeiro: <svg {...S}><rect x="2.5" y="6" width="19" height="13" rx="2" /><path d="M2.5 10h19M6.5 15h4" /></svg>,
   orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
 };
 
@@ -96,6 +97,7 @@ export function HomePage() {
   const orcamentos = useFeature("orcamentos");
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
+  const financeiro = useFeature("financeiro");
 
   const areas: Area[] = [
     {
@@ -156,7 +158,26 @@ export function HomePage() {
           title: "Orçamentos",
           sub: "Painéis e chapas quinadas",
           icon: icons.orcamentos,
-          badge: <span className="home-lock" title="Só para João Costa e David Costa">{icons.lock} Restrito</span>,
+        },
+      ],
+    });
+  }
+
+  if (financeiro.available && user?.role === "ADMINISTRADOR") {
+    areas.push({
+      key: "financeiro",
+      title: "Financeiro",
+      desc: "Só para o administrador",
+      icon: areaIcons.financeiro,
+      color: "#0f766e",
+      soft: "#e0f2f1",
+      tiles: [
+        {
+          to: "/financeiro",
+          title: "Cheques passados",
+          sub: "O que vai sair do banco e quando",
+          icon: areaIcons.financeiro,
+          badge: <span className="home-lock" title="Só tu vês">{icons.lock} Só tu</span>,
         },
       ],
     });

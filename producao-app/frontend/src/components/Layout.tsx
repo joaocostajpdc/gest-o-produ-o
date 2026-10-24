@@ -166,6 +166,15 @@ function IconVan(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function IconWallet(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="2.5" y="6" width="19" height="13" rx="2" />
+      <path d="M2.5 10h19M6.5 15h4" />
+    </svg>
+  );
+}
+
 // Ícone do "Chat" (balão de conversa).
 function IconChat(props: SVGProps<SVGSVGElement>) {
   return (
@@ -222,6 +231,7 @@ export function Layout() {
   const inicio = useFeature("inicio");
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
+  const financeiro = useFeature("financeiro");
   // Chat interno (2026-10-24): contador de mensagens por ler no menu.
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -381,6 +391,15 @@ export function Layout() {
               <div className="section-label">Orçamentação</div>
               <NavLink to="/orcamentos">
                 <IconFileText /> Orçamentos
+              </NavLink>
+            </>
+          )}
+
+          {financeiro.available && user?.role === "ADMINISTRADOR" && (
+            <>
+              <div className="section-label">Financeiro</div>
+              <NavLink to="/financeiro">
+                <IconWallet /> Cheques passados
               </NavLink>
             </>
           )}

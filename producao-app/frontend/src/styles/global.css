@@ -2646,3 +2646,24 @@ button.chat-oscard { font: inherit; text-align: left; cursor: pointer; }
   .chat.show-conv .chat-list { display: none; }
   .chat-back { display: inline-flex; align-items: center; justify-content: center; }
 }
+
+/* Financeiro — cheques passados (2026-10-24) */
+.fin-filtros { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 18px 12px; }
+.fin-chip { border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 600; color: var(--color-text-muted); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.fin-chip span { font-size: 11.5px; background: var(--color-border); color: var(--color-text); border-radius: 999px; padding: 0 7px; }
+.fin-chip.on { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-soft); }
+.fin-chip.warn span { background: #fde2e1; color: #b42318; }
+.fin-search { height: 36px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font: inherit; font-size: 13px; min-width: 210px; }
+.fin-estado { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.fin-estado.fin-por_descontar { background: #fff4e5; color: #b54708; }
+.fin-estado.fin-por_descontar.late { background: #fde2e1; color: #b42318; }
+.fin-estado.fin-descontado { background: #e3f5ee; color: #047857; }
+.fin-estado.fin-anulado { background: #eef0f4; color: #667085; }
+.fin-late { color: #b42318; }
+.fin-soon { color: #b54708; }
+tr.fin-anulado td { color: #98a2b3; }
+tr.fin-anulado td strong { text-decoration: line-through; }
+tr.fin-row-late td { background: #fef3f2; color: #b42318; }
+tr.fin-row-empty td { color: #98a2b3; }
+.cell-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+@media (max-width: 900px) { .ef-two { grid-template-columns: 1fr; } .fin-search { min-width: 0; flex: 1; } }

@@ -28,6 +28,7 @@ export const FEATURES = {
   horas: "Controlo de Horas",
   kmViaturas: "Km das Carrinhas",
   chat: "Chat interno",
+  financeiro: "Financeiro",
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",
 } as const;
@@ -41,7 +42,8 @@ export type FeatureKey = keyof typeof FEATURES;
 // 2026-10-24: o João pediu para abrir os Orçamentos a todos "para já"
 // (os preços continuam bloqueados — só o administrador os altera). Para
 // voltar a restringir, tirar "orcamentos" de OPEN_TO_ALL e repô-lo aqui.
-export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>();
+// Financeiro (2026-10-24): "apenas eu" — só o administrador, nunca para todos.
+export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro"]);
 export const OPEN_TO_ALL: ReadonlySet<string> = new Set(["orcamentos"]);
 
 export function isFeatureKey(value: string): value is FeatureKey {

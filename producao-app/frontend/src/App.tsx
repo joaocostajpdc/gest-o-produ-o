@@ -24,6 +24,7 @@ import { FeaturesProvider, useFeature } from "./contexts/FeaturesContext";
 import { HomePage } from "./pages/HomePage";
 import { HorasPage } from "./pages/HorasPage";
 import { KmPage } from "./pages/KmPage";
+import { FinanceiroPage } from "./pages/FinanceiroPage";
 import { ChatPage } from "./pages/ChatPage";
 
 function ProtectedArea() {
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/controlo-horas" element={<HorasPage />} />
         <Route path="/km-carrinhas" element={<KmPage />} />
         <Route path="/chat" element={<ChatPage />} />
+        <Route path="/financeiro" element={<FinanceiroPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

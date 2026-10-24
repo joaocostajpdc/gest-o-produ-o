@@ -732,3 +732,28 @@ model VehicleTrip {
   @@index([date])
   @@map("vehicle_trips")
 }
+
+// ---------------------------------------------------------------------------
+// Chat interno (pedido do utilizador de 2026-10-24: "cria chat interno").
+// Canal "geral" para todos e conversas diretas "dm:<idA>:<idB>" (ids por
+// ordem). As leituras guardam até quando cada pessoa já leu cada canal.
+// ---------------------------------------------------------------------------
+model ChatMessage {
+  id        String   @id @default(cuid())
+  channel   String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([channel, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatRead {
+  userId     String
+  channel    String
+  lastReadAt DateTime @default(now())
+
+  @@id([userId, channel])
+  @@map("chat_reads")
+}

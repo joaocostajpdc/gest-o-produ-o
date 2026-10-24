@@ -2,6 +2,7 @@ import { SVGProps, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
+import { api } from "../api/client";
 import { FeatureTestBanner } from "./FeatureTestBanner";
 import logoMark from "../assets/logo-mark.png";
 import { GoldylocksHost } from "./GoldylocksHost";
@@ -166,6 +167,15 @@ function IconVan(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone do "Chat" (balão de conversa).
+function IconChat(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 12a8 8 0 0 1-11.7 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+    </svg>
+  );
+}
+
 // Ícone do "Início" (casa).
 function IconHome(props: SVGProps<SVGSVGElement>) {
   return (
@@ -214,6 +224,16 @@ export function Layout() {
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
   const goldylocks = useFeature("goldylocks");
+  // Chat interno (2026-10-24): contador de mensagens por ler no menu.
+  const chat = useFeature("chat");
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    if (!chat.available) return;
+    const load = () => api.get<{ total: number }>("/chat/unread").then((r) => setChatUnread(r.total)).catch(() => undefined);
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, [chat.available]);
   // Menu lateral recolhido (só ícones) que abre ao passar o rato — pedido do
   // utilizador de 2026-10-20 ("esta barra só quero que apareça quando passo
   // o rato"). Em teste só para o administrador; só em ecrã de computador.
@@ -288,6 +308,13 @@ export function Layout() {
             <NavLink to="/" end>
               <IconHome /> Início
               {!inicio.released && <TestBadge />}
+            </NavLink>
+          )}
+          {chat.available && (
+            <NavLink to="/chat">
+              <IconChat /> Chat
+              {chatUnread > 0 && <span className="badge" style={{ marginLeft: "auto", background: "#dc2626", fontSize: 10.5, padding: "1px 7px" }}>{chatUnread}</span>}
+              {!chat.released && <TestBadge />}
             </NavLink>
           )}
           {goldylocks.available && (

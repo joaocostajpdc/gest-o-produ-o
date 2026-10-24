@@ -25,6 +25,7 @@ import { HomePage } from "./pages/HomePage";
 import { HorasPage } from "./pages/HorasPage";
 import { KmPage } from "./pages/KmPage";
 import { GoldylocksPage } from "./pages/GoldylocksPage";
+import { ChatPage } from "./pages/ChatPage";
 
 function ProtectedArea() {
   const { user, loading } = useAuth();
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/controlo-horas" element={<HorasPage />} />
         <Route path="/km-carrinhas" element={<KmPage />} />
         <Route path="/goldylocks" element={<GoldylocksPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/stages" element={<StagesPage />} />

@@ -274,6 +274,22 @@ export function EmailsPage() {
                 className="btn secondary"
                 disabled={!!busy}
                 onClick={() =>
+                  run("pdf" + k, async () => {
+                    // Abre já a janela (senão o browser bloqueia) e depois mostra o PDF.
+                    const w = window.open("", "_blank");
+                    const blob = await api.getBlob(`/email-reports/${k}/pdf`);
+                    const url = URL.createObjectURL(blob);
+                    if (w) w.location.href = url;
+                    else window.location.href = url;
+                  })
+                }
+              >
+                {busy === "pdf" + k ? "A gerar…" : "Ver PDF desta semana"}
+              </button>
+              <button
+                className="btn secondary"
+                disabled={!!busy}
+                onClick={() =>
                   run("send" + k, async () => {
                     await save();
                     const out = await api.post<{ count: number }>(`/email-reports/${k}/send`, {});

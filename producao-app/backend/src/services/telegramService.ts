@@ -119,6 +119,33 @@ export async function discoverChats(token: string) {
   return [...found.values()];
 }
 
+/** Envia um ficheiro (ex.: PDF) para uma conversa, com uma legenda curta em HTML. */
+export async function sendTelegramDocument(token: string, chatId: string, file: Buffer, filename: string, caption: string) {
+  if (!token) throw new Error("Falta o token do bot.");
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append("caption", caption.slice(0, 1000));
+  form.append("parse_mode", "HTML");
+  form.append("document", new Blob([new Uint8Array(file)], { type: "application/pdf" }), filename);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: "POST", body: form, signal: controller.signal });
+    const data = (await res.json().catch(() => null)) as { ok: boolean; description?: string } | null;
+    if (!data?.ok) {
+      const d = data?.description ?? `HTTP ${res.status}`;
+      if (res.status === 401 || /unauthorized/i.test(d)) throw new Error("Token do bot inválido.");
+      if (/chat not found/i.test(d)) throw new Error("Conversa não encontrada — a pessoa tem de escrever primeiro ao bot.");
+      throw new Error(`Telegram: ${d}`);
+    }
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw new Error("O Telegram não respondeu a tempo.");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function sendTelegramMessage(token: string, chatId: string, html: string) {
   await callTelegram(token, "sendMessage", {
     chat_id: chatId,

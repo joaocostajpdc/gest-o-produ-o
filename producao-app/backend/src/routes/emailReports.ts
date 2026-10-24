@@ -5,6 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { getTelegramSettings } from "../services/telegramService";
 import {
   buildReport,
+  buildReportPdf,
   emailSettingsSchema,
   getEmailLog,
   getEmailSettings,
@@ -76,6 +77,18 @@ emailReportsRouter.get(
     if (!isReportKey(req.params.key)) throw new Error("Email não encontrado.");
     const r = await buildReport(req.params.key);
     res.json({ subject: r.subject, html: r.html, tg: r.tg, count: r.count });
+  })
+);
+
+// O PDF desta semana (é o que segue no Telegram e em anexo no email).
+emailReportsRouter.get(
+  "/:key/pdf",
+  asyncHandler(async (req, res) => {
+    if (!isReportKey(req.params.key)) throw new Error("Email não encontrado.");
+    const { r, pdf } = await buildReportPdf(req.params.key);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${r.file}"`);
+    res.send(pdf);
   })
 );
 

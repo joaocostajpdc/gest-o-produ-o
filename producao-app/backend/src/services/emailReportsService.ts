@@ -2,7 +2,8 @@ import nodemailer from "nodemailer";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { PUBLIC_APP_URL } from "../config/publicUrl";
-import { getTelegramSettings, sendTelegramMessage } from "./telegramService";
+import { getTelegramSettings, sendTelegramDocument } from "./telegramService";
+import { ReportSection, renderReportPdf } from "./weeklyReportPdf";
 
 // ============================================================================
 // Emails automáticos semanais (pedido do utilizador de 2026-10-20: "quero que
@@ -193,8 +194,27 @@ export async function buildReport(key: ReportKey, now = new Date()) {
       `📋 <b>OS a terminar esta semana</b>\n${semana}\n\n` +
       (week.length ? week.map(tgLine).join("\n") : "Nenhuma OS com data-limite esta semana.") +
       (late.length ? `\n\n🔴 <b>Prazo ultrapassado (${late.length})</b>\n` + late.map(tgLine).join("\n") : "");
+    const pdfRow = (o: (typeof due)[number]) => [
+      o.externalId,
+      o.client.name,
+      o.product.name,
+      o.currentStageInstance?.stage.name ?? "—",
+      STATUS_PT[o.status] ?? o.status,
+      fmtPT(lisbonDate(o.deadlineAt!)),
+    ];
+    const sections: ReportSection[] = [
+      { title: `Para terminar esta semana (${week.length})`, headers: H, widths: [70, 190, 190, 120, 90, 80], rows: week.map(pdfRow), empty: "Nenhuma OS com data-limite esta semana." },
+    ];
+    if (late.length) sections.push({ title: `Já com o prazo ultrapassado (${late.length})`, tone: "danger", headers: H, widths: [70, 190, 190, 120, 90, 80], rows: late.map(pdfRow) });
+    const caption =
+      `📋 <b>OS a terminar esta semana</b>\n${semana}\n${week.length} para terminar` + (late.length ? ` · 🔴 ${late.length} com prazo ultrapassado` : "");
     return {
       tg,
+      caption,
+      title: REPORTS.osSemana,
+      semana,
+      sections,
+      file: `os-a-terminar-${monday}.pdf`,
       subject: `OS a terminar esta semana — ${fmtPT(monday)} a ${fmtPT(sunday)} (${week.length}${late.length ? ` + ${late.length} em atraso` : ""})`,
       html: wrap(REPORTS.osSemana, semana, body),
       count: due.length,
@@ -260,8 +280,47 @@ export async function buildReport(key: ReportKey, now = new Date()) {
       "\n";
   }
   if (noDate.length) tg += `\n⚪ Em lacagem sem prazo configurado: ${noDate.map((i) => esc(i.o.externalId)).join(", ")}`;
+  const LH = ["OS", "Cliente", "Produto", "Acabamento", "Entrou em", "Entrega prevista"];
+  const LW = [70, 170, 160, 150, 80, 110];
+  const sections: ReportSection[] = [];
+  if (!due.length) sections.push({ title: "Esta semana", headers: LH, widths: LW, rows: [], empty: "Nenhum material com entrega prevista esta semana." });
+  for (const [sup, list] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    sections.push({
+      title: `${sup} (${list.length})`,
+      headers: LH,
+      widths: LW,
+      rows: list.map((i) => [
+        i.o.externalId,
+        i.o.client.name,
+        i.o.product.name,
+        finish(i.o.specifications),
+        i.o.currentStageInstance?.enteredAt ? fmtPT(lisbonDate(new Date(i.o.currentStageInstance.enteredAt))) : "—",
+        fmtPT(i.expected!) + (i.expected! < monday ? " (atrasado)" : ""),
+      ]),
+      lateRows: list.map((i) => i.expected! < monday),
+    });
+  }
+  if (noDate.length) {
+    sections.push({
+      title: `Em lacagem sem prazo configurado (${noDate.length})`,
+      tone: "muted",
+      headers: ["OS", "Cliente", "Produto", "Fornecedor"],
+      widths: [70, 240, 220, 210],
+      rows: noDate.map((i) => [i.o.externalId, i.o.client.name, i.o.product.name, i.supplier]),
+    });
+  }
+  const nLate = due.filter((i) => i.expected! < monday).length;
+  const caption =
+    `🎨 <b>Lacagens — material a entregar esta semana</b>\n${semana}\n${due.length} a entregar` +
+    (groups.size ? ` · ${groups.size} ${groups.size === 1 ? "lacagem" : "lacagens"}` : "") +
+    (nLate ? ` · 🔴 ${nLate} atrasado${nLate === 1 ? "" : "s"}` : "");
   return {
     tg,
+    caption,
+    title: REPORTS.lacagemSemana,
+    semana,
+    sections,
+    file: `lacagens-a-entregar-${monday}.pdf`,
     subject: `Lacagens — material a entregar esta semana (${fmtPT(monday)} a ${fmtPT(sunday)}): ${due.length}`,
     html: wrap(REPORTS.lacagemSemana, semana, body),
     count: due.length,
@@ -297,39 +356,39 @@ export async function sendTestEmail(to: string) {
   });
 }
 
-/** Divide uma mensagem longa em partes de até ~3800 caracteres (limite do Telegram: 4096), cortando entre linhas. */
-function splitTelegram(text: string) {
-  const parts: string[] = [];
-  let cur = "";
-  for (const line of text.split("\n")) {
-    if ((cur + "\n" + line).length > 3800 && cur) {
-      parts.push(cur);
-      cur = line;
-    } else cur = cur ? cur + "\n" + line : line;
-  }
-  if (cur) parts.push(cur);
-  return parts;
-}
-
-async function sendToTelegram(text: string, only: string[]) {
+// Pedido de 2026-10-24: "este aviso quero que seja em PDF" — no Telegram o
+// aviso semanal vai como documento PDF, com uma legenda curta de resumo.
+async function sendToTelegram(pdf: Buffer, filename: string, caption: string, only: string[]) {
   const t = await getTelegramSettings();
   const chats = only.length ? t.chats.filter((c) => only.includes(c.id)) : t.chats;
   if (!t.botToken || !chats.length) {
     throw new Error("O Telegram não está configurado (Administração → Avisos Telegram: bot e conversas).");
   }
-  for (const c of chats) for (const part of splitTelegram(text)) await sendTelegramMessage(t.botToken, c.id, part);
+  for (const c of chats) await sendTelegramDocument(t.botToken, c.id, pdf, filename, caption);
   return chats.length;
+}
+
+export async function buildReportPdf(key: ReportKey, now = new Date()) {
+  const r = await buildReport(key, now);
+  const pdf = await renderReportPdf({ title: r.title, subtitle: r.semana, sections: r.sections, link: PUBLIC_APP_URL });
+  return { r, pdf };
 }
 
 export async function sendReport(key: ReportKey, opts: { to?: string[]; now?: Date; canal?: "email" | "telegram" | "ambos" } = {}) {
   const s = await getEmailSettings();
   const canal = opts.canal ?? s.reports[key].canal;
-  const r = await buildReport(key, opts.now);
-  if (canal === "telegram" || canal === "ambos") await sendToTelegram(r.tg, s.reports[key].tgChats);
+  const { r, pdf } = await buildReportPdf(key, opts.now);
+  if (canal === "telegram" || canal === "ambos") await sendToTelegram(pdf, r.file, r.caption, s.reports[key].tgChats);
   if (canal === "email" || canal === "ambos") {
     const to = opts.to ?? s.reports[key].to;
     if (!to.length) throw new Error("Este email não tem destinatários.");
-    await transport(s).sendMail({ from: fromAddr(s), to: to.join(", "), subject: r.subject, html: r.html });
+    await transport(s).sendMail({
+      from: fromAddr(s),
+      to: to.join(", "),
+      subject: r.subject,
+      html: r.html,
+      attachments: [{ filename: r.file, content: pdf, contentType: "application/pdf" }],
+    });
   }
   return r;
 }

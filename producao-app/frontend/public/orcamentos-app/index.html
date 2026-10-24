@@ -341,7 +341,7 @@ function perfilGeom(abasStr,angStr){
   return {abas,angs,pts};
 }
 /* layout em caixa W×H: roda o perfil para a aba maior ficar na horizontal, abas para cima */
-function perfilLayout(abasStr,angStr,W,H,pad){
+function perfilLayout(abasStr,angStr,W,H,pad,off=9){
   const g=perfilGeom(abasStr,angStr); if(g.abas.length===0) return null;
   let pts=g.pts.map(p=>p.slice());
   let li=0; g.abas.forEach((a,i)=>{ if(a>g.abas[li]) li=i; });
@@ -357,8 +357,8 @@ function perfilLayout(abasStr,angStr,W,H,pad){
   const P=pts.map(([x,y])=>[x*s+ox,y*s+oy]);
   const cx=P.reduce((a,p)=>a+p[0],0)/P.length, cyy=P.reduce((a,p)=>a+p[1],0)/P.length;
   const labels=g.abas.map((a,i)=>{ const [x0,y0]=P[i],[x1,y1]=P[i+1]; const mx=(x0+x1)/2,my=(y0+y1)/2; let nx=-(y1-y0),ny=x1-x0; const L=Math.hypot(nx,ny)||1; nx/=L; ny/=L;
-    if((mx-cx)*nx+(my-cyy)*ny<0){nx=-nx;ny=-ny;} if(g.abas.length===1){nx=0;ny=-1;} return {x:mx+nx*9,y:my+ny*9,t:fmt(a,a%1?1:0)}; });
-  const angLbl=[]; g.abas.forEach((a,i)=>{ if(i<g.abas.length-1){ const v=g.angs[i]; if(v&&Math.abs(v)!==90){ const vx=P[i+1][0],vy=P[i+1][1]; let dx=cx-vx,dy=cyy-vy; const dl=Math.hypot(dx,dy)||1; angLbl.push({x:vx+dx/dl*12,y:vy+dy/dl*12,t:Math.abs(v)+"°"}); } } });
+    if((mx-cx)*nx+(my-cyy)*ny<0){nx=-nx;ny=-ny;} if(g.abas.length===1){nx=0;ny=-1;} return {x:mx+nx*off,y:my+ny*off,t:fmt(a,a%1?1:0)}; });
+  const angLbl=[]; g.abas.forEach((a,i)=>{ if(i<g.abas.length-1){ const v=g.angs[i]; if(v&&Math.abs(v)!==90){ const vx=P[i+1][0],vy=P[i+1][1]; const u=(q)=>{ const ux=q[0]-vx,uy=q[1]-vy,l=Math.hypot(ux,uy)||1; return [ux/l,uy/l]; }; const [ax,ay]=u(P[i]),[bx2,by2]=u(P[i+2]); let dx=ax+bx2,dy=ay+by2; if(Math.hypot(dx,dy)<1e-3){dx=cx-vx;dy=cyy-vy;} const dl=Math.hypot(dx,dy)||1; /* bissetriz do ângulo: o texto fica dentro da dobra, fora das linhas */ angLbl.push({x:vx+dx/dl*(off+3),y:vy+dy/dl*(off+3),t:Math.abs(v)+"°"}); } } });
   return {pts:P,labels,angLbl};
 }
 function perfilSVG(abasStr,angStr,W=140,H=100){
@@ -1127,21 +1127,25 @@ async function buildFolhaDesenho(q){
   const boxW=78, boxH=52;
   q.linhas.forEach((L,i)=>{
     const meds=medidasDe(L).map(m=>({comp:num(m.comp),qt:Math.max(0,Math.round(num(m.qt)))})).filter(m=>m.comp&&m.qt);
-    const blockH=Math.max(boxH, 30+Math.max(1,meds.length)*5.2)+8;
+    // Muitas medidas: passam a 2 colunas e o cartão cresce até caberem todas (2026-10-24).
+    const nCols=meds.length>8?2:1, perCol=Math.max(1,Math.ceil(meds.length/nCols));
+    const blockH=Math.max(boxH+8, 47+perCol*5.2);
     need(blockH);
     const y0=y;
     doc.setDrawColor(...LN); doc.setLineWidth(.3); doc.roundedRect(M,y0,W-2*M,blockH-4,2,2,"S");
     // desenho do perfil
     const bx=M+3, by=y0+3;
-    doc.setFillColor(250,250,252); doc.rect(bx,by,boxW,boxH-6,"F");
+    const bh=blockH-10; doc.setFillColor(250,250,252); doc.rect(bx,by,boxW,bh,"F");
     T("PEÇA "+(i+1),bx+2,by+4.5,{s:8,b:1,c:A});
-    const Lay=perfilLayout(L.abas,L.angs,boxW*4,(boxH-6)*4,40);
-    if(Lay){ doc.setDrawColor(...INK); doc.setLineWidth(.9); const pts=Lay.pts.map(p=>[bx+p[0]/4,by+p[1]/4]);
+    // Desenho centrado na altura do cartão; medidas e ângulos em letra maior.
+    const oy=by+Math.max(0,(bh-(boxH-6))/2);
+    const Lay=perfilLayout(L.abas,L.angs,boxW*4,(boxH-6)*4,56,17);
+    if(Lay){ doc.setDrawColor(...INK); doc.setLineWidth(1); const pts=Lay.pts.map(p=>[bx+p[0]/4,oy+p[1]/4]);
       for(let k=0;k<pts.length-1;k++) doc.line(pts[k][0],pts[k][1],pts[k+1][0],pts[k+1][1]);
-      doc.setFillColor(...A); pts.forEach(p=>doc.circle(p[0],p[1],.55,"F"));
-      Lay.labels.forEach(l=>T(l.t,bx+l.x/4,by+l.y/4+1.2,{s:8.5,b:1,a:"center"}));
-      Lay.angLbl.forEach(l=>T(l.t,bx+l.x/4,by+l.y/4+1,{s:7,c:[154,91,0],a:"center"})); }
-    else T("Sem abas indicadas",bx+boxW/2,by+(boxH-6)/2,{s:8,c:MUT,a:"center"});
+      doc.setFillColor(...A); pts.forEach(p=>doc.circle(p[0],p[1],.6,"F"));
+      Lay.labels.forEach(l=>T(l.t,bx+l.x/4,oy+l.y/4+1.8,{s:13,b:1,a:"center"}));
+      Lay.angLbl.forEach(l=>T(l.t,bx+l.x/4,oy+l.y/4+1.4,{s:9.5,b:1,c:[154,91,0],a:"center"})); }
+    else T("Sem abas indicadas",bx+boxW/2,by+bh/2,{s:8,c:MUT,a:"center"});
     // dados da peça
     const dx=bx+boxW+6, dw=W-M-3-dx;
     T(L.desc||"Chapa quinada",dx,y0+7,{s:11,b:1,w:dw});
@@ -1151,10 +1155,14 @@ async function buildFolhaDesenho(q){
     kv.forEach(([l,v],k)=>{ const cx=dx+(k%2)*(dw/2), cy=ky+Math.floor(k/2)*8; T(l.toUpperCase(),cx,cy,{s:6.3,b:1,c:MUT}); T(v,cx,cy+3.8,{s:8.8,b:1,w:dw/2-3}); });
     // comprimentos
     let ty=ky+3*8+1;
-    doc.setFillColor(...SOFT); doc.rect(dx,ty-3.6,dw,5,"F");
-    T("QUANT.",dx+2,ty,{s:6.5,b:1,c:MUT}); T("COMPRIMENTO (MM)",dx+22,ty,{s:6.5,b:1,c:MUT}); T("M²",dx+dw-2,ty,{s:6.5,b:1,c:MUT,a:"right"});
+    const cw=(dw-(nCols-1)*4)/nCols;
+    for(let c=0;c<nCols;c++){ const cx=dx+c*(cw+4);
+      doc.setFillColor(...SOFT); doc.rect(cx,ty-3.6,cw,5,"F");
+      T("QUANT.",cx+2,ty,{s:6.5,b:1,c:MUT}); T("COMPRIMENTO (MM)",cx+(nCols>1?14:22),ty,{s:6.5,b:1,c:MUT}); T("M²",cx+cw-2,ty,{s:6.5,b:1,c:MUT,a:"right"}); }
     ty+=5;
-    (meds.length? meds : [{comp:0,qt:0}]).forEach(m=>{ T(m.qt? String(m.qt):"—",dx+2,ty,{s:9.5,b:1}); T(m.comp? fmt(m.comp,0):"—",dx+22,ty,{s:9.5,b:1}); T(m.comp&&m.qt? fmt(dv*m.comp*m.qt/1e6,2):"",dx+dw-2,ty,{s:8.5,c:MUT,a:"right"}); ty+=5.2; });
+    const lista=meds.length? meds : [{comp:0,qt:0}];
+    lista.forEach((m,k)=>{ const c=Math.floor(k/perCol), cx=dx+c*(cw+4), ry=ty+(k%perCol)*5.2;
+      T(m.qt? String(m.qt):"—",cx+2,ry,{s:9.5,b:1}); T(m.comp? fmt(m.comp,0):"—",cx+(nCols>1?14:22),ry,{s:9.5,b:1}); T(m.comp&&m.qt? fmt(dv*m.comp*m.qt/1e6,2):"",cx+cw-2,ry,{s:8.5,c:MUT,a:"right"}); });
     y=y0+blockH;
   });
 

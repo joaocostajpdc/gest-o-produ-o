@@ -4,6 +4,7 @@ import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContex
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "./FeatureTestBanner";
 import logoMark from "../assets/logo-mark.png";
+import { GoldylocksHost } from "./GoldylocksHost";
 import {
   IconBox,
   IconClipboard,
@@ -229,6 +230,16 @@ export function Layout() {
     setMenuOpen(false);
   }, [location.pathname]);
 
+  // Dentro de um separador da área de trabalho (iframe do próprio programa):
+  // só a página, sem menu lateral nem barra do telemóvel (2026-10-24).
+  if (typeof window !== "undefined" && window.self !== window.top) {
+    return (
+      <main className="main-content main-embed">
+        <Outlet />
+      </main>
+    );
+  }
+
   // Ecrã inicial: sem menu lateral nem barra do telemóvel; o menu só aparece
   // depois de entrar numa área (pedido do utilizador de 2026-10-20).
   if (inicio.available && location.pathname === "/") {
@@ -400,11 +411,12 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className="main-content">
+      <main className={`main-content${location.pathname === "/goldylocks" ? " main-full" : ""}`}>
         {menuHover.available && !menuHover.released && location.pathname === "/ordens-servico" && (
           <FeatureTestBanner featureKey="menuHover" label="o menu lateral que abre ao passar o rato" />
         )}
         <Outlet />
+        <GoldylocksHost visible={location.pathname === "/goldylocks"} />
       </main>
     </div>
   );

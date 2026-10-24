@@ -1,8 +1,9 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "../components/FeatureTestBanner";
+import { SERVICE_ORDER_STATUS_LABELS, ServiceOrderListItem } from "../types";
 
 // ============================================================================
 // Chat interno (pedido do utilizador de 2026-10-24). Conversa "Geral" para
@@ -49,10 +50,66 @@ function quando(iso: string) {
   return d.toDateString() === new Date().toDateString() ? hora(iso) : d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" });
 }
 
-// Números de OS (ex.: 2026/548) ficam realçados para se verem bem.
-function renderText(t: string) {
-  const parts = t.split(/(\b20\d{2}\/\d{1,5}\b)/g);
-  return parts.map((p, i) => (/^20\d{2}\/\d{1,5}$/.test(p) ? <strong key={i} className="chat-os">{p}</strong> : <span key={i}>{p}</span>));
+// Ordens de Serviço anexadas à mensagem (pedido de 2026-10-24: "na conversa
+// dar para selecionar ordem de serviço"). Ficam no texto como
+// [[os:<id>|<número>]] e são mostradas como cartão com os dados atuais da OS.
+const OS_TOKEN = /\[\[os:([^|\]]+)\|([^\]]*)\]\]/g;
+
+function semTokens(t: string) {
+  return t.replace(OS_TOKEN, (_m, _id, num) => `OS ${num}`).trim();
+}
+
+function OsCard({ id, num, os, mine }: { id: string; num: string; os?: ServiceOrderListItem; mine: boolean }) {
+  return (
+    <Link to={`/service-orders/${id}`} className={`chat-oscard${mine ? " mine" : ""}`}>
+      <span className="chat-oscard-ic" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3" /></svg>
+      </span>
+      <span className="chat-oscard-text">
+        <strong>OS {os?.externalId ?? num}</strong>
+        {os ? (
+          <>
+            <span>{os.client.name}</span>
+            <span className="chat-oscard-sub">
+              {os.product.name} · {SERVICE_ORDER_STATUS_LABELS[os.status]}
+              {os.currentStage ? ` · ${os.currentStage.name}` : ""}
+            </span>
+          </>
+        ) : (
+          <span className="chat-oscard-sub">Abrir a Ordem de Serviço</span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
+// Números de OS escritos à mão (ex.: 2026/548) ficam realçados; as OS anexadas viram cartões.
+function renderText(t: string, osMap: Map<string, ServiceOrderListItem>, mine: boolean) {
+  const out: JSX.Element[] = [];
+  let last = 0;
+  let k = 0;
+  const byNum = new Map([...osMap.values()].map((o) => [o.externalId, o] as [string, ServiceOrderListItem]));
+  const plain = (txt: string) =>
+    txt.split(/(\b20\d{2}\/\d{1,5}\b)/g).map((p) =>
+      /^20\d{2}\/\d{1,5}$/.test(p) ? (
+        byNum.get(p) ? (
+          <Link key={k++} to={`/service-orders/${byNum.get(p)!.id}`} className="chat-os">{p}</Link>
+        ) : (
+          <strong key={k++} className="chat-os">{p}</strong>
+        )
+      ) : (
+        <span key={k++}>{p}</span>
+      )
+    );
+  for (const m of t.matchAll(OS_TOKEN)) {
+    const before = t.slice(last, m.index).trim();
+    if (before) out.push(<span key={k++} className="chat-text">{plain(before)}</span>);
+    out.push(<OsCard key={k++} id={m[1]} num={m[2]} os={osMap.get(m[1])} mine={mine} />);
+    last = (m.index ?? 0) + m[0].length;
+  }
+  const rest = t.slice(last).trim();
+  if (rest) out.push(<span key={k++} className="chat-text">{plain(rest)}</span>);
+  return out;
 }
 
 export function ChatPage() {
@@ -64,6 +121,11 @@ export function ChatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showList, setShowList] = useState(true); // telemóvel: lista ou conversa
+  const [osList, setOsList] = useState<ServiceOrderListItem[]>([]);
+  const [anexos, setAnexos] = useState<ServiceOrderListItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickQ, setPickQ] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastRef = useRef<string | null>(null);
   const activeRef = useRef(active);
@@ -120,12 +182,29 @@ export function ChatPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [msgs]);
 
+  // Lista de OS para escolher e para mostrar os cartões com dados atuais.
+  useEffect(() => {
+    if (!feature.available) return;
+    const load = () => api.get<ServiceOrderListItem[]>("/service-orders").then(setOsList).catch(() => undefined);
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [feature.available]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const h = (e: MouseEvent) => { if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [pickerOpen]);
+
   if (feature.loading) return <div className="muted">A carregar...</div>;
   if (!feature.available) return <Navigate to="/" replace />;
 
   async function send(e?: FormEvent) {
     e?.preventDefault();
-    const t = text.trim();
+    const tokens = anexos.map((o) => `[[os:${o.id}|${o.externalId}]]`).join("\n");
+    const t = [text.trim(), tokens].filter(Boolean).join("\n");
     if (!t || sending) return;
     setSending(true);
     setError(null);
@@ -134,6 +213,7 @@ export function ChatPage() {
       setMsgs((prev) => [...prev, m]);
       lastRef.current = m.createdAt;
       setText("");
+      setAnexos([]);
       loadChannels();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível enviar.");
@@ -149,6 +229,13 @@ export function ChatPage() {
   }
 
   const cur = channels.find((c) => c.channel === active);
+  const osMap = new Map(osList.map((o) => [o.id, o] as [string, ServiceOrderListItem]));
+  const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const pickMatches = osList
+    .filter((o) => !anexos.some((a) => a.id === o.id))
+    .filter((o) => !pickQ.trim() || norm(`${o.externalId} ${o.client.name} ${o.product.name}`).includes(norm(pickQ.trim())))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 30);
 
   return (
     <div>
@@ -177,7 +264,7 @@ export function ChatPage() {
                   {c.last && <span className="chat-item-time">{quando(c.last.createdAt)}</span>}
                 </span>
                 <span className="chat-item-last">
-                  {c.last ? (c.last.mine ? "Tu: " : "") + c.last.text : c.tipo === "geral" ? "Conversa de toda a equipa" : "Sem mensagens"}
+                  {c.last ? (c.last.mine ? "Tu: " : "") + semTokens(c.last.text) : c.tipo === "geral" ? "Conversa de toda a equipa" : "Sem mensagens"}
                 </span>
               </span>
               {c.unread > 0 && <span className="chat-unread" aria-label={`${c.unread} por ler`}>{c.unread}</span>}
@@ -212,7 +299,7 @@ export function ChatPage() {
                   <div className={`chat-msg${m.mine ? " mine" : ""}${agrupado ? " grouped" : ""}`}>
                     {!m.mine && !agrupado && cur?.tipo === "geral" && <div className="chat-author">{m.userName}</div>}
                     <div className="chat-bubble">
-                      <span className="chat-text">{renderText(m.text)}</span>
+                      <span className="chat-content">{renderText(m.text, osMap, m.mine)}</span>
                       <span className="chat-time">{hora(m.createdAt)}</span>
                     </div>
                   </div>
@@ -220,7 +307,54 @@ export function ChatPage() {
               );
             })}
           </div>
+          {anexos.length > 0 && (
+            <div className="chat-anexos">
+              {anexos.map((o) => (
+                <span key={o.id} className="chat-anexo">
+                  OS {o.externalId} · {o.client.name}
+                  <button type="button" onClick={() => setAnexos(anexos.filter((a) => a.id !== o.id))} aria-label={`Tirar OS ${o.externalId}`}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
           <form className="chat-input" onSubmit={send}>
+            <div className="chat-pick" ref={pickerRef}>
+              <button
+                type="button"
+                className="btn secondary chat-pick-btn"
+                onClick={() => { setPickerOpen((o) => !o); setPickQ(""); }}
+                aria-expanded={pickerOpen}
+                title="Anexar Ordem de Serviço"
+              >
+                + OS
+              </button>
+              {pickerOpen && (
+                <div className="chat-picker" role="dialog" aria-label="Escolher Ordem de Serviço">
+                  <input
+                    autoFocus
+                    type="search"
+                    placeholder="Procurar nº, cliente ou produto…"
+                    value={pickQ}
+                    onChange={(e) => setPickQ(e.target.value)}
+                    aria-label="Procurar Ordem de Serviço"
+                  />
+                  <div className="chat-picker-list">
+                    {pickMatches.length === 0 && <div className="muted" style={{ padding: 10, fontSize: 13 }}>Nenhuma OS encontrada.</div>}
+                    {pickMatches.map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => { setAnexos([...anexos, o]); setPickerOpen(false); }}
+                      >
+                        <strong>{o.externalId}</strong>
+                        <span>{o.client.name}</span>
+                        <span className="muted">{o.product.name} · {SERVICE_ORDER_STATUS_LABELS[o.status]}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -229,7 +363,7 @@ export function ChatPage() {
               placeholder="Escreve uma mensagem… (Enter envia, Shift+Enter muda de linha)"
               aria-label="Mensagem"
             />
-            <button className="btn" type="submit" disabled={sending || !text.trim()}>
+            <button className="btn" type="submit" disabled={sending || (!text.trim() && !anexos.length)}>
               Enviar
             </button>
           </form>

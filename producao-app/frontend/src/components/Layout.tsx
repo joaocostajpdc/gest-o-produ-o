@@ -5,7 +5,6 @@ import { useFeature } from "../contexts/FeaturesContext";
 import { api } from "../api/client";
 import { FeatureTestBanner } from "./FeatureTestBanner";
 import logoMark from "../assets/logo-mark.png";
-import { GoldylocksHost } from "./GoldylocksHost";
 import {
   IconBox,
   IconClipboard,
@@ -223,7 +222,6 @@ export function Layout() {
   const inicio = useFeature("inicio");
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
-  const goldylocks = useFeature("goldylocks");
   // Chat interno (2026-10-24): contador de mensagens por ler no menu.
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -315,12 +313,6 @@ export function Layout() {
               <IconChat /> Chat
               {chatUnread > 0 && <span className="badge" style={{ marginLeft: "auto", background: "#dc2626", fontSize: 10.5, padding: "1px 7px" }}>{chatUnread}</span>}
               {!chat.released && <TestBadge />}
-            </NavLink>
-          )}
-          {goldylocks.available && (
-            <NavLink to="/goldylocks">
-              <IconFileText /> Goldylocks
-              {!goldylocks.released && <TestBadge />}
             </NavLink>
           )}
           <div className="section-label" style={{ marginTop: 4 }}>Produção</div>
@@ -438,12 +430,11 @@ export function Layout() {
           </button>
         </div>
       </aside>
-      <main className={`main-content${location.pathname === "/goldylocks" ? " main-full" : ""}`}>
+      <main className="main-content">
         {menuHover.available && !menuHover.released && location.pathname === "/ordens-servico" && (
           <FeatureTestBanner featureKey="menuHover" label="o menu lateral que abre ao passar o rato" />
         )}
         <Outlet />
-        <GoldylocksHost visible={location.pathname === "/goldylocks"} />
       </main>
     </div>
   );

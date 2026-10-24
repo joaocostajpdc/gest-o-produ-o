@@ -24,7 +24,6 @@ import { FeaturesProvider, useFeature } from "./contexts/FeaturesContext";
 import { HomePage } from "./pages/HomePage";
 import { HorasPage } from "./pages/HorasPage";
 import { KmPage } from "./pages/KmPage";
-import { GoldylocksPage } from "./pages/GoldylocksPage";
 import { ChatPage } from "./pages/ChatPage";
 
 function ProtectedArea() {
@@ -66,7 +65,6 @@ export default function App() {
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/controlo-horas" element={<HorasPage />} />
         <Route path="/km-carrinhas" element={<KmPage />} />
-        <Route path="/goldylocks" element={<GoldylocksPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/reports" element={<PrintableListPage />} />
         <Route path="/products" element={<ProductsPage />} />

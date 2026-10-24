@@ -27,7 +27,6 @@ export const FEATURES = {
   inicio: "Ecrã Inicial (Central Minho Ferragens)",
   horas: "Controlo de Horas",
   kmViaturas: "Km das Carrinhas",
-  goldylocks: "Goldylocks dentro do programa",
   chat: "Chat interno",
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",

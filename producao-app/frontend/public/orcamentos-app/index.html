@@ -142,6 +142,13 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .fadd:hover,.fadd:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
 .fadd b{font-size:13px;color:var(--fg)}
 .pocli span{color:var(--accent);font-weight:600}
+.aut{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;display:flex;flex-direction:column;gap:8px}
+.aut.pend{background:#fff7e6;border:1px solid #f1c27d}
+.aut.ok{background:#e9f7ef;border:1px solid #a8dcbc;color:#14663a}
+.aut.no{background:#fdecea;border:1px solid #f3b4ad;color:#9b1c13}
+.aut .row,.pedir .row{display:flex;gap:6px}
+.pedir{margin-top:8px;padding:10px;border:1px dashed var(--line-2);border-radius:8px}
+.pill.autp{background:#fff1d6;color:#8a5300;font-size:10.5px}
 .gt{width:100%;border-collapse:collapse;font-size:13px}
 .gt th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
 .gt td{padding:7px 8px;border-bottom:1px solid var(--line)}
@@ -508,6 +515,8 @@ function imgAttr(src){ return src.startsWith("fid:")? `data-fid="${esc(src.slice
 async function initServer(){
   try{
     const b=await api("GET","/bootstrap");
+    // Preços bloqueados para quem não é administrador (2026-10-24).
+    try{ const t=token(); const r=await fetch("/api/auth/me",{headers:t?{Authorization:"Bearer "+t}:{}}); const j=r.ok? await r.json():null; S.admin=!!(j&&j.user&&j.user.role==="ADMINISTRADOR"); S.userName=j&&j.user?j.user.name:""; }catch(_){ S.admin=false; }
     S.db=SERVER_DB; S.assets=SERVER_FILES; S.downloads=SERVER_DL;
     if(b.precos&&b.precos.P) S.P=Object.assign(clone(DEFAULT_P),clone(b.precos.P));
     if(b.empresa) S.E=Object.assign(clone(DEFAULT_E),clone(b.empresa));
@@ -537,7 +546,14 @@ function saveQuote(){
   const idx=S.quotes.findIndex(x=>x.id===q.id); if(idx>=0) S.quotes[idx]=q; else S.quotes.unshift(q);
   if(!S.db){ S.dirty=false; updSaveState(); return Promise.resolve(); }
   const {id,...body}=q;
-  saveChain=saveChain.then(()=>S.db.doc("orcamentos/"+id).set(body)).then(()=>{ if(S.cur&&S.cur.id===id&&JSON.stringify(S.cur.linhas)===JSON.stringify(q.linhas)) { S.dirty=false; } updSaveState(); })
+  saveChain=saveChain.then(()=>S.db.doc("orcamentos/"+id).set(body)).then(resp=>{ if(S.cur&&S.cur.id===id&&JSON.stringify(S.cur.linhas)===JSON.stringify(q.linhas)) { S.dirty=false; }
+      // O servidor repõe a margem/desconto bloqueados e devolve o pedido de autorização atual.
+      if(resp&&S.cur&&S.cur.id===id){ let mud=false;
+        if(!S.admin&&resp.margem!==undefined&&num(resp.margem)!==num(S.cur.margem)){ S.cur.margem=resp.margem; mud=true; }
+        if(!S.admin&&resp.desconto!==undefined&&num(resp.desconto)!==num(S.cur.desconto)){ S.cur.desconto=resp.desconto; mud=true; }
+        if(JSON.stringify(resp.pedidoAut||null)!==JSON.stringify(S.cur.pedidoAut||null)){ S.cur.pedidoAut=resp.pedidoAut||undefined; mud=true; }
+        if(mud&&S.view==="editor") renderEditor(); }
+      updSaveState(); })
     .catch(e=>{ console.warn(e); updSaveState("Erro ao guardar ("+(e.code||"?")+"). Tente de novo."); });
   return saveChain;
 }
@@ -553,6 +569,49 @@ function render(){ ({lista:renderLista,editor:renderEditor,tabelas:renderTabelas
 function refreshView(){ if(S.view==="editor") { refreshCalc(); } else if(S.view==="tabelas"&&!S.pDirty) renderTabelas(); else if(S.view==="lista") renderLista(); }
 
 /* ============================== LISTA ============================== */
+/* ---- Preços bloqueados e pedidos de autorização (2026-10-24) ---- */
+function pctTxt(v){ return fmt(num(v)*100,num(v)*100%1?1:0)+"%"; }
+function autHTML(q){
+  const p=q.pedidoAut; let h="";
+  if(p&&p.estado==="pendente"){
+    const o=[p.margem!==null&&p.margem!==undefined?`margem <b>${pctTxt(p.margem)}</b>`:"",p.desconto!==null&&p.desconto!==undefined?`desconto <b>${fmt(num(p.desconto),num(p.desconto)%1?1:0)}%</b>`:""].filter(Boolean).join(" e ");
+    h+=`<div class="aut pend"><div><b>Autorização pendente</b> — ${esc(p.porNome||"")} pede ${o}${p.motivo?`<div class="hint">“${esc(p.motivo)}”</div>`:""}</div>
+      ${S.admin?`<div class="row"><button class="btn sm pri" data-aut="1">Autorizar</button><button class="btn sm" data-aut="0">Recusar</button></div>`:`<div class="hint">A aguardar o administrador.</div>`}</div>`;
+  } else if(p&&p.estado){
+    h+=`<div class="aut ${p.estado==="aprovado"?"ok":"no"}">${p.estado==="aprovado"?"✅ Autorizado":"❌ Não autorizado"} por ${esc(p.decididoPor||"administrador")}${p.decididoEm?" em "+dataPT(String(p.decididoEm).slice(0,10)):""}</div>`;
+  }
+  if(!S.admin){
+    h+=`<div class="hint" style="margin-top:8px">🔒 Os preços, a margem e o desconto só o administrador altera.</div>
+      ${p&&p.estado==="pendente"?"":`<button class="btn sm" id="bPedir" style="margin-top:8px;width:100%;justify-content:center">Pedir autorização de preço</button>`}
+      <div id="pedirBox" hidden class="pedir">
+        <div class="grid g2"><label class="f"><span>Margem pretendida %</span><input class="i num" inputmode="decimal" id="pM" placeholder="${esc(fmt(num(q.margem)*100,1))}"></label>
+        <label class="f"><span>Desconto pretendido %</span><input class="i num" inputmode="decimal" id="pD" placeholder="${esc(String(q.desconto||0))}"></label></div>
+        <label class="f"><span>Motivo</span><input class="i" id="pMot" placeholder="Ex.: cliente com volume, concorrência…"></label>
+        <div class="row" style="margin-top:6px"><button class="btn sm pri" id="pEnviar">Enviar pedido</button><button class="btn sm ghost" id="pCancel">Cancelar</button></div></div>`;
+  }
+  return h;
+}
+function bindAut(q){
+  const bp=$("#bPedir"), box=$("#pedirBox");
+  if(bp) bp.onclick=()=>{ box.hidden=false; bp.hidden=true; $("#pM").focus(); };
+  const pc=$("#pCancel"); if(pc) pc.onclick=()=>{ box.hidden=true; if(bp) bp.hidden=false; };
+  const pe=$("#pEnviar"); if(pe) pe.onclick=async()=>{
+    const m=$("#pM").value.trim(), d=$("#pD").value.trim();
+    if(!m&&!d){ toast("Indique a margem e/ou o desconto que pretende."); return; }
+    pe.disabled=true;
+    try{ if(S.dirty) await saveQuote();
+      const r=await api("POST","/"+encodeURIComponent(q.id)+"/autorizacao",{margem:m?num(m)/100:null,desconto:d?num(d):null,motivo:$("#pMot").value});
+      q.pedidoAut=r.pedidoAut; toast("Pedido enviado ao administrador"); renderEditor(); }
+    catch(e){ toast("Não foi possível enviar ("+(e.code||"?")+")"); pe.disabled=false; } };
+  $$("[data-aut]").forEach(b=>b.onclick=async()=>{
+    const aprovar=b.dataset.aut==="1"; b.disabled=true;
+    try{ if(S.dirty) await saveQuote();
+      const r=await api("POST","/"+encodeURIComponent(q.id)+"/autorizacao/decisao",{aprovar});
+      q.margem=r.margem; q.desconto=r.desconto; q.pedidoAut=r.pedidoAut;
+      const i=S.quotes.findIndex(x=>x.id===q.id); if(i>=0) S.quotes[i]=clone(q);
+      toast(aprovar?"Autorizado — margem/desconto aplicados":"Pedido recusado"); renderEditor(); }
+    catch(e){ toast("Não foi possível decidir ("+(e.code||"?")+")"); b.disabled=false; } });
+}
 function renderLista(){
   const el=$("#v-lista"); const qs=S.quotes;
   const resumo=ESTADOS.map(e=>{ const l=qs.filter(q=>q.estado===e); return {e,n:l.length,t:l.reduce((s,q)=>s+num(q.totais&&q.totais.base),0)}; });
@@ -565,7 +624,7 @@ function renderLista(){
   <div class="sumrow">${resumo.map(r=>`<button class="sumcard" data-f="${esc(r.e)}" aria-pressed="${S.filtro===r.e}"><span class="pill ${ESTCLS[r.e]}">${r.e}</span><span class="v">${eur(r.t)}</span><span class="c">${r.n} orçamento${r.n===1?"":"s"} · s/ IVA</span></button>`).join("")}</div>
   <div class="filters"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}">${S.filtro?`<button class="btn ghost" id="clrF">Mostrar todos os estados</button>`:""}</div>
   ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Obra / ref.</th><th>Tipo</th><th class="r">Total s/ IVA</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
+  ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="pill autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
    <td><span class="tag ${q.tipo==="chapas"?"ch":""}">${q.tipo==="chapas"?"Chapas":"Painéis"}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
    <td><select class="i" data-est="${q.id}" aria-label="Estado" style="width:auto;padding:4px 6px">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
    <td class="r" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar">${ico("trash")}</button></span></td></tr>`).join("")}
@@ -642,8 +701,9 @@ function renderEditor(){
   </div>
   <aside class="aside"><div class="panel sum" id="sumBox"></div>
     <div class="panel sum"><div class="grid g2">
-      <label class="f"><span>Margem %</span><input class="i num" inputmode="decimal" id="qMargem" value="${esc(fmt(num(q.margem)*100,num(q.margem)*100%1?1:0))}"></label>
-      <label class="f"><span>Desconto ao cliente %</span><input class="i num" inputmode="decimal" data-q="desconto" value="${esc(q.desconto)}"></label></div></div>
+      <label class="f"><span>Margem %${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" id="qMargem" value="${esc(fmt(num(q.margem)*100,num(q.margem)*100%1?1:0))}" ${S.admin?"":"disabled"}></label>
+      <label class="f"><span>Desconto ao cliente %${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" data-q="desconto" value="${esc(q.desconto)}" ${S.admin?"":"disabled"}></label></div>
+      ${autHTML(q)}</div>
     <div class="actions">${ch?`<button class="btn pri" id="bFolha" style="justify-content:center">${ico("down")}Descarregar folha de desenho</button>
       <div class="row"><button class="btn" id="bFolhaPrev">${ico("eye")}Ver folha de desenho</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>
       <div class="row"><button class="btn" id="bPdf">${ico("down")}Orçamento PDF</button><button class="btn" id="bPrev">${ico("eye")}Ver orçamento</button></div>`
@@ -656,6 +716,7 @@ function renderEditor(){
   $("#addLine").onclick=()=>{ const last=q.linhas[q.linhas.length-1]; q.linhas.push(ch?linhaChapa(last):linhaPainel(last)); renderLines(); refreshCalc(); markDirty(); const ls=$$("#lines .line"); ls[ls.length-1].querySelector("input").focus(); };
   $("#qEstado").onchange=e=>{ q.estado=e.target.value; markDirty(); };
   $("#qMargem").oninput=e=>{ q.margem=num(e.target.value)/100; refreshCalc(); markDirty(); };
+  bindAut(q);
   $("#bSave").onclick=async()=>{ await saveQuote(); toast(S.db?"Orçamento guardado":"Sem ligação: não foi guardado"); };
   $("#bPdf").onclick=()=>descarregarPDF();
   $("#bPrev").onclick=()=>preVisualizar();
@@ -751,7 +812,7 @@ function linePainelHTML(L,i,P){
     <label class="f"><span>Pux. embutido (m)</span><input class="i num" inputmode="decimal" data-l="puxEmb" value="${esc(L.puxEmb)}" ${off("puxEmb")}></label>
     <label class="f"><span>LED (m)</span><input class="i num" inputmode="decimal" data-l="led" value="${esc(L.led)}" ${off("led")}></label>
     <label class="f"><span>Fechadura (un.)</span><input class="i num" inputmode="numeric" data-l="fechadura" value="${esc(L.fechadura)}" ${off("fechadura")}></label>
-    <label class="f"><span>Margem % (opc.)</span><input class="i num" inputmode="decimal" data-l="margem" value="${esc(L.margem)}" placeholder="geral"></label>
+    <label class="f"><span>Margem % (opc.)${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" data-l="margem" value="${esc(L.margem)}" placeholder="geral" ${S.admin?"":"disabled"}></label>
    </div><div class="out"><span>m² <b data-o="m2"></b></span><span>Peso chapas <b data-o="kg"></b></span><span>Custo un. <b data-o="custo"></b></span><span>Preço un. <b data-o="unit"></b></span><span class="tot">Total <b data-o="tot"></b></span></div></div></div>`;
 }
 
@@ -1158,6 +1219,9 @@ const TDEF={
 function getP(path){ return path.split(".").reduce((o,k)=>o[k],S.pTab); }
 function renderTabelas(){
   const el=$("#v-tabelas"); if(!S.pDirty||!S.pTab) S.pTab=clone(S.P); const P=S.pTab;
+  setTimeout(()=>{ if(S.admin) return; const v=$("#v-tabelas"); if(!v) return;
+    v.querySelectorAll("input,select,textarea,button").forEach(x=>{ x.disabled=true; });
+    const h=v.querySelector(".view-head"); if(h&&!v.querySelector(".lockmsg")) h.insertAdjacentHTML("afterend",`<div class="banner lockmsg">🔒 Só o administrador pode alterar as tabelas de preços. Se precisar de outro preço num orçamento, use “Pedir autorização de preço” no próprio orçamento.</div>`); },0);
   const sc=(path,label,suf="",hint="")=>`<label class="f"><span>${label}${suf?` (${suf})`:""}</span><input class="i num" inputmode="decimal" data-sc="${path}" value="${esc(String(getP(path)??""))}">${hint?`<span class="hint">${hint}</span>`:""}</label>`;
   const tbl=key=>{ const d=TDEF[key]; const rows=getP(key); return `<div class="panel"><header><h2>${d.t}</h2><button class="btn sm" data-addrow="${key}">${ico("plus")}Linha</button></header><div class="body" style="overflow-x:auto"><table class="et"><thead><tr>${d.cols.map(c=>`<th>${c[1]}</th>`).join("")}<th></th></tr></thead><tbody>
     ${rows.map((r,i)=>`<tr>${d.cols.map(([k,,ty])=>`<td>${ty==="b"?`<input type="checkbox" class="chk" data-tk="${key}" data-ti="${i}" data-tf="${k}" ${r[k]?"checked":""}>`:`<input class="i ${ty==="n"?"num":""}" ${ty==="n"?'inputmode="decimal"':""} data-tk="${key}" data-ti="${i}" data-tf="${k}" data-ty="${ty}" value="${esc(r[k])}">`}</td>`).join("")}<td class="x"><button class="btn sm ghost danger" data-delrow="${key}" data-ti="${i}" aria-label="Remover linha">${ico("x")}</button></td></tr>`).join("")}</tbody></table>${extraInfo(key,P)}</div></div>`; };
@@ -1222,7 +1286,7 @@ function extraInfo(key,P){
   if(key==="enchimento.tabela") return `<p class="hint" style="margin:8px 0 0">€/m² = preço × (1 + aumento) × (1 − desconto) ÷ área da placa. Ex.: 24 mm = <b class="num">${eur(enchM2(P,24))}</b>/m²</p>`;
   if(key==="alunox") return `<p class="hint" style="margin:8px 0 0">${P.alunox.map(a=>esc(alunoxLabel(a))+" → <b class='num'>"+eur(alunoxM2(P,alunoxLabel(a)))+"</b>/m²").join(" · ")}</p>`;
   return ""; }
-async function guardarTabelas(){ const P=clone(S.pTab); S.P=P; S.pDirty=false; S.pTab=null;
+async function guardarTabelas(){ if(!S.admin){ toast("Só o administrador pode alterar as tabelas de preços."); return; } const P=clone(S.pTab); S.P=P; S.pDirty=false; S.pTab=null;
   if(S.db){ try{ await S.db.doc("config/precos").set({P,atualizado:Date.now()}); toast("Tabelas guardadas"); }catch(e){ S.pDirty=true; S.pTab=clone(P); toast("Não foi possível guardar ("+e.code+")"); } } else toast("Sem ligação: tabelas não guardadas");
   renderTabelas(); }
 

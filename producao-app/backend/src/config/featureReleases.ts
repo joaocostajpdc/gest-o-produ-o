@@ -38,7 +38,11 @@ export type FeatureKey = keyof typeof FEATURES;
 // os Orçamentos são "apenas para João Costa e David Costa"). Nunca são
 // lançadas para todos: só os administradores e os utilizadores escolhidos
 // pelo administrador (testerUserIds) as veem, mesmo depois de aprovadas.
-export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set(["orcamentos"]);
+// 2026-10-24: o João pediu para abrir os Orçamentos a todos "para já"
+// (os preços continuam bloqueados — só o administrador os altera). Para
+// voltar a restringir, tirar "orcamentos" de OPEN_TO_ALL e repô-lo aqui.
+export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>();
+export const OPEN_TO_ALL: ReadonlySet<string> = new Set(["orcamentos"]);
 
 export function isFeatureKey(value: string): value is FeatureKey {
   return Object.prototype.hasOwnProperty.call(FEATURES, value);
@@ -55,6 +59,7 @@ export async function canUseFeature(
 ): Promise<boolean> {
   if (!user) return false;
   if (user.role === "ADMINISTRADOR") return true;
+  if (OPEN_TO_ALL.has(key)) return true;
   const row = await prisma.featureRelease.findUnique({ where: { key } });
   if (RESTRICTED_FEATURES.has(key)) return !!row?.testerUserIds.includes(user.id);
   return !!row?.released || !!row?.testerUserIds.includes(user.id);

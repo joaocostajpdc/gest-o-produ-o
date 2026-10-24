@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
-import { FEATURES, FeatureKey, isFeatureKey, RESTRICTED_FEATURES } from "../config/featureReleases";
+import { FEATURES, FeatureKey, isFeatureKey, OPEN_TO_ALL, RESTRICTED_FEATURES } from "../config/featureReleases";
 
 // ============================================================================
 // Estado do lançamento das funcionalidades novas (ver
@@ -20,7 +20,7 @@ type Row = Awaited<ReturnType<typeof prisma.featureRelease.findMany>>[number];
 function present(key: FeatureKey, row: Row | undefined, user: { id: string; role: string }) {
   const isAdmin = user.role === "ADMINISTRADOR";
   const restricted = RESTRICTED_FEATURES.has(key);
-  const released = !restricted && !!row?.released;
+  const released = OPEN_TO_ALL.has(key) || (!restricted && !!row?.released);
   const testers = row?.testerUserIds ?? [];
   return {
     key,

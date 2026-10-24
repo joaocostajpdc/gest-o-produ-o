@@ -2616,7 +2616,20 @@ td > .ef-tag:first-child {
 .chat-pick { position: relative; }
 .chat-pick-btn { min-height: 42px; white-space: nowrap; }
 .chat-picker { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30; width: min(380px, 80vw); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--shadow-md); padding: 8px; }
-.chat-picker input { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+.chat-picker { width: min(460px, 86vw); }
+.chat-picker input[type="search"] { width: 100%; box-sizing: border-box; margin-bottom: 6px; height: 38px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font: inherit; font-size: 14px; }
+.chat-picker input[type="search"]:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
+.chat-picker-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.chat-picker-tabs button { border: 1px solid var(--color-border); background: #fff; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--color-text-muted); cursor: pointer; }
+.chat-picker-tabs button.on { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.chat-picker-file { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; padding: 10px; border: 1.5px dashed var(--color-border); border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--color-primary); cursor: pointer; }
+.chat-picker-file:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.chat-picker-file input { display: none; }
+.chat-oscard-kind { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+button.chat-oscard { font: inherit; text-align: left; cursor: pointer; }
+.chat-img { border: 0; padding: 0; background: none; cursor: zoom-in; border-radius: 9px; overflow: hidden; display: block; }
+.chat-img img { display: block; max-width: min(320px, 60vw); max-height: 260px; border-radius: 9px; }
+.chat-img-ph { display: block; padding: 30px 40px; background: #eef0f5; color: var(--color-text-muted); font-size: 12px; border-radius: 9px; }
 .chat-picker-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; }
 .chat-picker-list button { border: 0; background: none; text-align: left; font: inherit; padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; font-size: 13px; color: var(--color-text); }
 .chat-picker-list button:hover { background: var(--color-primary-soft); }

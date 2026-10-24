@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth";
@@ -152,5 +152,39 @@ chatRouter.post(
       update: { lastReadAt: now },
     });
     res.json({ ok: true });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Ficheiros no chat (pedido de 2026-10-24: "todo o tipo de documentos").
+// O ficheiro vai em bruto no corpo do pedido; o nome vem em ?name=.
+// ---------------------------------------------------------------------------
+const CHAT_FILE_LIMIT = 20 * 1024 * 1024;
+
+chatRouter.post(
+  "/files",
+  express.raw({ type: () => true, limit: CHAT_FILE_LIMIT }),
+  asyncHandler(async (req, res) => {
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || !body.length) return res.status(400).json({ error: "Ficheiro vazio." });
+    const name = String(req.query.name || "ficheiro").slice(0, 200);
+    const mimeType = String(req.query.type || req.headers["content-type"] || "application/octet-stream").slice(0, 120);
+    const f = await prisma.chatFile.create({
+      data: { name, mimeType, size: body.length, data: body, userId: req.user!.id },
+      select: { id: true, name: true, mimeType: true, size: true },
+    });
+    res.status(201).json(f);
+  })
+);
+
+chatRouter.get(
+  "/files/:id",
+  asyncHandler(async (req, res) => {
+    const f = await prisma.chatFile.findUnique({ where: { id: req.params.id } });
+    if (!f) return res.status(404).json({ error: "Ficheiro não encontrado." });
+    res.setHeader("Content-Type", f.mimeType);
+    res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(Buffer.from(f.data));
   })
 );

@@ -757,3 +757,16 @@ model ChatRead {
   @@id([userId, channel])
   @@map("chat_reads")
 }
+
+// Ficheiros enviados no chat (PDF, fotografias, Excel, …) — 2026-10-24.
+model ChatFile {
+  id        String   @id @default(cuid())
+  name      String
+  mimeType  String
+  size      Int
+  data      Bytes
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@map("chat_files")
+}

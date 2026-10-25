@@ -43,7 +43,8 @@ export type FeatureKey = keyof typeof FEATURES;
 // 2026-10-24: o João pediu para abrir os Orçamentos a todos "para já"
 // (os preços continuam bloqueados — só o administrador os altera). Para
 // voltar a restringir, tirar "orcamentos" de OPEN_TO_ALL e repô-lo aqui.
-// Financeiro (2026-10-24): "apenas eu" — só o administrador, nunca para todos.
+// Financeiro (2026-10-24): "apenas eu" — nunca para todos. 2026-10-25: aberto
+// também à Alice Sousa (escolhida em testerUserIds).
 export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro"]);
 export const OPEN_TO_ALL: ReadonlySet<string> = new Set(["orcamentos"]);
 

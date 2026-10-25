@@ -180,11 +180,11 @@ export function HomePage() {
     });
   }
 
-  if (financeiro.available && user?.role === "ADMINISTRADOR") {
+  if (financeiro.available) {
     areas.push({
       key: "financeiro",
       title: "Financeiro",
-      desc: "Só para o administrador",
+      desc: "Acesso restrito",
       icon: areaIcons.financeiro,
       color: "#0f766e",
       soft: "#e0f2f1",
@@ -194,7 +194,7 @@ export function HomePage() {
           title: "Cheques passados",
           sub: "O que vai sair do banco e quando",
           icon: areaIcons.financeiro,
-          badge: <span className="home-lock" title="Só tu vês">{icons.lock} Só tu</span>,
+          badge: <span className="home-lock" title="Acesso restrito">{icons.lock} Restrito</span>,
         },
       ],
     });

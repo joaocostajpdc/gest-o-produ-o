@@ -402,7 +402,7 @@ export function Layout() {
             </>
           )}
 
-          {financeiro.available && user?.role === "ADMINISTRADOR" && (
+          {financeiro.available && (
             <>
               <div className="section-label">Financeiro</div>
               <NavLink to="/financeiro">

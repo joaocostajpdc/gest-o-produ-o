@@ -7,16 +7,13 @@ import { asyncHandler } from "../utils/asyncHandler";
 
 // ============================================================================
 // Financeiro — Cheques passados (pedido de 2026-10-24, "apenas eu").
-// Além da funcionalidade restrita, exige mesmo o perfil de administrador.
+// Funcionalidade restrita: só o administrador e as pessoas que ele escolher
+// (testerUserIds). 2026-10-25: o João abriu os cheques também à Alice Sousa.
 // ============================================================================
 
 export const financeiroRouter = Router();
 financeiroRouter.use(requireAuth);
 financeiroRouter.use(requireFeature("financeiro"));
-financeiroRouter.use((req, res, next) => {
-  if (req.user?.role === "ADMINISTRADOR") return next();
-  res.status(404).json({ error: "Funcionalidade ainda não disponível." });
-});
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.");
 const toDate = (v: string) => new Date(`${v}T00:00:00Z`);

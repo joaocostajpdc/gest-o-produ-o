@@ -10,7 +10,7 @@ import { Kpi, formatDay, todayIso } from "../components/EquipaFrota";
 // uma parte para o financeiro já, apenas eu" → "cheques passados").
 // Regista os cheques que a empresa passa (a quem, banco, valor e data do
 // cheque) e mostra o que vai sair do banco por semana e por mês.
-// Só o administrador vê esta parte.
+// Só o administrador e quem ele escolher veem esta parte (Alice, 2026-10-25).
 // ============================================================================
 
 type Estado = "POR_DESCONTAR" | "DESCONTADO" | "ANULADO";
@@ -87,8 +87,8 @@ export function FinanceiroPage() {
   const [banco, setBanco] = useState("");
   const [q, setQ] = useState("");
 
-  const isAdmin = user?.role === "ADMINISTRADOR";
-  const allowed = feature.available && isAdmin;
+  // Restrito: administrador e quem ele escolher (a Alice, desde 2026-10-25).
+  const allowed = feature.available;
   const hoje = todayIso();
 
   async function load() {
@@ -167,6 +167,7 @@ export function FinanceiroPage() {
   }, [list]);
 
   if (feature.loading) return <div className="muted">A carregar...</div>;
+  if (feature.loading) return null;
   if (!allowed) return <Navigate to="/" replace />;
 
   async function submit(e: FormEvent) {

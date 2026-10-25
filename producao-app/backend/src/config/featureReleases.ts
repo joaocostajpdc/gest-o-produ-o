@@ -31,6 +31,7 @@ export const FEATURES = {
   financeiro: "Financeiro",
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",
+  abas: "Abas (várias páginas abertas) e Início só com ícones",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

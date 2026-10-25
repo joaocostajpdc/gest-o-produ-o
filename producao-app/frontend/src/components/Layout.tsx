@@ -4,6 +4,8 @@ import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContex
 import { useFeature } from "../contexts/FeaturesContext";
 import { api } from "../api/client";
 import { FeatureTestBanner } from "./FeatureTestBanner";
+import { TabsProvider } from "../contexts/TabsContext";
+import { TabPanes, TabStrip } from "./TabStrip";
 import logoMark from "../assets/logo-mark.png";
 import {
   IconBox,
@@ -246,6 +248,9 @@ export function Layout() {
   // utilizador de 2026-10-20 ("esta barra só quero que apareça quando passo
   // o rato"). Em teste só para o administrador; só em ecrã de computador.
   const menuHover = useFeature("menuHover");
+  // Abas como no browser + Início só com os ícones das áreas (2026-10-25).
+  // Em teste só para o administrador até ser aprovado.
+  const abas = useFeature("abas");
   const appName = inicio.available ? "Central Minho Ferragens" : "Gestão de Produção";
   // Em telemóvel/tablet o menu lateral fica escondido por omissão (vira uma
   // gaveta deslizante aberta pela barra superior); em ecrã de computador o
@@ -268,14 +273,16 @@ export function Layout() {
     );
   }
 
+  const isHome = inicio.available && location.pathname === "/";
+
   // Ecrã inicial: sem menu lateral nem barra do telemóvel; o menu só aparece
   // depois de entrar numa área (pedido do utilizador de 2026-10-20).
-  if (inicio.available && location.pathname === "/") {
+  if (isHome && !abas.available) {
     return <Outlet />;
   }
 
-  return (
-    <div className={`app-shell${menuHover.available ? " sb-hover" : ""}`}>
+  const sidebarParts = (
+    <>
       <header className="mobile-topbar">
         <button
           className="mobile-menu-btn"
@@ -449,10 +456,37 @@ export function Layout() {
           </button>
         </div>
       </aside>
+    </>
+  );
+
+  const menuHoverBanner = menuHover.available && !menuHover.released && location.pathname === "/ordens-servico" && (
+    <FeatureTestBanner featureKey="menuHover" label="o menu lateral que abre ao passar o rato" />
+  );
+
+  // Com abas: barra de abas em cima e, por baixo, todas as abas abertas
+  // (cada uma com a sua página). O Início continua sem menu lateral.
+  if (abas.available) {
+    return (
+      <TabsProvider>
+        <div className="tabs-mode">
+          <TabStrip />
+          <div className={`app-shell${menuHover.available ? " sb-hover" : ""}${isHome ? " tabs-home" : ""}`}>
+            {!isHome && sidebarParts}
+            <main className={isHome ? "tabs-home-main" : "main-content"}>
+              {!isHome && menuHoverBanner}
+              <TabPanes />
+            </main>
+          </div>
+        </div>
+      </TabsProvider>
+    );
+  }
+
+  return (
+    <div className={`app-shell${menuHover.available ? " sb-hover" : ""}`}>
+      {sidebarParts}
       <main className="main-content">
-        {menuHover.available && !menuHover.released && location.pathname === "/ordens-servico" && (
-          <FeatureTestBanner featureKey="menuHover" label="o menu lateral que abre ao passar o rato" />
-        )}
+        {menuHoverBanner}
         <Outlet />
       </main>
     </div>

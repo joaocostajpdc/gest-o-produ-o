@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useTabs } from "../contexts/TabsContext";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "../components/FeatureTestBanner";
@@ -40,6 +41,8 @@ const icons = {
   carrinha: <svg {...S}><path d="M2 17V7a1 1 0 0 1 1-1h11v11" /><path d="M14 9h4l4 4v4h-2" /><circle cx="7" cy="17.5" r="2" /><circle cx="17" cy="17.5" r="2" /><path d="M9 17.5h6" /></svg>,
   lock: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>,
   arrow: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>,
+  back: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" /></svg>,
+  newTab: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="7" width="14" height="14" rx="2" /><path d="M10 3h11v11M21 3l-8 8" /></svg>,
   logout: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" /></svg>,
 };
 
@@ -82,10 +85,21 @@ const areaIcons = {
   compras: <svg {...S}><path d="M3 4h2l2.5 11h11L21 7H7" /><circle cx="9" cy="19.5" r="1.5" /><circle cx="17" cy="19.5" r="1.5" /></svg>,
   equipa: <svg {...S}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14a5 5 0 0 1 6 5" /></svg>,
   financeiro: <svg {...S}><rect x="2.5" y="6" width="19" height="13" rx="2" /><path d="M2.5 10h19M6.5 15h4" /></svg>,
+  config: <svg {...S}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>,
   orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
 };
 
 export const CENTRAL_UI_KEY = "central_ui";
+
+const configSubs: Record<string, string> = {
+  "/products": "Produtos e medidas",
+  "/stages": "Etapas da produção",
+  "/production-lines": "Linhas e sequência de etapas",
+  "/suppliers": "Fornecedores e lacagens",
+  "/users": "Quem entra e o que vê",
+  "/avisos-telegram": "Avisos por Telegram",
+  "/emails-automaticos": "Avisos semanais em PDF",
+};
 
 export function HomePage() {
   const { user, logout } = useAuth();
@@ -98,6 +112,9 @@ export function HomePage() {
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
   const financeiro = useFeature("financeiro");
+  const abas = useFeature("abas");
+  const tabs = useTabs();
+  const [params, setParams] = useSearchParams();
 
   const areas: Area[] = [
     {
@@ -193,7 +210,7 @@ export function HomePage() {
     );
   }
   if (canManageUsers(user?.role)) {
-    config.push({ to: "/users", label: "Utilizadores e Permissões" }, { to: "/avisos-telegram", label: "Avisos Telegram" });
+    config.push({ to: "/users", label: "Utilizadores e Permissões" }, { to: "/avisos-telegram", label: "Avisos Telegram" }, { to: "/emails-automaticos", label: "Avisos Semanais" });
   }
 
   const firstName = user?.name?.split(" ")[0];
@@ -207,6 +224,114 @@ export function HomePage() {
       /* sem armazenamento: não faz mal */
     }
   }, []);
+
+  // Novo Início só com os ícones das áreas (2026-10-25), junto com as abas.
+  if (abas.available) {
+    const allAreas: Area[] = [...areas];
+    if (config.length > 0) {
+      allAreas.push({
+        key: "config",
+        title: "Configuração",
+        desc: "Produtos, etapas, utilizadores e avisos",
+        icon: areaIcons.config,
+        color: "#475467",
+        soft: "#eef0f4",
+        tiles: config.map((c) => ({ to: c.to, title: c.label, sub: configSubs[c.to] ?? "", icon: areaIcons.config })),
+      });
+    }
+    const openKey = params.get("area");
+    const open = allAreas.find((a) => a.key === openKey);
+    return (
+      <div className="home home-tabs">
+        <div className="home-band">
+          <section className="home-hero home-hero-compact">
+            {open ? (
+              <>
+                <button type="button" className="home-back" onClick={() => setParams({})}>
+                  {icons.back} Início
+                </button>
+                <h1>{open.title}</h1>
+                <p className="home-company">{open.desc}</p>
+              </>
+            ) : (
+              <>
+                <p className="home-date">{today()}</p>
+                <h1>
+                  {greeting()}
+                  {firstName ? `, ${firstName}` : ""}
+                </h1>
+                <p className="home-company">Escolhe a área em que vais trabalhar.</p>
+              </>
+            )}
+          </section>
+        </div>
+
+        <div className="home-body">
+          {!abas.released && !open && (
+            <div style={{ marginBottom: 24 }}>
+              <FeatureTestBanner featureKey="abas" label="o Início só com ícones e as abas" />
+            </div>
+          )}
+
+          {!open && (
+            <div className="home-icons">
+              {allAreas.map((area) => (
+                <button
+                  key={area.key}
+                  type="button"
+                  className="home-icon-tile"
+                  style={{ ["--accent" as string]: area.color, ["--accent-soft" as string]: area.soft }}
+                  onClick={() => setParams({ area: area.key })}
+                >
+                  <span className="home-icon-big">{area.icon}</span>
+                  <span className="home-icon-title">{area.title}</span>
+                  <span className="home-icon-sub">{area.desc}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {open && (
+            <div
+              className="home-icons"
+              style={{ ["--accent" as string]: open.color, ["--accent-soft" as string]: open.soft }}
+            >
+              {open.tiles.map((t) => (
+                <div key={t.to} className="home-icon-tile-wrap">
+                  <Link to={t.to} className="home-icon-tile">
+                    <span className="home-icon-big">{t.icon}</span>
+                    <span className="home-icon-title">
+                      {t.title}
+                      {t.badge}
+                    </span>
+                    {t.sub && <span className="home-icon-sub">{t.sub}</span>}
+                  </Link>
+                  {tabs && (
+                    <button
+                      type="button"
+                      className="home-newtab"
+                      title="Abrir numa aba nova"
+                      aria-label={`Abrir ${t.title} numa aba nova`}
+                      onClick={() => tabs.openTab(t.to)}
+                    >
+                      {icons.newTab}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="home-tip">
+            Dica: <kbd>Ctrl</kbd> + clique (ou o botão do meio do rato) abre numa aba nova, sem sair desta. O <strong>+</strong> lá
+            em cima abre uma aba nova no Início.
+          </p>
+
+          <footer className="home-foot">Central Minho Ferragens · JPDC - Mynhoferragens, Lda.</footer>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="home">

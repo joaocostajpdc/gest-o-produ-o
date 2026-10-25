@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useTabTitle } from "../contexts/TabsContext";
 import { api, downloadBlob } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
 import { GlassOrdersPanel } from "../components/GlassOrdersPanel";
@@ -123,6 +124,8 @@ export function ServiceOrderDetailPage() {
   const [deadlineReason, setDeadlineReason] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [downloadingLabel, setDownloadingLabel] = useState<"barcode" | "product" | "mosquiteira" | null>(null);
+  // Nome da aba (abas da Central, 2026-10-25): "OS <número>".
+  useTabTitle(order ? `OS ${order.externalId ?? ""}`.trim() : undefined);
 
   async function downloadTravelerPdf() {
     if (!id) return;

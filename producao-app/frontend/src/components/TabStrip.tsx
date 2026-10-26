@@ -39,6 +39,7 @@ const tabIcons = {
   clock: <svg {...P}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
   van: <svg {...P}><path d="M2 17V7a1 1 0 0 1 1-1h11v11" /><path d="M14 9h4l4 4v4h-2" /><circle cx="7" cy="17.5" r="2" /><circle cx="17" cy="17.5" r="2" /></svg>,
   chat: <svg {...P}><path d="M21 12a8 8 0 0 1-11.7 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /></svg>,
+  chart: <svg {...P}><path d="M3 3v18h18" /><path d="M7 15v2M11 11v6M15 8v9M19 5v12" /></svg>,
   wallet: <svg {...P}><rect x="2.5" y="6" width="19" height="13" rx="2" /><path d="M2.5 10h19" /></svg>,
   gear: <svg {...P}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></svg>,
 };
@@ -69,7 +70,8 @@ const PAGES: { prefix: string; title: string; icon: ReactNode }[] = [
   { prefix: "/controlo-horas", title: "Controlo de Horas", icon: tabIcons.clock },
   { prefix: "/km-carrinhas", title: "Km das Carrinhas", icon: tabIcons.van },
   { prefix: "/chat", title: "Chat", icon: tabIcons.chat },
-  { prefix: "/financeiro", title: "Cheques passados", icon: tabIcons.wallet },
+  { prefix: "/financeiro", title: "Financeiro", icon: tabIcons.wallet },
+  { prefix: "/relatorios", title: "Relatório de Produção", icon: tabIcons.chart },
   { prefix: "/products", title: "Produtos", icon: tabIcons.gear },
   { prefix: "/stages", title: "Etapas", icon: tabIcons.gear },
   { prefix: "/production-lines", title: "Linhas de Produção", icon: tabIcons.gear },

@@ -10,7 +10,7 @@ import { useAuth } from "../contexts/AuthContext";
 // quem recebe, o dia e a hora. Ver backend/src/services/emailReportsService.ts.
 // ============================================================================
 
-type ReportKey = "osSemana" | "lacagemSemana";
+type ReportKey = "osSemana" | "lacagemSemana" | "producaoSemana" | "producaoMes";
 type Canal = "email" | "telegram" | "ambos";
 interface ReportCfg {
   canal: Canal;
@@ -48,7 +48,7 @@ export function EmailsPage() {
   const { user } = useAuth();
   const [d, setD] = useState<Data | null>(null);
   const [pass, setPass] = useState("");
-  const [toText, setToText] = useState<Record<ReportKey, string>>({ osSemana: "", lacagemSemana: "" });
+  const [toText, setToText] = useState<Record<string, string>>({});
   const [testTo, setTestTo] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -56,7 +56,7 @@ export function EmailsPage() {
 
   function load(data: Data) {
     setD(data);
-    setToText({ osSemana: data.reports.osSemana.to.join(", "), lacagemSemana: data.reports.lacagemSemana.to.join(", ") });
+    setToText(Object.fromEntries(Object.entries(data.reports).map(([k, v]) => [k, (v as { to: string[] }).to.join(", ")])));
     setPass("");
   }
 
@@ -91,7 +91,7 @@ export function EmailsPage() {
   async function save() {
     const body = {
       smtp: { ...d!.smtp, pass },
-      reports: Object.fromEntries(keys.map((k) => [k, { ...d!.reports[k], to: parseTo(toText[k]) }])),
+      reports: Object.fromEntries(keys.map((k) => [k, { ...d!.reports[k], to: parseTo(toText[k] ?? "") }])),
     };
     const out = await api.put<Data>("/email-reports", body);
     load(out);
@@ -228,11 +228,14 @@ export function EmailsPage() {
                     ))}
                   </div>
                 ) : (
-                  <input value={toText[k]} onChange={(e) => setToText({ ...toText, [k]: e.target.value })} placeholder="producao@minhoferragens.pt" />
+                  <input value={toText[k] ?? ""} onChange={(e) => setToText({ ...toText, [k]: e.target.value })} placeholder="producao@minhoferragens.pt" />
                 )}
               </div>
               <div className="field">
                 <label>Dia</label>
+                {k === "producaoMes" ? (
+                  <p style={{ margin: "8px 0 0" }}>Dia 1 de cada mês</p>
+                ) : (
                 <select value={r.weekday} onChange={(e) => setRep(k, { weekday: Number(e.target.value) })}>
                   {WEEKDAYS.map((w, i) => (
                     <option key={w} value={i + 1}>
@@ -240,6 +243,7 @@ export function EmailsPage() {
                     </option>
                   ))}
                 </select>
+                )}
               </div>
               <div className="field">
                 <label>Hora</label>

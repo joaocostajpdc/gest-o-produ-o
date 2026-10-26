@@ -22,6 +22,7 @@ import { HomePage } from "./pages/HomePage";
 import { HorasPage } from "./pages/HorasPage";
 import { KmPage } from "./pages/KmPage";
 import { FinanceiroPage } from "./pages/FinanceiroPage";
+import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { ChatPage } from "./pages/ChatPage";
 
 // ============================================================================
@@ -57,6 +58,7 @@ export const protectedRoutes = (
     <Route path="/km-carrinhas" element={<KmPage />} />
     <Route path="/chat" element={<ChatPage />} />
     <Route path="/financeiro" element={<FinanceiroPage />} />
+    <Route path="/relatorios" element={<RelatoriosPage />} />
     <Route path="/reports" element={<PrintableListPage />} />
     <Route path="/products" element={<ProductsPage />} />
     <Route path="/stages" element={<StagesPage />} />

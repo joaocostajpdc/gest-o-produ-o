@@ -22,6 +22,7 @@ import { orcamentosRouter } from "./routes/orcamentos";
 import { emailReportsRouter } from "./routes/emailReports";
 import { prisma } from "./config/prisma";
 import { financeiroRouter } from "./routes/financeiro";
+import { relatoriosRouter } from "./routes/relatorios";
 import { colaboradoresRouter, horasRouter, viaturasRouter } from "./routes/equipaFrota";
 import { chatRouter } from "./routes/chat";
 
@@ -69,6 +70,7 @@ export function createApp() {
   app.use("/api/viaturas", viaturasRouter);
   app.use("/api/chat", chatRouter);
   app.use("/api/financeiro", financeiroRouter);
+  app.use("/api/relatorios", relatoriosRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

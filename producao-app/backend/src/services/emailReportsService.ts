@@ -3,7 +3,9 @@ import { z } from "zod";
 import { prisma } from "../config/prisma";
 import { PUBLIC_APP_URL } from "../config/publicUrl";
 import { getTelegramSettings, sendTelegramDocument } from "./telegramService";
-import { ReportSection, renderReportPdf } from "./weeklyReportPdf";
+import { ReportKpi, ReportSection, renderReportPdf } from "./weeklyReportPdf";
+import { buildProductionReport, previousMonth, previousWeek } from "./productionReportService";
+import { reportCaption, reportHtml, reportKpis, reportSections } from "./productionReportPdf";
 
 // ============================================================================
 // Emails automáticos semanais (pedido do utilizador de 2026-10-20: "quero que
@@ -28,6 +30,10 @@ const TZ = "Europe/Lisbon";
 export const REPORTS = {
   osSemana: "Ordens de Serviço a terminar esta semana",
   lacagemSemana: "Material que as lacagens têm de entregar esta semana",
+  // Relatório de produção (2026-10-26): o semanal cobre a semana anterior
+  // (segunda a domingo); o mensal sai no dia 1 com o mês anterior.
+  producaoSemana: "Relatório de produção — semana anterior",
+  producaoMes: "Relatório de produção — mês anterior (sai no dia 1)",
 } as const;
 export type ReportKey = keyof typeof REPORTS;
 export function isReportKey(k: string): k is ReportKey {
@@ -63,6 +69,8 @@ export const emailSettingsSchema = z.object({
     .object({
       osSemana: reportSchema.default({}),
       lacagemSemana: reportSchema.default({}),
+      producaoSemana: reportSchema.default({}),
+      producaoMes: reportSchema.default({}),
     })
     .default({}),
 });
@@ -158,7 +166,40 @@ const osLink = (o: { id: string; externalId: string }) =>
 const OPEN = ["NAO_INICIADA", "EM_PRODUCAO", "SUSPENSA"] as const;
 const STATUS_PT: Record<string, string> = { NAO_INICIADA: "Não iniciada", EM_PRODUCAO: "Em produção", SUSPENSA: "Suspensa" };
 
-export async function buildReport(key: ReportKey, now = new Date()) {
+export async function buildReport(
+  key: ReportKey,
+  now = new Date()
+): Promise<{
+  tg: string;
+  caption: string;
+  title: string;
+  semana: string;
+  sections: ReportSection[];
+  file: string;
+  subject: string;
+  html: string;
+  count: number;
+  kpis?: ReportKpi[];
+  kind?: string;
+}> {
+  if (key === "producaoSemana" || key === "producaoMes") {
+    const p = key === "producaoSemana" ? previousWeek(now) : previousMonth(now);
+    const r = await buildProductionReport(p.from, p.to, now);
+    const caption = reportCaption(r);
+    return {
+      tg: caption,
+      caption,
+      title: "Relatório de produção",
+      semana: r.label,
+      sections: reportSections(r),
+      kpis: reportKpis(r),
+      kind: key === "producaoSemana" ? "Central · relatório semanal" : "Central · relatório mensal",
+      file: `relatorio-producao-${p.from}-a-${p.to}.pdf`,
+      subject: `Relatório de produção — ${r.label}`,
+      html: reportHtml(r),
+      count: r.numeros.concluidas,
+    };
+  }
   const { monday, sunday } = currentWeek(now);
   const semana = `Semana de ${fmtPT(monday)} a ${fmtPT(sunday)}`;
 
@@ -370,7 +411,7 @@ async function sendToTelegram(pdf: Buffer, filename: string, caption: string, on
 
 export async function buildReportPdf(key: ReportKey, now = new Date()) {
   const r = await buildReport(key, now);
-  const pdf = await renderReportPdf({ title: r.title, subtitle: r.semana, sections: r.sections, link: PUBLIC_APP_URL });
+  const pdf = await renderReportPdf({ title: r.title, subtitle: r.semana, sections: r.sections, link: PUBLIC_APP_URL, kpis: r.kpis, kind: r.kind });
   return { r, pdf };
 }
 
@@ -404,16 +445,22 @@ export async function runDueReports(now = new Date()) {
     const s = await getEmailSettings();
     const log = await getLog();
     const { monday } = currentWeek(now);
-    const { weekday, hour } = lisbonParts(now);
+    const { weekday, hour, date } = lisbonParts(now);
     for (const key of Object.keys(REPORTS) as ReportKey[]) {
       const cfg = s.reports[key];
       if (!cfg.enabled || (cfg.canal !== "telegram" && !cfg.to.length)) continue;
-      if (log[key]?.week === monday) continue; // já enviado esta semana
-      const due = weekday > cfg.weekday || (weekday === cfg.weekday && hour >= cfg.hour);
+      // O mensal conta por mês (sai no dia 1 à hora marcada, ou assim que o
+      // servidor acordar depois disso); os outros contam por semana.
+      const periodo = key === "producaoMes" ? date.slice(0, 7) : monday;
+      if (log[key]?.week === periodo) continue; // já enviado neste período
+      const due =
+        key === "producaoMes"
+          ? Number(date.slice(8)) > 1 || hour >= cfg.hour
+          : weekday > cfg.weekday || (weekday === cfg.weekday && hour >= cfg.hour);
       if (!due) continue;
       try {
         const r = await sendReport(key, { now });
-        await writeLog(key, { week: monday, at: now.toISOString(), ok: true, info: `${r.count} linha(s)` });
+        await writeLog(key, { week: periodo, at: now.toISOString(), ok: true, info: `${r.count} linha(s)` });
         // eslint-disable-next-line no-console
         console.log(`[emails] enviado ${key} (${r.count})`);
       } catch (err) {

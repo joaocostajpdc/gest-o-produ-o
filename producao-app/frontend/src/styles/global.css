@@ -3007,3 +3007,49 @@ tr.fin-row-empty td { color: #98a2b3; }
   .fcal-item { font-size: 13px; padding: 4px 7px; }
   .fcal-nav h3 { min-width: 0; font-size: 16px; }
 }
+
+/* ===== Relatório de produção (2026-10-26) ===== */
+.rel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.rel-periodo { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 16px; }
+.rel-datas { display: inline-flex; gap: 6px; align-items: center; margin-left: 4px; }
+.rel-datas input { height: 34px; padding: 0 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font: inherit; font-size: 13px; }
+.rel-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.rel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.rel-grid > .card { margin: 0; }
+.rel-wide { grid-column: 1 / -1; }
+.rel-card { padding: 16px 18px; }
+.rel-card h3 { margin: 0 0 6px; font-size: 15px; }
+.rel-legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--color-text-muted); margin-bottom: 10px; }
+.rel-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.rel-legend .e::before { background: #93c5fd; }
+.rel-legend .c::before { background: #16a34a; }
+.rel-bars { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; height: 200px; padding-top: 18px; box-sizing: border-box; align-items: end; border-bottom: 1px solid var(--color-border); padding-bottom: 2px; }
+.rel-bar { display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+.rel-bar-stack { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.rel-bar-stack span { flex: 1; max-width: 18px; border-radius: 3px 3px 0 0; position: relative; min-height: 0; }
+.rel-bar-stack .e { background: #93c5fd; }
+.rel-bar-stack .c { background: #16a34a; }
+.rel-bar-stack em { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--color-text); }
+.rel-bar small { font-size: 10.5px; color: var(--color-text-muted); margin-top: 3px; position: relative; top: 16px; height: 0; }
+.rel-bars + * { margin-top: 18px; }
+.rel-card .rel-bars { margin-bottom: 18px; }
+.rel-ok { color: #047857; font-weight: 600; }
+.rel-ko { color: #b42318; font-weight: 600; }
+.rel-inline-bar { display: inline-block; width: 60px; height: 6px; background: #f2f4f7; border-radius: 3px; margin-right: 8px; vertical-align: middle; overflow: hidden; }
+.rel-inline-bar i { display: block; height: 100%; background: #f79009; border-radius: 3px; }
+.rel-link { border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--color-primary); cursor: pointer; text-align: left; }
+.rel-ev { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f2f4f7; color: #344054; white-space: nowrap; }
+.rel-ev-saida_etapa { background: #e3f5ee; color: #047857; }
+.rel-ev-entrada_etapa { background: #e0f2fe; color: #0369a1; }
+.rel-ev-inicio_interrupcao { background: #fde2e1; color: #b42318; }
+.rel-ev-fim_interrupcao { background: #fff4e5; color: #b54708; }
+.rel-ev-observacao_registada { background: #f4ebff; color: #6941c6; }
+.rel-ev-criacao { background: #eef2ff; color: #3538cd; }
+.rel-outras { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.rel-out { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; text-decoration: none; color: inherit; margin: 0; }
+.rel-out:hover { border-color: var(--color-primary); }
+.rel-out span { font-size: 12.5px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.rel-out strong { font-size: 16px; }
+.rel-out small { color: var(--color-text-muted); font-size: 12.5px; }
+.rel-foot { font-size: 13px; margin-top: 18px; }
+@media (max-width: 900px) { .rel-grid { grid-template-columns: 1fr; } }

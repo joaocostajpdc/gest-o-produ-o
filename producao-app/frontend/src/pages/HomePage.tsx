@@ -90,6 +90,7 @@ const areaIcons = {
   equipa: <svg {...S}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14a5 5 0 0 1 6 5" /></svg>,
   financeiro: <svg {...S}><rect x="2.5" y="6" width="19" height="13" rx="2" /><path d="M2.5 10h19M6.5 15h4" /></svg>,
   config: <svg {...S}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>,
+  gestao: <svg {...S}><path d="M3 3v18h18" /><path d="M7 15v2M11 11v6M15 8v9M19 5v12" /></svg>,
   chat: <svg {...S}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" /><path d="M8.5 11h7M8.5 14.5h4.5" /></svg>,
   orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
 };
@@ -117,6 +118,7 @@ export function HomePage() {
   const horas = useFeature("horas");
   const kmViaturas = useFeature("kmViaturas");
   const financeiro = useFeature("financeiro");
+  const relatorios = useFeature("relatorios");
   const abas = useFeature("abas");
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -186,6 +188,27 @@ export function HomePage() {
           title: "Orçamentos",
           sub: "Painéis e chapas quinadas",
           icon: icons.orcamentos,
+        },
+      ],
+    });
+  }
+
+  // Gestão (2026-10-26): relatório de produção e tudo o que se passa.
+  if (relatorios.available) {
+    areas.push({
+      key: "gestao",
+      title: "Gestão",
+      desc: "Relatório da produção e de tudo o que se passa",
+      icon: areaIcons.gestao,
+      color: "#b42318",
+      soft: "#fdecea",
+      tiles: [
+        {
+          to: "/relatorios",
+          title: "Relatório de Produção",
+          sub: "Números, etapas, paragens, pessoas e atividade",
+          icon: areaIcons.gestao,
+          badge: <span className="home-lock" title="Acesso restrito">{icons.lock} Restrito</span>,
         },
       ],
     });

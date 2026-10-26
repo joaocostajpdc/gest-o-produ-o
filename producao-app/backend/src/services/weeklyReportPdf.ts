@@ -27,7 +27,23 @@ const C = {
   danger: "#dc2626",
 };
 
-export function renderReportPdf(opts: { title: string; subtitle: string; sections: ReportSection[]; link?: string }): Promise<Buffer> {
+export interface ReportKpi {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "danger" | "good";
+}
+
+export function renderReportPdf(opts: {
+  title: string;
+  subtitle: string;
+  sections: ReportSection[];
+  link?: string;
+  /** Texto pequeno do cabeçalho (por defeito "Central · aviso semanal"). */
+  kind?: string;
+  /** Caixas de números no topo (relatório de produção, 2026-10-26). */
+  kpis?: ReportKpi[];
+}): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, bufferPages: true });
     const chunks: Buffer[] = [];
@@ -47,7 +63,7 @@ export function renderReportPdf(opts: { title: string; subtitle: string; section
       /* sem logótipo */
     }
     doc.font("Helvetica-Bold").fontSize(10).fillColor(C.primary).text("MINHO FERRAGENS", L + 40, 34);
-    doc.font("Helvetica").fontSize(8).fillColor(C.muted).text("Central · aviso semanal", L + 40, 47);
+    doc.font("Helvetica").fontSize(8).fillColor(C.muted).text(opts.kind ?? "Central · aviso semanal", L + 40, 47);
     doc
       .font("Helvetica")
       .fontSize(8)
@@ -57,6 +73,29 @@ export function renderReportPdf(opts: { title: string; subtitle: string; section
     doc.font("Helvetica").fontSize(10.5).fillColor(C.muted).text(opts.subtitle, L, doc.y + 2, { width: W });
     doc.moveTo(L, doc.y + 8).lineTo(R, doc.y + 8).strokeColor(C.border).lineWidth(1).stroke();
     doc.y += 18;
+
+    if (opts.kpis?.length) {
+      const perRow = opts.kpis.length > 6 ? Math.ceil(opts.kpis.length / 2) : opts.kpis.length;
+      const gap = 8;
+      const bw = (W - gap * (perRow - 1)) / perRow;
+      const bh = 52;
+      opts.kpis.forEach((k, i) => {
+        const col = i % perRow;
+        if (col === 0 && i > 0) doc.y += bh + gap;
+        const x = L + col * (bw + gap);
+        const y = doc.y;
+        doc.roundedRect(x, y, bw, bh, 5).fillAndStroke("#f9fafb", C.border);
+        doc.font("Helvetica").fontSize(7.5).fillColor(C.muted).text(k.label.toUpperCase(), x + 8, y + 7, { width: bw - 16, lineBreak: false, ellipsis: true });
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(16)
+          .fillColor(k.tone === "danger" ? C.danger : k.tone === "good" ? "#047857" : C.ink)
+          .text(k.value, x + 8, y + 19, { width: bw - 16, lineBreak: false, ellipsis: true });
+        if (k.sub) doc.font("Helvetica").fontSize(7.5).fillColor(C.muted).text(k.sub, x + 8, y + 38, { width: bw - 16, lineBreak: false, ellipsis: true });
+        doc.y = y;
+      });
+      doc.y += bh + 18;
+    }
 
     for (const sec of opts.sections) {
       const scale = W / sec.widths.reduce((a, b) => a + b, 0);

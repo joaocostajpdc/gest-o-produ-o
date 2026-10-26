@@ -29,6 +29,7 @@ export const FEATURES = {
   kmViaturas: "Km das Carrinhas",
   chat: "Chat interno",
   financeiro: "Financeiro",
+  relatorios: "Relatórios de gestão (produção e atividade)",
   financeiroAgenda: "Financeiro: calendário, transferências e pagamentos",
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",
@@ -46,7 +47,7 @@ export type FeatureKey = keyof typeof FEATURES;
 // voltar a restringir, tirar "orcamentos" de OPEN_TO_ALL e repô-lo aqui.
 // Financeiro (2026-10-24): "apenas eu" — nunca para todos. 2026-10-25: aberto
 // também à Alice Sousa (escolhida em testerUserIds).
-export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro", "financeiroAgenda"]);
+export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro", "financeiroAgenda", "relatorios"]);
 export const OPEN_TO_ALL: ReadonlySet<string> = new Set(["orcamentos"]);
 
 export function isFeatureKey(value: string): value is FeatureKey {

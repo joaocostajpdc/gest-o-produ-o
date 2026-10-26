@@ -150,6 +150,7 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .pedir{margin-top:8px;padding:10px;border:1px dashed var(--line-2);border-radius:8px}
 .pill.autp{background:#fff1d6;color:#8a5300;font-size:10.5px}
 .gt{width:100%;border-collapse:collapse;font-size:13px}
+.goldy-txt{margin:0;padding:14px 16px;background:var(--surface-2,#f6f7f9);border:1px solid var(--line);border-radius:8px;font:13.5px/1.55 var(--f-mono);white-space:pre-wrap;user-select:all}
 .gt th{text-align:left;font-size:12px;font-weight:600;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
 .gt td{padding:7px 8px;border-bottom:1px solid var(--line)}
 .gt tfoot td{font-weight:700;border-bottom:0}
@@ -679,7 +680,7 @@ function renderEditor(){
     <div class="panel"><header><h2>${ch?"Peças":"Painéis"}</h2><span class="hint">${ch?"Abas em mm separadas por espaço (ex.: 20 120 20). Ângulos opcionais (90 por defeito; negativo vira para o outro lado).":"Os campos a cinzento não se aplicam ao tipo de painel escolhido."}</span></header>
       <div class="body"><div id="lines"></div><button class="btn" id="addLine" style="margin-top:12px">${ico("plus")}${ch?"Adicionar peça":"Adicionar painel"}</button></div></div>
 
-    ${ch?`<div class="panel"><header><h2>Tabela para o Goldylocks</h2><span class="hint">Medidas e quantidades de todas as peças, uma linha por comprimento.</span><button class="btn sm" id="bCopy">${ico("copy")}Copiar tabela</button></header><div class="body" id="goldy"></div></div>`:""}
+    ${ch?`<div class="panel"><header><h2>Texto para o Goldylocks</h2><span class="hint">Medidas e quantidades de todas as peças, prontas a colar no orçamento.</span><button class="btn sm" id="bCopy">${ico("copy")}Copiar texto</button></header><div class="body" id="goldy"></div></div>`:""}
     ${ch?`<div class="panel"><header><h2>Plano de corte e trabalho</h2><span class="hint">Calculado automaticamente; pode substituir m² de chapa ou nº de cortes à mão.</span></header><div class="body">
       <div class="grid g4" style="margin-bottom:14px">
         <label class="f"><span>Mão de obra (min)</span><input class="i num" inputmode="decimal" data-q="job.moMin" value="${esc(q.job.moMin)}"></label>
@@ -1084,21 +1085,42 @@ function tabelaGoldy(q){
     rows.push({n:i+1,desc:descGoldy(L),dv,comp,qt,m2:dv*comp*qt/1e6}); }); });
   return rows;
 }
+/* Texto para colar no orçamento do Goldylocks (pedido de 2026-10-26), no
+   formato que o João já usa:
+     Varias medidas conforme abaixo:
+     Abas Desenv. × Comp. = Qt
+     32+330+30 392 × 995 = 1
+     …
+     Total — 9 unid.
+     Espessura 1.2mm
+     Acabamento.: Noir 200
+   Se houver peças com espessuras ou acabamentos diferentes, sai um bloco
+   para cada combinação. */
+function abasMais(L){ return perfilGeom(L.abas,L.angs).abas.map(a=>String(Math.round(a*10)/10)).join("+"); }
+function espTxt(v){ return String(Math.round(num(v)*100)/100); }
+function textoGoldy(q){
+  const P=S.P; const grupos=new Map();
+  q.linhas.forEach(L=>{ const dv=desenvolvimento(P,L); const abas=abasMais(L); if(!abas) return;
+    medidasDe(L).forEach(m=>{ const comp=num(m.comp), qt=Math.max(0,Math.round(num(m.qt))); if(!comp||!qt) return;
+      const k=espTxt(L.esp)+"|"+(L.acab||"");
+      if(!grupos.has(k)) grupos.set(k,{esp:espTxt(L.esp),acab:L.acab||"",linhas:[],qt:0});
+      const g=grupos.get(k); g.linhas.push(`${abas} ${Math.round(dv)} × ${Math.round(comp)} = ${qt}`); g.qt+=qt; }); });
+  const gs=[...grupos.values()]; if(!gs.length) return "";
+  const bloco=g=>[...g.linhas,"",`Total — ${g.qt} unid.`,"",`Espessura ${g.esp}mm`,...(g.acab?[`Acabamento.: ${g.acab}`]:[])].join("\n");
+  const head="Varias medidas conforme abaixo:\n\nAbas Desenv. × Comp. = Qt\n";
+  if(gs.length===1) return head+bloco(gs[0]);
+  const total=gs.reduce((s,g)=>s+g.qt,0);
+  return head+gs.map(bloco).join("\n\n—\n\n")+`\n\nTotal geral — ${total} unid.`;
+}
 function renderGoldy(){
   const box=$("#goldy"); if(!box||!S.cur||S.cur.tipo!=="chapas") return;
-  const rows=tabelaGoldy(S.cur);
-  if(!rows.length){ box.innerHTML=`<div class="hint">Preencha as abas e os comprimentos das peças para aparecer a tabela.</div>`; return; }
-  const tq=rows.reduce((s,r)=>s+r.qt,0), tm=rows.reduce((s,r)=>s+r.m2,0);
-  box.innerHTML=`<div style="overflow-x:auto"><table class="gt"><thead><tr><th>Peça</th><th>Descrição</th><th class="r">Desenv. (mm)</th><th class="r">Comprimento (mm)</th><th class="r">Quant.</th><th class="r">m²</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.n}</td><td>${esc(r.desc)}</td><td class="r mono">${fmt(r.dv,0)}</td><td class="r mono">${fmt(r.comp,0)}</td><td class="r mono">${r.qt}</td><td class="r mono">${fmt(r.m2,2)}</td></tr>`).join("")}
-    </tbody><tfoot><tr><td colspan="4">Total</td><td class="r mono">${tq}</td><td class="r mono">${fmt(tm,2)}</td></tr></tfoot></table></div>`;
+  const t=textoGoldy(S.cur);
+  box.innerHTML= t? `<pre class="goldy-txt">${esc(t)}</pre>` : `<div class="hint">Preencha as abas e os comprimentos das peças para aparecer o texto.</div>`;
 }
 async function copiarGoldy(){
-  const rows=tabelaGoldy(S.cur); if(!rows.length){ toast("A tabela está vazia."); return; }
-  const n=v=>String(v).replace(".",",");
-  const tsv=["Descrição\tDesenv. (mm)\tComprimento (mm)\tQuant.\tm²"].concat(rows.map(r=>[r.desc,Math.round(r.dv),Math.round(r.comp),r.qt,n(r.m2.toFixed(2))].join("\t"))).join("\n");
-  try{ await navigator.clipboard.writeText(tsv); toast("Tabela copiada — cole no Goldylocks ou no Excel"); }
-  catch(_){ const ta=document.createElement("textarea"); ta.value=tsv; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); toast("Tabela copiada"); }catch(e){ toast("Não foi possível copiar"); } ta.remove(); }
+  const t=textoGoldy(S.cur); if(!t){ toast("Ainda não há medidas."); return; }
+  try{ await navigator.clipboard.writeText(t); toast("Texto copiado — cole no orçamento do Goldylocks"); }
+  catch(_){ const ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); toast("Texto copiado"); }catch(e){ toast("Não foi possível copiar"); } ta.remove(); }
 }
 async function buildFolhaDesenho(q){
   const P=S.P, E=S.E;

@@ -1,5 +1,5 @@
 import express, { NextFunction, Request, Response } from "express";
-import { maintenanceGuard } from "./middleware/maintenance";
+import { maintenanceGuard, updateLockGuard } from "./middleware/maintenance";
 import cors from "cors";
 import { ZodError } from "zod";
 import path from "path";
@@ -30,6 +30,10 @@ export function createApp() {
   const app = express();
 
   app.use(cors());
+
+  // Bloqueio por atualização (UPDATE_LOCK=1): todos, admin incluído, veem o aviso.
+  app.use(updateLockGuard);
+
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));

@@ -797,3 +797,28 @@ model Cheque {
   @@index([estado])
   @@map("cheques")
 }
+
+// Financeiro — transferências programadas e pagamentos a fazer (2026-10-26).
+// Valor certo ou estimado (ex.: IVA ± 5000 €); ao pagar guarda o valor final.
+model MovimentoFinanceiro {
+  id           String    @id @default(cuid())
+  tipo         String    // TRANSFERENCIA | PAGAMENTO
+  descricao    String
+  entidade     String?
+  banco        String?
+  valor        Decimal   @db.Decimal(12, 2)
+  estimado     Boolean   @default(false)
+  data         DateTime  @db.Date
+  estado       String    @default("POR_PAGAR") // POR_PAGAR | PAGO | ANULADO
+  pagoEm       DateTime? @db.Date
+  valorPago    Decimal?  @db.Decimal(12, 2)
+  grupoId      String?   // movimentos criados juntos (repetir todos os meses)
+  notas        String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([data])
+  @@index([estado])
+  @@map("financeiro_movimentos")
+}

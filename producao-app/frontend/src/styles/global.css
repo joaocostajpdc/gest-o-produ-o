@@ -2926,3 +2926,84 @@ tr.fin-row-empty td { color: #98a2b3; }
 @media (min-width: 901px) {
   .tabs-mode .app-shell.sb-hover.tabs-home { padding-left: 0; }
 }
+
+/* ===== Financeiro: calendário, transferências e pagamentos (2026-10-26) ===== */
+.fin-seg { display: flex; gap: 4px; padding: 4px; background: #f2f4f7; border-radius: 10px; margin-bottom: 14px; }
+.fin-seg button { flex: 1; border: 0; background: transparent; padding: 8px 10px; border-radius: 7px; font: inherit; font-size: 13px; font-weight: 600; color: var(--color-text-muted); cursor: pointer; }
+.fin-seg button.on { background: var(--color-surface); color: var(--color-text); box-shadow: 0 1px 2px rgba(16, 24, 40, .1); }
+.fin-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px dashed var(--color-border); border-radius: 8px; margin: 2px 0 14px; cursor: pointer; }
+.fin-check input { margin-top: 3px; width: auto; }
+.fin-check strong { display: block; font-size: 14px; }
+.fin-check small { display: block; color: var(--color-text-muted); font-size: 12.5px; line-height: 1.35; }
+.fin-est-note { font-weight: 500; font-size: 13px; color: #6941c6; }
+.fin-tipo { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.fin-tipo-transferencia { background: #e0f2fe; color: #0369a1; }
+.fin-tipo-pagamento { background: #f4ebff; color: #6941c6; }
+.fin-estado.fin-mov-por_pagar { background: #fff4e5; color: #b54708; }
+.fin-estado.fin-mov-por_pagar.late { background: #fde2e1; color: #b42318; }
+.fin-estado.fin-mov-pago { background: #e3f5ee; color: #047857; }
+.fin-estado.fin-mov-anulado { background: #eef0f4; color: #667085; }
+
+.fcal { padding: 18px; --k-cheque: #d97706; --k-cheque-soft: #fff4e5; --k-transferencia: #0284c7; --k-transferencia-soft: #e0f2fe; --k-pagamento: #7c3aed; --k-pagamento-soft: #f4ebff; }
+.fcal-cheque { --k: var(--k-cheque); --ks: var(--k-cheque-soft); }
+.fcal-transferencia { --k: var(--k-transferencia); --ks: var(--k-transferencia-soft); }
+.fcal-pagamento { --k: var(--k-pagamento); --ks: var(--k-pagamento-soft); }
+.fcal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.fcal-nav { display: flex; align-items: center; gap: 8px; }
+.fcal-nav h3 { margin: 0 6px; min-width: 170px; text-align: center; font-size: 18px; }
+.fcal-nav .btn { min-width: 38px; padding: 6px 10px; }
+.fcal-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+.fcal-key { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--color-text); }
+.fcal-key input { width: auto; margin: 0; }
+.fcal-key i { width: 10px; height: 10px; border-radius: 3px; background: var(--k); }
+.fcal-sums { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.fcal-sum { border: 1px solid var(--color-border); border-left: 4px solid var(--k, #101828); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.fcal-sum span { font-size: 12.5px; color: var(--color-text-muted); font-weight: 600; }
+.fcal-sum strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+.fcal-sum small { font-size: 12px; color: var(--color-text-muted); }
+.fcal-total { background: #f9fafb; }
+.fcal-alert { background: #fef3f2; color: #b42318; border: 1px solid #fecdca; border-radius: 8px; padding: 8px 12px; font-size: 13.5px; margin-bottom: 12px; }
+.fcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; background: var(--color-border); gap: 1px; }
+.fcal-wd { background: #f9fafb; padding: 7px 8px; font-size: 12px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.fcal-day { background: var(--color-surface); min-height: 112px; padding: 6px 6px 22px; border: 0; text-align: left; font: inherit; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fcal-day:hover { background: #f9fafb; }
+.fcal-day.wk { background: #fcfcfd; }
+.fcal-day.out { background: #f9fafb; }
+.fcal-day.out .fcal-dn { color: #c0c5ce; }
+.fcal-day.out .fcal-item { opacity: .55; }
+.fcal-day.sel { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.fcal-num { display: flex; }
+.fcal-wdm { display: none; }
+.fcal-dn { font-size: 13px; font-weight: 700; color: var(--color-text); width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+.fcal-day.today .fcal-dn { background: var(--color-primary); color: #fff; }
+.fcal-items { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fcal-item { display: flex; justify-content: space-between; gap: 4px; font-size: 11.5px; line-height: 1.25; padding: 2px 5px; border-radius: 4px; background: var(--ks); color: var(--color-text); border-left: 3px solid var(--k); min-width: 0; }
+.fcal-item .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fcal-item .v { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fcal-item.done { background: #f2f4f7; border-left-color: #c0c5ce; color: #98a2b3; }
+.fcal-item.done .t { text-decoration: line-through; }
+.fcal-item.late { box-shadow: inset 0 0 0 1px #f04438; }
+.fcal-more { font-size: 11px; color: var(--color-text-muted); padding-left: 5px; }
+.fcal-tot { position: absolute; right: 7px; bottom: 5px; font-size: 11.5px; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.fcal-detail { margin-top: 16px; border-top: 1px solid var(--color-border); padding-top: 14px; }
+.fcal-detail h4 { margin: 0 0 10px; font-size: 15px; text-transform: capitalize; }
+.fcal-detail h4 span { text-transform: none; font-weight: 500; color: var(--color-text-muted); }
+.fcal-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: 8px; margin-bottom: 6px; }
+.fcal-row > i { width: 4px; align-self: stretch; border-radius: 2px; background: var(--k); }
+.fcal-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fcal-row-main small { color: var(--color-text-muted); font-size: 12.5px; }
+.fcal-row-v { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fcal-row.done { opacity: .6; }
+.fcal-row.done .fcal-row-main strong { text-decoration: line-through; }
+
+@media (max-width: 760px) {
+  .fcal { padding: 12px; }
+  .fcal-grid { grid-template-columns: 1fr; background: transparent; border: 0; gap: 6px; }
+  .fcal-wd, .fcal-day.empty, .fcal-day.out { display: none; }
+  .fcal-day { min-height: 0; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px 26px; }
+  .fcal-wdm { display: inline; font-weight: 700; font-size: 13px; text-transform: capitalize; }
+  .fcal-dn { display: none; }
+  .fcal-day.today { box-shadow: inset 0 0 0 2px var(--color-primary); }
+  .fcal-item { font-size: 13px; padding: 4px 7px; }
+  .fcal-nav h3 { min-width: 0; font-size: 16px; }
+}

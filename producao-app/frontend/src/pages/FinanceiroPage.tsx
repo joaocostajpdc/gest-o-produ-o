@@ -4,6 +4,8 @@ import { api } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
 import { Kpi, formatDay, todayIso } from "../components/EquipaFrota";
+import { FeatureTestBanner } from "../components/FeatureTestBanner";
+import { CalendarioTab, Movimento, PagamentosTab } from "../components/FinanceiroAgenda";
 
 // ============================================================================
 // Financeiro — Cheques passados (pedido do utilizador de 2026-10-24: "cria
@@ -69,12 +71,15 @@ const emptyForm = () => ({
   notas: "",
 });
 
-type Tab = "cheques" | "semanas" | "meses";
+type Tab = "cheques" | "calendario" | "pagamentos" | "semanas" | "meses";
 type Filtro = "abertos" | "atraso" | "DESCONTADO" | "ANULADO" | "todos";
 
 export function FinanceiroPage() {
   const { user } = useAuth();
   const feature = useFeature("financeiro");
+  // Calendário, transferências e pagamentos (2026-10-26) — em teste só para o administrador.
+  const agenda = useFeature("financeiroAgenda");
+  const [movs, setMovs] = useState<Movimento[]>([]);
   const [list, setList] = useState<Cheque[]>([]);
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<string[]>([]);
@@ -103,6 +108,21 @@ export function FinanceiroPage() {
       setLoading(false);
     }
   }
+
+  async function loadMovs() {
+    try {
+      setMovs(await api.get<Movimento[]>("/financeiro/movimentos"));
+    } catch {
+      setMovs([]);
+    }
+  }
+  async function reloadAll() {
+    await Promise.all([load(), agenda.available ? loadMovs() : Promise.resolve()]);
+  }
+
+  useEffect(() => {
+    if (agenda.available) loadMovs();
+  }, [agenda.available]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -271,7 +291,7 @@ export function FinanceiroPage() {
   return (
     <div>
       <div className="page-header">
-        <h2>Financeiro · Cheques passados</h2>
+        <h2>{agenda.available ? "Financeiro" : "Financeiro · Cheques passados"}</h2>
       </div>
       <p className="muted" style={{ fontSize: 13, marginTop: -6 }}>
         🔒 Só tu vês esta parte.
@@ -292,6 +312,12 @@ export function FinanceiroPage() {
         {(
           [
             ["cheques", "Cheques"],
+            ...(agenda.available
+              ? ([
+                  ["calendario", "Calendário"],
+                  ["pagamentos", "Transferências e pagamentos"],
+                ] as [Tab, string][])
+              : []),
             ["semanas", "Saídas por semana"],
             ["meses", "Por mês"],
           ] as [Tab, string][]
@@ -523,6 +549,21 @@ export function FinanceiroPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {tab === "calendario" && agenda.available && (
+        <>
+          {!agenda.released && (
+            <div style={{ marginBottom: 12 }}>
+              <FeatureTestBanner featureKey="financeiroAgenda" label="o calendário e as transferências e pagamentos" />
+            </div>
+          )}
+          <CalendarioTab cheques={list} movs={movs} reload={reloadAll} agenda={agenda.available} />
+        </>
+      )}
+
+      {tab === "pagamentos" && agenda.available && (
+        <PagamentosTab movs={movs} reload={reloadAll} bancos={bancos} entidades={beneficiarios} />
       )}
 
       {tab === "semanas" && (

@@ -614,14 +614,13 @@ function bindAut(q){
 }
 function renderLista(){
   const el=$("#v-lista"); const qs=S.quotes;
-  const resumo=ESTADOS.map(e=>{ const l=qs.filter(q=>q.estado===e); return {e,n:l.length,t:l.reduce((s,q)=>s+num(q.totais&&q.totais.base),0)}; });
+  S.filtro=""; // cartões de totais por estado retirados (2026-10-26)
   const b=S.busca.toLowerCase();
   const lista=qs.filter(q=>(!S.filtro||q.estado===S.filtro)&&(!b||[q.num,q.cliente&&q.cliente.nome,q.obra].join(" ").toLowerCase().includes(b)));
   el.innerHTML=`
   <div class="view-head"><div><div class="eyebrow">${esc(S.E.nome)}</div><h1>Orçamentos</h1></div>
     <button class="btn pri" data-new="chapas">${ico("plus")}Chapas quinadas</button>
     <button class="btn pri" data-new="paineis">${ico("plus")}Painéis</button></div>
-  <div class="sumrow">${resumo.map(r=>`<button class="sumcard" data-f="${esc(r.e)}" aria-pressed="${S.filtro===r.e}"><span class="pill ${ESTCLS[r.e]}">${r.e}</span><span class="v">${eur(r.t)}</span><span class="c">${r.n} orçamento${r.n===1?"":"s"} · s/ IVA</span></button>`).join("")}</div>
   <div class="filters"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}">${S.filtro?`<button class="btn ghost" id="clrF">Mostrar todos os estados</button>`:""}</div>
   ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Obra / ref.</th><th>Tipo</th><th class="r">Total s/ IVA</th><th>Estado</th><th></th></tr></thead><tbody>
   ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="pill autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>

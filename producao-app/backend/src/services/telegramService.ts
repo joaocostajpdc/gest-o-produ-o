@@ -36,7 +36,7 @@ export const telegramSettingsSchema = z.object({
       started: z.boolean().default(false),
       completed: z.boolean().default(true),
     })
-    .default({}),
+    .prefault({}),
 });
 
 export type TelegramSettings = z.infer<typeof telegramSettingsSchema>;

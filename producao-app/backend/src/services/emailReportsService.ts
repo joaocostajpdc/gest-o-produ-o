@@ -64,15 +64,15 @@ export const emailSettingsSchema = z.object({
       fromName: z.string().trim().max(120).default("Minho Ferragens"),
       fromEmail: z.string().trim().max(200).default(""),
     })
-    .default({}),
+    .prefault({}),
   reports: z
     .object({
-      osSemana: reportSchema.default({}),
-      lacagemSemana: reportSchema.default({}),
-      producaoSemana: reportSchema.default({}),
-      producaoMes: reportSchema.default({}),
+      osSemana: reportSchema.prefault({}),
+      lacagemSemana: reportSchema.prefault({}),
+      producaoSemana: reportSchema.prefault({}),
+      producaoMes: reportSchema.prefault({}),
     })
-    .default({}),
+    .prefault({}),
 });
 export type EmailSettings = z.infer<typeof emailSettingsSchema>;
 

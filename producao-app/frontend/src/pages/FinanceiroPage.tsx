@@ -82,6 +82,8 @@ export function FinanceiroPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Adiar um cheque direto na linha (pedido de 2026-10-26).
+  const [adiar, setAdiar] = useState<{ id: string; data: string } | null>(null);
   const [tab, setTab] = useState<Tab>("cheques");
   const [filtro, setFiltro] = useState<Filtro>("abertos");
   const [banco, setBanco] = useState("");
@@ -216,11 +218,23 @@ export function FinanceiroPage() {
       notas: c.notas ?? "",
     });
     setTab("cheques");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // O ecrã pode estar dentro de uma aba: leva o formulário à vista e põe o cursor na data.
+    setTimeout(() => {
+      const el = document.getElementById("c-data") as HTMLInputElement | null;
+      el?.closest("form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      el?.focus({ preventScroll: true });
+    }, 50);
   }
 
   async function setEstado(c: Cheque, estado: Estado) {
     await api.put(`/financeiro/cheques/${c.id}`, { estado, descontadoEm: estado === "DESCONTADO" ? hoje : null });
+    await load();
+  }
+
+  async function gravarAdiamento(c: Cheque) {
+    if (!adiar || !adiar.data) return;
+    await api.put(`/financeiro/cheques/${c.id}`, { dataCheque: adiar.data });
+    setAdiar(null);
     await load();
   }
 
@@ -454,6 +468,34 @@ export function FinanceiroPage() {
                             {c.estado === "DESCONTADO" && c.descontadoEm && <div className="cell-sub">em {formatDay(d10(c.descontadoEm))}</div>}
                           </td>
                           <td className="ef-row-actions">
+                            {adiar?.id === c.id ? (
+                              <>
+                                <input
+                                  type="date"
+                                  aria-label="Nova data do cheque"
+                                  value={adiar.data}
+                                  autoFocus
+                                  onChange={(e) => setAdiar({ id: c.id, data: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") gravarAdiamento(c);
+                                    if (e.key === "Escape") setAdiar(null);
+                                  }}
+                                  style={{ width: "auto" }}
+                                />
+                                <button className="btn" type="button" onClick={() => gravarAdiamento(c)} disabled={!adiar.data}>
+                                  Gravar
+                                </button>
+                                <button className="btn secondary" type="button" onClick={() => setAdiar(null)}>
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                            <>
+                            {c.estado === "POR_DESCONTAR" && (
+                              <button className="btn secondary" type="button" onClick={() => setAdiar({ id: c.id, data: d10(c.dataCheque) })} title="Mudar a data do cheque">
+                                Adiar
+                              </button>
+                            )}
                             {c.estado === "POR_DESCONTAR" && (
                               <button className="btn" type="button" onClick={() => setEstado(c, "DESCONTADO")} title="Já saiu do banco">
                                 Descontado
@@ -470,6 +512,8 @@ export function FinanceiroPage() {
                             <button className="btn secondary" type="button" onClick={() => remove(c)} title="Apagar" aria-label="Apagar">
                               ✕
                             </button>
+                            </>
+                            )}
                           </td>
                         </tr>
                       );

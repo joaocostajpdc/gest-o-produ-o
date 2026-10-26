@@ -1,4 +1,5 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { api } from "../api/client";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTabs } from "../contexts/TabsContext";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
@@ -62,6 +63,9 @@ interface Area {
   color: string;
   soft: string;
   tiles: Tile[];
+  /** Área que abre logo uma página (ex.: Chat), sem submenu. */
+  link?: string;
+  badge?: ReactNode;
 }
 
 function initials(name?: string) {
@@ -86,6 +90,7 @@ const areaIcons = {
   equipa: <svg {...S}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.5" /><path d="M16 14a5 5 0 0 1 6 5" /></svg>,
   financeiro: <svg {...S}><rect x="2.5" y="6" width="19" height="13" rx="2" /><path d="M2.5 10h19M6.5 15h4" /></svg>,
   config: <svg {...S}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>,
+  chat: <svg {...S}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" /><path d="M8.5 11h7M8.5 14.5h4.5" /></svg>,
   orcamentacao: <svg {...S}><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M15 8.5a3 3 0 1 0 0 5M8.5 10h5M8.5 12.5h5M8 17h8" /></svg>,
 };
 
@@ -113,6 +118,12 @@ export function HomePage() {
   const kmViaturas = useFeature("kmViaturas");
   const financeiro = useFeature("financeiro");
   const abas = useFeature("abas");
+  const chat = useFeature("chat");
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    if (!chat.available) return;
+    api.get<{ total: number }>("/chat/unread").then((r) => setChatUnread(r.total)).catch(() => undefined);
+  }, [chat.available]);
   const tabs = useTabs();
   const [params, setParams] = useSearchParams();
 
@@ -228,6 +239,20 @@ export function HomePage() {
   // Novo Início só com os ícones das áreas (2026-10-25), junto com as abas.
   if (abas.available) {
     const allAreas: Area[] = [...areas];
+    // Chat no Início (pedido de 2026-10-26: "falta o chat").
+    if (chat.available) {
+      allAreas.push({
+        key: "chat",
+        title: "Chat",
+        desc: "Mensagens e documentos da equipa",
+        icon: areaIcons.chat,
+        color: "#0369a1",
+        soft: "#e0f2fe",
+        tiles: [],
+        link: "/chat",
+        badge: chatUnread > 0 ? <span className="badge" style={{ background: "#dc2626", color: "#fff", fontSize: 11, padding: "1px 7px", marginLeft: 8 }}>{chatUnread}</span> : undefined,
+      });
+    }
     if (config.length > 0) {
       allAreas.push({
         key: "config",
@@ -275,7 +300,22 @@ export function HomePage() {
 
           {!open && (
             <div className="home-icons">
-              {allAreas.map((area) => (
+              {allAreas.map((area) =>
+                area.link ? (
+                  <Link
+                    key={area.key}
+                    to={area.link}
+                    className="home-icon-tile"
+                    style={{ ["--accent" as string]: area.color, ["--accent-soft" as string]: area.soft }}
+                  >
+                    <span className="home-icon-big">{area.icon}</span>
+                    <span className="home-icon-title">
+                      {area.title}
+                      {area.badge}
+                    </span>
+                    <span className="home-icon-sub">{area.desc}</span>
+                  </Link>
+                ) : (
                 <button
                   key={area.key}
                   type="button"
@@ -287,7 +327,8 @@ export function HomePage() {
                   <span className="home-icon-title">{area.title}</span>
                   <span className="home-icon-sub">{area.desc}</span>
                 </button>
-              ))}
+                )
+              )}
             </div>
           )}
 

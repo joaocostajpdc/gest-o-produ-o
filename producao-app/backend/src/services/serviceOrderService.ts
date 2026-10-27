@@ -29,7 +29,7 @@ export async function importSingleGoldylocksOrder(
   actingUserId?: string
 ): Promise<ImportResult> {
   const product = await prisma.product.findUnique({
-    where: { externalId: goldOrder.product.externalId },
+    where: { externalId: goldOrder.product.externalId.trim() },
   });
 
   if (!product) {

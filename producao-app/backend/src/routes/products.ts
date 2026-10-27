@@ -13,7 +13,9 @@ const productSchema = z.object({
   description: z.string().optional(),
   category: z.string().optional(),
   productionDays: z.number().int().nonnegative(),
-  externalId: z.string().optional(),
+  // Sem espaços no início/fim: um espaço a mais no código fazia a importação
+  // da OS dizer que o produto "não está configurado" (OS 2026/556, 2026-10-27).
+  externalId: z.string().trim().optional(),
 });
 
 productsRouter.get(

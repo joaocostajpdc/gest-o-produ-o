@@ -3053,3 +3053,40 @@ tr.fin-row-empty td { color: #98a2b3; }
 .rel-out small { color: var(--color-text-muted); font-size: 12.5px; }
 .rel-foot { font-size: 13px; margin-top: 18px; }
 @media (max-width: 900px) { .rel-grid { grid-template-columns: 1fr; } }
+
+/* Abas: um só logótipo (2026-10-27). O da barra de cima fica com o nome e
+   leva ao Início; o do menu lateral (logo por baixo) deixa de aparecer no
+   computador. No telemóvel o topo do menu mantém-se (tem o botão de fechar). */
+.tabbar-brand {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+  padding: 4px 12px 4px 4px;
+  margin-right: 4px;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px 0 0 8px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+.tabbar-brand:hover .tabbar-logo { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18); }
+.tabbar-brand:focus-visible { outline: 2px solid #4c6fff; outline-offset: 2px; }
+.tabbar-brand .tabbar-logo { width: 30px; height: 30px; border-radius: 8px; transition: box-shadow 0.15s ease; }
+.tabbar-brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.tabbar-brand-text strong { font-size: 13.5px; font-weight: 700; color: #fff; }
+.tabbar-brand-text span { font-size: 11px; color: #8b92b3; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .tabbar-brand-text { display: none; }
+  .tabbar-brand { padding-right: 8px; }
+}
+@media (min-width: 901px) {
+  .tabs-mode .sidebar-brand { display: none; }
+  .tabs-mode .sidebar nav { padding-top: 10px; }
+}
+@media (max-width: 900px) {
+  .tabs-mode .mobile-topbar-logo { display: none; }
+}

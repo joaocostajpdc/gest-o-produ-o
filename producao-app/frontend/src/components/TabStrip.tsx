@@ -116,9 +116,17 @@ export function TabStrip() {
 
   return (
     <header className="tabbar">
-      <span className="tabbar-logo" title="Central Minho Ferragens">
-        <img src={logoMark} alt="Central Minho Ferragens" />
-      </span>
+      {/* Um só logótipo com abas (pedido de 2026-10-27: "melhorar aqueles dois
+          logos"): o do menu lateral fica escondido e este leva ao Início. */}
+      <button type="button" className="tabbar-brand" onClick={() => tabs.openTab("/")} title="Central Minho Ferragens — Início" aria-label="Ir para o Início">
+        <span className="tabbar-logo">
+          <img src={logoMark} alt="" />
+        </span>
+        <span className="tabbar-brand-text">
+          <strong>Central</strong>
+          <span>Minho Ferragens</span>
+        </span>
+      </button>
       <div className="tabbar-tabs" role="tablist" aria-label="Abas abertas">
         {tabs.tabs.map((t) => {
           const { icon, title } = tabLabel(t);

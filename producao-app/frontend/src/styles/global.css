@@ -3090,3 +3090,44 @@ tr.fin-row-empty td { color: #98a2b3; }
 @media (max-width: 900px) {
   .tabs-mode .mobile-topbar-logo { display: none; }
 }
+
+/* Acessos (2026-10-27): quem vê o quê, numa só tabela. */
+.acessos-intro { margin: -6px 0 14px; max-width: 760px; }
+.acessos-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.acessos-tools label { display: flex; align-items: center; gap: 8px; font-weight: 600; margin: 0; }
+.acessos-tools select { width: auto; min-width: 200px; }
+.acessos-legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: #5b6275; }
+.acessos-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.ac-dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; border: 1.5px solid #c9cedb; }
+.ac-dot.sim { background: #1f3fe0; border-color: #1f3fe0; }
+.ac-dot.todos { background: #dfe5f7; border-color: #b9c3e3; }
+.acessos-card { padding: 0; overflow: hidden; }
+.acessos-scroll { overflow-x: auto; }
+.acessos-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 560px; }
+.acessos-table th, .acessos-table td { padding: 9px 12px; border-bottom: 1px solid #eef0f5; vertical-align: middle; }
+.acessos-table thead th { background: #f7f8fb; position: sticky; top: 0; z-index: 1; }
+.acessos-table .ac-feat { position: sticky; left: 0; background: #fff; z-index: 1; min-width: 190px; font-weight: 500; }
+.acessos-table thead .ac-feat { background: #f7f8fb; z-index: 2; text-align: left; }
+.acessos-table .ac-estado { min-width: 150px; white-space: nowrap; }
+.ac-user { text-align: center; min-width: 118px; font-weight: 600; }
+.ac-user .ac-avatar { display: flex; margin: 0 auto 4px; width: 30px; height: 30px; border-radius: 50%; background: #e4e8f4; color: #2a3350; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; }
+.ac-user .ac-name { display: block; font-size: 13px; white-space: nowrap; }
+.ac-user .ac-role { margin-top: 6px; width: 100%; font-size: 12px; padding: 3px 6px; height: auto; }
+.ac-group td { background: #fafbfd; font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7389; padding-top: 14px; }
+.ac-group td:first-child { position: sticky; left: 0; }
+.ac-pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-right: 8px; }
+.ac-pill.todos { background: #e3f6ea; color: #17733b; }
+.ac-pill.teste { background: #fdf4dc; color: #8a5a00; }
+.ac-pill.restrito { background: #eceffa; color: #33408a; }
+.ac-link { border: 0; background: none; padding: 0; color: #1f3fe0; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.ac-link:hover { text-decoration: underline; }
+.ac-link:disabled { opacity: 0.5; cursor: default; }
+.ac-cell { text-align: center; }
+.ac-check { width: 26px; height: 26px; border-radius: 7px; border: 1.5px solid #c9cedb; background: #fff; color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease; }
+.ac-check:hover:not(:disabled) { border-color: #1f3fe0; }
+.ac-check.sim { background: #1f3fe0; border-color: #1f3fe0; }
+.ac-check.todos { background: #dfe5f7; border-color: #b9c3e3; color: #4a5684; }
+.ac-check:disabled { cursor: default; }
+.ac-check:focus-visible { outline: 2px solid #4c6fff; outline-offset: 2px; }
+.ac-total td { font-weight: 600; color: #4a5168; border-bottom: 0; background: #fafbfd; }
+.acessos-nota { margin-top: 10px; font-size: 12.5px; }

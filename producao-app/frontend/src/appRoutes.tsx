@@ -7,6 +7,7 @@ import { StagesPage } from "./pages/StagesPage";
 import { ProductionLinesPage } from "./pages/ProductionLinesPage";
 import { SuppliersPage } from "./pages/SuppliersPage";
 import { UsersPage } from "./pages/UsersPage";
+import { AcessosPage } from "./pages/AcessosPage";
 import { PrintableListPage } from "./pages/PrintableListPage";
 import { MaterialLacagemPage } from "./pages/MaterialLacagemPage";
 import { MaterialRequestsPage } from "./pages/MaterialRequestsPage";
@@ -65,6 +66,7 @@ export const protectedRoutes = (
     <Route path="/production-lines" element={<ProductionLinesPage />} />
     <Route path="/suppliers" element={<SuppliersPage />} />
     <Route path="/users" element={<UsersPage />} />
+    <Route path="/acessos" element={<AcessosPage />} />
     <Route path="/avisos-telegram" element={<TelegramPage />} />
     <Route path="/emails-automaticos" element={<EmailsPage />} />
   </>

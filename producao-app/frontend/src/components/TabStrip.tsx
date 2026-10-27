@@ -77,6 +77,7 @@ const PAGES: { prefix: string; title: string; icon: ReactNode }[] = [
   { prefix: "/production-lines", title: "Linhas de Produção", icon: tabIcons.gear },
   { prefix: "/suppliers", title: "Fornecedores", icon: tabIcons.gear },
   { prefix: "/users", title: "Utilizadores", icon: tabIcons.gear },
+  { prefix: "/acessos", title: "Acessos", icon: tabIcons.gear },
   { prefix: "/avisos-telegram", title: "Avisos Telegram", icon: tabIcons.gear },
   { prefix: "/emails-automaticos", title: "Avisos Semanais", icon: tabIcons.gear },
 ];

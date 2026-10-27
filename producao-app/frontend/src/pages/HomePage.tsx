@@ -102,7 +102,8 @@ const configSubs: Record<string, string> = {
   "/stages": "Etapas da produção",
   "/production-lines": "Linhas e sequência de etapas",
   "/suppliers": "Fornecedores e lacagens",
-  "/users": "Quem entra e o que vê",
+  "/users": "Quem entra e o perfil",
+  "/acessos": "O que cada pessoa vê",
   "/avisos-telegram": "Avisos por Telegram",
   "/emails-automaticos": "Avisos semanais em PDF",
 };
@@ -244,7 +245,7 @@ export function HomePage() {
     );
   }
   if (canManageUsers(user?.role)) {
-    config.push({ to: "/users", label: "Utilizadores e Permissões" }, { to: "/avisos-telegram", label: "Avisos Telegram" }, { to: "/emails-automaticos", label: "Avisos Semanais" });
+    config.push({ to: "/users", label: "Utilizadores e Permissões" }, { to: "/acessos", label: "Acessos" }, { to: "/avisos-telegram", label: "Avisos Telegram" }, { to: "/emails-automaticos", label: "Avisos Semanais" });
   }
 
   const firstName = user?.name?.split(" ")[0];

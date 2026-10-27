@@ -128,6 +128,15 @@ function IconCut(props: SVGProps<SVGSVGElement>) {
 }
 
 // Ícone dos "Avisos Telegram" (avião de papel).
+function IconKey(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <circle cx="8" cy="15" r="4" />
+      <path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2" />
+    </svg>
+  );
+}
+
 function IconSend(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -453,6 +462,9 @@ export function Layout() {
               <div className="section-label">Administração</div>
               <NavLink to="/users">
                 <IconUsers /> Utilizadores e Permissões
+              </NavLink>
+              <NavLink to="/acessos">
+                <IconKey /> Acessos
               </NavLink>
               <NavLink to="/avisos-telegram">
                 <IconSend /> Avisos Telegram

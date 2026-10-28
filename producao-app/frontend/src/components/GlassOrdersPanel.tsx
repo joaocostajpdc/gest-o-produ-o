@@ -66,6 +66,11 @@ export function GlassOrdersPanel({
   const [showForm, setShowForm] = useState(false);
   const [showFinished, setShowFinished] = useState(inOrder);
   const [search, setSearch] = useState("");
+  // Filtros (pedido do utilizador de 2026-10-28: "põe filtros aqui").
+  const [fStatus, setFStatus] = useState<"" | GlassOrderStatus>("");
+  const [fSupplier, setFSupplier] = useState("");
+  const [fOrder, setFOrder] = useState("");
+  const [fPeriod, setFPeriod] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Fornecedor mais usado nos vidros (ex.: Vitralia) fica pré-escolhido.
@@ -190,14 +195,42 @@ export function GlassOrdersPanel({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const since = fPeriod ? Date.now() - Number(fPeriod) * 86400000 : 0;
     return items.filter((o) => {
-      if (!showFinished && o.status === "FINALIZADO") return false;
+      if (fStatus) {
+        if (o.status !== fStatus) return false;
+      } else if (!showFinished && o.status === "FINALIZADO") return false;
+      if (fSupplier && (o.supplier?.id ?? "__sem") !== fSupplier) return false;
+      if (fOrder && (o.orderNumber ?? "__sem") !== fOrder) return false;
+      if (since && new Date(o.date).getTime() < since) return false;
       if (!q) return true;
       return [o.nRef ?? "", o.medida, o.caixa, o.orderNumber ?? "", o.supplier?.name ?? "", o.notes ?? ""].some((v) =>
         v.toLowerCase().includes(q)
       );
     });
-  }, [items, search, showFinished]);
+  }, [items, search, showFinished, fStatus, fSupplier, fOrder, fPeriod]);
+
+  // Opções só com o que existe nos pedidos (não aparecem escolhas vazias).
+  const supplierOpts = useMemo(() => {
+    const m = new Map<string, string>();
+    items.forEach((o) => m.set(o.supplier?.id ?? "__sem", o.supplier?.name ?? "Sem fornecedor"));
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-PT"));
+  }, [items]);
+  const orderOpts = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((o) => {
+      if (fStatus ? o.status === fStatus : showFinished || o.status !== "FINALIZADO") set.add(o.orderNumber ?? "__sem");
+    });
+    return [...set].sort((a, b) => (a === "__sem" ? 1 : b === "__sem" ? -1 : b.localeCompare(a, "pt-PT", { numeric: true })));
+  }, [items, fStatus, showFinished]);
+  const hasFilters = !!(fStatus || fSupplier || fOrder || fPeriod || search.trim());
+  function clearFilters() {
+    setFStatus("");
+    setFSupplier("");
+    setFOrder("");
+    setFPeriod("");
+    setSearch("");
+  }
 
   const finishedCount = items.filter((o) => o.status === "FINALIZADO").length;
   const pendingCount = items.length - finishedCount;
@@ -347,7 +380,43 @@ export function GlassOrdersPanel({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Procurar N/Ref., medida, caixa, nº encomenda..."
             />
+            <select value={fStatus} onChange={(e) => setFStatus(e.target.value as "" | GlassOrderStatus)} aria-label="Estado">
+              <option value="">Estado (todos)</option>
+              {STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {GLASS_ORDER_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <select value={fSupplier} onChange={(e) => setFSupplier(e.target.value)} aria-label="Fornecedor">
+              <option value="">Fornecedor (todos)</option>
+              {supplierOpts.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <select value={fOrder} onChange={(e) => setFOrder(e.target.value)} aria-label="Nº encomenda">
+              <option value="">Nº encomenda (todas)</option>
+              {orderOpts.map((n) => (
+                <option key={n} value={n}>
+                  {n === "__sem" ? "Sem nº (ainda por encomendar)" : n}
+                </option>
+              ))}
+            </select>
+            <select value={fPeriod} onChange={(e) => setFPeriod(e.target.value)} aria-label="Data do pedido">
+              <option value="">Data (todas)</option>
+              <option value="7">Últimos 7 dias</option>
+              <option value="30">Últimos 30 dias</option>
+              <option value="90">Últimos 3 meses</option>
+            </select>
+            {hasFilters && (
+              <button type="button" className="link-button" onClick={clearFilters} style={{ alignSelf: "center" }}>
+                Limpar filtros
+              </button>
+            )}
             <span className="muted" style={{ alignSelf: "center" }}>
+              {hasFilters ? `${filtered.length} de ${items.length} · ` : ""}
               {pendingCount} por receber
             </span>
           </div>

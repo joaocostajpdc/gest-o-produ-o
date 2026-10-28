@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useFeature } from "../contexts/FeaturesContext";
+import { MAX_SIDE_PANELS, QuickViewBody, SIDE_PANEL_MIN_WIDTH, useIsWide } from "./ServiceOrdersListPage";
 import { ServiceOrderListItem, Stage } from "../types";
 import { minutesToDays, PriorityBadge, StatusBadge } from "../components/Badges";
 
@@ -24,9 +26,44 @@ export function MaterialLacagemPage() {
   const [supplierFilter, setSupplierFilter] = useState("");
   const [finishFilter, setFinishFilter] = useState("");
 
+  // Painel lateral, como nas Ordens de Serviço (pedido do utilizador de
+  // 2026-10-28: "aqui também vá abrindo ao lado"). No computador, clicar no
+  // nº da OS abre-a numa coluna à esquerda e podem ficar várias abertas.
+  const sidePanel = useFeature("osSidePanel");
+  const isWide = useIsWide(SIDE_PANEL_MIN_WIDTH);
+  const panelMode = sidePanel.available && isWide;
+  const [panels, setPanels] = useState<ServiceOrderListItem[]>([]);
+  const [panelBusyId, setPanelBusyId] = useState<string | null>(null);
+  const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
+  const [reload, setReload] = useState(0);
+  const refresh = useCallback(() => setReload((n) => n + 1), []);
+
+  function openPanel(order: ServiceOrderListItem) {
+    setPanels((prev) => [order, ...prev.filter((p) => p.id !== order.id)].slice(0, MAX_SIDE_PANELS));
+  }
+  function closePanel(id: string) {
+    setPanels((prev) => prev.filter((p) => p.id !== id));
+    setPanelErrors(({ [id]: _removed, ...rest }) => rest);
+  }
+  async function runPanelAction(orderId: string, action: () => Promise<unknown>) {
+    setPanelErrors(({ [orderId]: _removed, ...rest }) => rest);
+    setPanelBusyId(orderId);
+    try {
+      await action();
+      refresh();
+    } catch (err) {
+      setPanelErrors((prev) => ({ ...prev, [orderId]: err instanceof Error ? err.message : "Ocorreu um erro." }));
+    } finally {
+      setPanelBusyId(null);
+    }
+  }
+  useEffect(() => {
+    setPanels((prev) => prev.map((p) => orders.find((o) => o.id === p.id) ?? p));
+  }, [orders]);
+
   useEffect(() => {
     async function load() {
-      setLoading(true);
+      if (reload === 0) setLoading(true);
       setError(null);
       try {
         const stages = await api.get<Stage[]>("/stages");
@@ -47,7 +84,7 @@ export function MaterialLacagemPage() {
       }
     }
     load();
-  }, []);
+  }, [reload]);
 
   // As opções dos filtros vêm apenas dos fornecedores/acabamentos que
   // existem de facto entre as OS atualmente em Lacagem — evita mostrar
@@ -76,8 +113,38 @@ export function MaterialLacagemPage() {
     });
   }, [orders, supplierFilter, finishFilter]);
 
+  const showPanels = panelMode && panels.length > 0;
+
   return (
-    <div>
+    <div className={showPanels ? "os-split" : undefined}>
+      {showPanels && (
+        <aside className="os-side-panel" aria-label="Ordens de Serviço abertas">
+          <div className="os-side-panel-head">
+            <span>
+              {panels.length} OS aberta{panels.length > 1 ? "s" : ""}
+            </span>
+            {panels.length > 1 && (
+              <button type="button" className="link-button" onClick={() => setPanels([])}>
+                Fechar todas
+              </button>
+            )}
+          </div>
+          {panels.map((p) => (
+            <div key={p.id} className="os-side-card">
+              <QuickViewBody
+                order={p}
+                busy={panelBusyId === p.id}
+                actionError={panelErrors[p.id] ?? null}
+                showDesignation
+                onClose={() => closePanel(p.id)}
+                onStart={() => runPanelAction(p.id, () => api.post(`/service-orders/${p.id}/start`))}
+                onAdvance={() => runPanelAction(p.id, () => api.post(`/service-orders/${p.id}/stage-flow/advance`))}
+              />
+            </div>
+          ))}
+        </aside>
+      )}
+      <div className="os-split-main">
       <div className="page-header">
         <h2>Material em Lacagem</h2>
       </div>
@@ -137,7 +204,18 @@ export function MaterialLacagemPage() {
                     <PriorityBadge priority={o.priority} label={o.priorityLabel} color={o.priorityColor} />
                   </td>
                   <td>
-                    <Link to={`/service-orders/${o.id}`}>{o.externalId}</Link>
+                    {panelMode ? (
+                      <button
+                        type="button"
+                        className="link-button"
+                        aria-expanded={panels.some((p) => p.id === o.id)}
+                        onClick={() => openPanel(o)}
+                      >
+                        {o.externalId}
+                      </button>
+                    ) : (
+                      <Link to={`/service-orders/${o.id}`}>{o.externalId}</Link>
+                    )}
                   </td>
                   <td>{o.client.externalId ?? "—"}</td>
                   <td>{o.product.name}</td>
@@ -166,6 +244,7 @@ export function MaterialLacagemPage() {
           </table>
         )}
       </div>
+    </div>
     </div>
   );
 }

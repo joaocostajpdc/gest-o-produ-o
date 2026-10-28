@@ -14,10 +14,10 @@ import { useFeature } from "../contexts/FeaturesContext";
 
 // Painel lateral de consulta rápida (2026-10-14): só em ecrã de computador
 // (≥ 1100px de largura); em telemóvel/tablet continua o cartão ao centro.
-const SIDE_PANEL_MIN_WIDTH = 1100;
-const MAX_SIDE_PANELS = 8;
+export const SIDE_PANEL_MIN_WIDTH = 1100;
+export const MAX_SIDE_PANELS = 8;
 
-function useIsWide(minWidth: number) {
+export function useIsWide(minWidth: number) {
   const query = `(min-width: ${minWidth}px)`;
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
   useEffect(() => {
@@ -568,7 +568,7 @@ function designationLines(specifications?: string | null): string[] {
     .filter((l) => l && !/:\s*-{2,}\s*$/.test(l));
 }
 
-function QuickViewBody({
+export function QuickViewBody({
   order,
   busy,
   actionError,

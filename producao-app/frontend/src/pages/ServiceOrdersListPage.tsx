@@ -11,6 +11,8 @@ import {
 import { minutesToDays, PriorityBadge, StatusBadge } from "../components/Badges";
 import { useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
+import { useTabs } from "../contexts/TabsContext";
+import { FeatureTestBanner } from "../components/FeatureTestBanner";
 
 // Painel lateral de consulta rápida (2026-10-14): só em ecrã de computador
 // (≥ 1100px de largura); em telemóvel/tablet continua o cartão ao centro.
@@ -578,6 +580,10 @@ export function QuickViewBody({
   onAdvance,
 }: QuickViewBodyProps) {
   const designation = showDesignation ? designationLines(order.specifications) : [];
+  // Botão "Abrir em nova aba" (pedido do utilizador de 2026-10-29) — abre a OS
+  // numa aba nova da barra de cima. Em teste: "osNovaAba".
+  const tabs = useTabs();
+  const novaAba = useFeature("osNovaAba").available && !!tabs;
   return (
     <>
       <div className="qv-popover-header">
@@ -665,7 +671,18 @@ export function QuickViewBody({
         <Link to={`/service-orders/${order.id}`} className="btn secondary">
           Ver detalhes completos
         </Link>
+        {novaAba && (
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={() => tabs!.openTab(`/service-orders/${order.id}`)}
+            title="Abrir esta OS numa aba nova, na barra de cima"
+          >
+            Abrir em nova aba
+          </button>
+        )}
       </div>
+      {novaAba && <FeatureTestBanner featureKey="osNovaAba" label="o botão Abrir em nova aba" />}
     </>
   );
 }

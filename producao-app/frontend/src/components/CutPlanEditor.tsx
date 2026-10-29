@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { CutPlan, CutPlanInput, CutPlanMode, CutResult, MosquitoRules } from "../types";
 import { CutPlanView } from "./CutPlanView";
+import { useFeature } from "../contexts/FeaturesContext";
+import { FeatureTestBanner } from "./FeatureTestBanner";
 import { EMPTY_RULES, GeneratedPiece, MosquitoPanel, MosquitoRow, emptyMosquitoRow, rowsToItems } from "./MosquitoPanel";
 
 // ============================================================================
@@ -150,7 +152,17 @@ export function CutPlanEditor({
         }))
       : [emptyMosquitoRow()]
   );
+  // Mosquiteiras no plano de corte, versão 2 (pedido do utilizador de
+  // 2026-10-29): o quadro Largura × Altura (lido de uma ou várias OS) aparece
+  // logo nos planos novos em barras, e os descontos usados ficam escritos nas
+  // Notas do plano. Em teste: "corteMosquiteiras".
+  const mosqV2 = useFeature("corteMosquiteiras").available;
+  const isNewPlan = !initial?.input;
   const [showMosq, setShowMosq] = useState(!!initialBars?.mosquitos?.length || !!initial?.startMosquito);
+  useEffect(() => {
+    if (mosqV2 && isNewPlan && mode === "BARRAS") setShowMosq(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mosqV2, mode]);
   const [paste, setPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [preview, setPreview] = useState<{ input: CutPlanInput; result: CutResult } | null>(null);
@@ -179,6 +191,7 @@ export function CutPlanEditor({
         os: g.os ?? "",
       }))
     );
+    if (mosqV2) setNotes((prev) => withDeductions(prev, rules));
     const oss = [...new Set(list.map((g) => g.os).filter((x): x is string => !!x))];
     const auto = /^Mosquiteiras OS /.test(name.trim());
     if ((!name.trim() || auto) && oss.length) setName(`Mosquiteiras OS ${oss.join(" + ")}`);
@@ -370,6 +383,14 @@ export function CutPlanEditor({
           Calcular a partir de mosquiteiras (OS)
         </button>
       )}
+      {!isSheet && showMosq && mosqV2 && isNewPlan && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+          <button type="button" className="link-button" onClick={() => setShowMosq(false)}>
+            Esconder mosquiteiras (plano de barras normal)
+          </button>
+        </div>
+      )}
+      {!isSheet && showMosq && mosqV2 && <FeatureTestBanner featureKey="corteMosquiteiras" label="as mosquiteiras no plano de corte (quadro Largura × Altura e descontos nas Notas)" />}
       {!isSheet && showMosq && (
         <MosquitoPanel
           osRef={osRef}
@@ -593,8 +614,13 @@ export function CutPlanEditor({
 
       <div className="card">
         <label className="field" style={{ marginBottom: 12 }}>
-          Notas
-          <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          {mosqV2 && showMosq ? "Notas — descontos e observações" : "Notas"}
+          <textarea
+            rows={mosqV2 && showMosq ? 5 : 2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={mosqV2 && showMosq ? "Os descontos (x, f, y) são escritos aqui ao gerar as peças. Podes acrescentar o que quiseres." : undefined}
+          />
         </label>
         {error && <p className="error-text">{error}</p>}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -631,4 +657,24 @@ export function editorInitialFromPlan(plan: CutPlan): EditorInitial {
     serviceOrderRef: plan.serviceOrder?.externalId ?? null,
     input: plan.input,
   };
+}
+
+// Bloco "Descontos" escrito nas Notas ao gerar as peças das mosquiteiras
+// (pedido do utilizador de 2026-10-29: "notas, quadro para pôr os descontos").
+// Substitui o bloco anterior, se já lá estiver, e mantém o resto das notas.
+const DED_START = "Descontos das mosquiteiras:";
+function withDeductions(prev: string, r: MosquitoRules): string {
+  const v = (n: number | null) => (n == null ? "—" : `${String(n).replace(".", ",")} mm`);
+  const block = [
+    DED_START,
+    `• Alturas (${r.heightsPerUnit} por mosquiteira, perfil "${r.heightProfile}"): −${v(r.heightDeduct)} (x)`,
+    `• Larguras até ${r.widthLimit} (${r.widthsPerUnit} por mosquiteira, perfil "${r.widthSmallProfile}"): −${v(r.widthDeductSmall)} (f)`,
+    `• Larguras acima de ${r.widthLimit} (${r.widthsPerUnit} por mosquiteira, perfil "${r.widthLargeProfile}"): −${v(r.widthDeductLarge)} (y)`,
+  ].join("\n");
+  const lines = prev.split("\n");
+  const i = lines.findIndex((l) => l.trim() === DED_START);
+  if (i < 0) return prev.trim() ? `${block}\n\n${prev.trim()}` : block;
+  let j = i + 1;
+  while (j < lines.length && lines[j].startsWith("• ")) j++;
+  return [...lines.slice(0, i), block, ...lines.slice(j)].join("\n").trim();
 }

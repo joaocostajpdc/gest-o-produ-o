@@ -317,17 +317,20 @@ export function MosquitoPanel({
         ))}
       </div>
 
+      <div style={{ fontWeight: 600, margin: "4px 0 6px" }}>
+        Descontos <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>— ficam escritos nas Notas do plano</span>
+      </div>
       <div className="cut-rules">
         <label className="field">
-          Alturas: descontar <b>x</b> (mm)
+          Alturas ({rules.heightsPerUnit} por mosquiteira): descontar <b>x</b> (mm)
           <input type="number" step="0.1" value={rules.heightDeduct ?? ""} onChange={(e) => setRule({ heightDeduct: numOrNull(e.target.value) })} />
         </label>
         <label className="field">
-          Larguras até {rules.widthLimit}: descontar <b>f</b> (mm)
+          Larguras até {rules.widthLimit} ({rules.widthsPerUnit} por mosquiteira): descontar <b>f</b> (mm)
           <input type="number" step="0.1" value={rules.widthDeductSmall ?? ""} onChange={(e) => setRule({ widthDeductSmall: numOrNull(e.target.value) })} />
         </label>
         <label className="field">
-          Larguras acima de {rules.widthLimit}: descontar <b>y</b> (mm)
+          Larguras acima de {rules.widthLimit} ({rules.widthsPerUnit} por mosquiteira): descontar <b>y</b> (mm)
           <input type="number" step="0.1" value={rules.widthDeductLarge ?? ""} onChange={(e) => setRule({ widthDeductLarge: numOrNull(e.target.value) })} />
         </label>
       </div>

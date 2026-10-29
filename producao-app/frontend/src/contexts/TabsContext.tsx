@@ -87,8 +87,27 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Endereço para onde se mandou ir ao trocar/abrir/fechar uma aba. Até o
+  // browser lá chegar, o endereço antigo não pode ser copiado para a aba que
+  // ficou ativa (o React Router 7 muda o endereço um pouco depois).
+  const pendingNav = useRef<{ path: string; at: number } | null>(null);
+  const go = useCallback(
+    (path: string) => {
+      pendingNav.current = { path, at: Date.now() };
+      navigate(path);
+    },
+    [navigate]
+  );
+
   // A aba ativa acompanha a navegação normal (links, botões, voltar atrás).
   useEffect(() => {
+    const pend = pendingNav.current;
+    if (pend) {
+      // (se a página entretanto redirecionar para outro sítio, ao fim de 1,5 s
+      // a aba volta a seguir o endereço normalmente)
+      if (current !== pend.path && Date.now() - pend.at < 1500) return;
+      pendingNav.current = null;
+    }
     setState((s) => {
       const active = s.tabs.find((t) => t.id === s.activeId);
       if (!active || active.path === current) return s;
@@ -127,9 +146,9 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       if (!tab || id === stateRef.current.activeId) return;
       rememberScroll();
       setState((s) => ({ ...s, activeId: id }));
-      if (tab.path !== window.location.pathname + window.location.search) navigate(tab.path);
+      if (tab.path !== window.location.pathname + window.location.search) go(tab.path);
     },
-    [navigate]
+    [go]
   );
 
   const openTab = useCallback(
@@ -149,10 +168,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       } else {
         rememberScroll();
         setState({ tabs, activeId: tab.id });
-        navigate(path);
+        go(path);
       }
     },
-    [navigate]
+    [go]
   );
 
   const closeTab = useCallback(
@@ -165,7 +184,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       if (tabs.length === 0) {
         const fresh: AppTab = { id: newId(), path: HOME };
         setState({ tabs: [fresh], activeId: fresh.id });
-        navigate(HOME);
+        go(HOME);
         return;
       }
       if (id !== s.activeId) {
@@ -174,9 +193,9 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       }
       const next = tabs[Math.min(idx, tabs.length - 1)];
       setState({ tabs, activeId: next.id });
-      navigate(next.path);
+      go(next.path);
     },
-    [navigate]
+    [go]
   );
 
   const setTabTitle = useCallback((id: string, title: string | undefined) => {

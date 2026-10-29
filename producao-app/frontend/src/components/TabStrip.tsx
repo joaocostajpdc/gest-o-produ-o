@@ -230,10 +230,17 @@ export function TabPanes() {
     <>
       {tabs.tabs.map((t) => {
         const active = t.id === tabs.activeId;
+        // Ao trocar de aba, a aba passa a ativa um instante antes de o
+        // endereço mudar (o React Router 7 muda o endereço "em transição").
+        // Nesse instante a aba mostraria a página da aba anterior e deitava
+        // fora a sua (perdendo filtros, etc.) — por isso só segue o endereço
+        // do browser quando ele já é o desta aba (correção de 2026-10-29).
+        const here = location.pathname + location.search;
+        const useLive = active && here === t.path;
         return (
           <div key={t.id} className="tab-pane" hidden={!active}>
             <TabIdProvider id={t.id}>
-              <Routes location={active ? location : t.path}>
+              <Routes location={useLive ? location : t.path}>
                 {protectedRoutes}
                 <Route path="*" element={<RootPage />} />
               </Routes>

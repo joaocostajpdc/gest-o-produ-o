@@ -112,6 +112,8 @@ export function ServiceOrderDetailPage() {
   const etiquetaPainelFeature = useFeature("etiquetaPainel");
   // Medidas nas OS (2026-10-29): em teste só para o administrador.
   const medidasFeature = useFeature("medidasOS");
+  // Botão "Retomar produção" nas OS suspensas (2026-10-29): em teste.
+  const retomarFeature = useFeature("retomarSuspensa");
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -274,6 +276,16 @@ export function ServiceOrderDetailPage() {
                 Avançar etapa
               </button>
             )}
+            {order.status === "SUSPENSA" && retomarFeature.available && (
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => runAction(() => api.post(`/service-orders/${id}/resume`))}
+                title="Termina a interrupção e volta a pôr a OS em produção"
+              >
+                Retomar produção
+              </button>
+            )}
             {(() => {
               // PDF original da Ordem Serviço (guardado ao importar) — 2026-10-21.
               const osPdf = attachments.find((a) => !a.observationId && /^Ordem Servi[çc]o /i.test(a.filename) && a.mimeType === "application/pdf");
@@ -327,6 +339,11 @@ export function ServiceOrderDetailPage() {
               </button>
             )}
           </div>
+          {order.status === "SUSPENSA" && retomarFeature.available && !retomarFeature.released && (
+            <div style={{ marginTop: 12 }}>
+              <FeatureTestBanner featureKey="retomarSuspensa" label="o botão Retomar produção" />
+            </div>
+          )}
           {order.product.category === "Painéis" && etiquetaPainelFeature.available && !etiquetaPainelFeature.released && (
             <div style={{ marginTop: 12 }}>
               <FeatureTestBanner featureKey="etiquetaPainel" label="a nova Etiqueta do Produto dos painéis" />

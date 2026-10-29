@@ -34,6 +34,7 @@ export const FEATURES = {
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",
   abas: "Abas (várias páginas abertas) e Início só com ícones",
+  retomarSuspensa: "Botão Retomar produção nas OS suspensas",
   osNovaAba: "Botão Abrir em nova aba no painel lateral das OS",
   listagemAcabamento: "Coluna Acabamento na Listagem de Ordens de Serviço",
   medidasOS: "Medidas nas OS (leitura do PDF, editar medidas, etiquetas e corte das mosquiteiras)",

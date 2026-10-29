@@ -912,3 +912,36 @@ serviceOrdersRouter.put(
     res.json(readSpecBlocks(specifications));
   })
 );
+
+// ---------------------------------------------------------------------------
+// Retomar uma OS suspensa (pedido do utilizador de 2026-10-29: "botão para
+// tirar de suspenso"). Termina a interrupção em aberto (como o botão
+// "Terminar" do separador Interrupções); se por algum motivo não houver
+// nenhuma, volta só a pôr a OS em produção. Em teste: "retomarSuspensa".
+// ---------------------------------------------------------------------------
+serviceOrdersRouter.post(
+  "/:id/resume",
+  requirePermission("interruptions:write"),
+  requireFeature("retomarSuspensa"),
+  asyncHandler(async (req, res) => {
+    const so = await prisma.serviceOrder.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
+    if (!so) throw new Error("Ordem de Serviço não encontrada.");
+    if (so.status !== "SUSPENSA") throw new Error("Esta OS não está suspensa.");
+    const open = await prisma.interruption.findFirst({
+      where: { serviceOrderId: so.id, endedAt: null },
+      orderBy: { startedAt: "desc" },
+    });
+    if (open) {
+      await endInterruption(open.id, req.user!.id);
+    } else {
+      await prisma.serviceOrder.update({ where: { id: so.id }, data: { status: "EM_PRODUCAO", lastResumedAt: new Date() } });
+      await logHistoryEvent({
+        serviceOrderId: so.id,
+        type: "FIM_INTERRUPCAO",
+        description: "Produção retomada.",
+        userId: req.user?.id,
+      });
+    }
+    res.json({ ok: true });
+  })
+);

@@ -23,7 +23,7 @@ interface TextItem {
   width: number;
 }
 
-function renderPageWithColumns(pageData: any): Promise<string> {
+export function renderPageWithColumns(pageData: any): Promise<string> {
   return pageData.getTextContent().then((textContent: { items: TextItem[] }) => {
     let lastY: number | null = null;
     let lastX: number | null = null;

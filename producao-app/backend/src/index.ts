@@ -6,7 +6,7 @@ import { startEmailScheduler } from "./services/emailReportsService";
 import { goldylocksProbe } from "./scripts/goldylocksProbe";
 import { announceTelegram } from "./scripts/announceTelegram";
 import { launchOS20261029 } from "./scripts/launchOS20261029";
-import { dumpPdfText } from "./scripts/dumpPdfText";
+import { rereadPdfs20261029 } from "./scripts/rereadPdfs20261029";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -37,8 +37,8 @@ void announceTelegram();
 // Lançamento pontual das OS 2026/557 e 2026/558 na Lacagem (Alumiasas) — 2026-10-29.
 void launchOS20261029();
 
-// Diagnóstico temporário da leitura dos PDFs (só com DUMP_PDF_TEXT=1).
-void dumpPdfText();
+// Releitura pontual dos PDFs das OS abertas com a leitura melhorada (uma só vez).
+void rereadPdfs20261029();
 
 // Sonda temporária da API do Goldylocks (só com GOLDYLOCKS_PROBE=1).
 void goldylocksProbe();

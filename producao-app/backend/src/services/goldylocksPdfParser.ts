@@ -165,6 +165,8 @@ const ALT = "Alt(?:ura)?\\.?\\s*:?\\s*";
 const QTY_PREFIX = "(?:(\\d{1,3})\\s*(?:=|uni?\\.?|un\\.?|x|×)\\s*)?";
 const LARG_ALT_RE = new RegExp(`${QTY_PREFIX}${LARG}${N}${SEP}${ALT}${N}`, "gi");
 const ALT_LARG_RE = new RegExp(`${QTY_PREFIX}${ALT}${N}${SEP}${LARG}${N}`, "gi");
+// "Larg. 1014 * 1824 Alt." / "Larg. 1002 *  455Alt." (OS 2026/563): número antes de "Alt."
+const LARG_N_N_ALT_RE = new RegExp(`${QTY_PREFIX}${LARG}${N}${SEP}${N}\\s*Alt(?:ura)?\\.?`, "gi");
 const LARG_ONLY_RE = new RegExp(`^${LARG}${N}\\s*(?:mm)?$`, "i");
 const ALT_ONLY_RE = new RegExp(`^${ALT}${N}\\s*(?:mm)?$`, "i");
 // "2 = 1370x1000" / "1370 x 1000" (só números — usado só nas mosquiteiras)
@@ -192,6 +194,12 @@ function extractMedidas(blockText: string, mosquiteira: boolean): { medidas: Med
     for (const m of line.matchAll(LARG_ALT_RE)) {
       medidas.push({ qty: m[1] ? Number(m[1]) : undefined, larg: cleanNum(m[2]), alt: cleanNum(m[3]) });
       found = true;
+    }
+    if (!found) {
+      for (const m of line.matchAll(LARG_N_N_ALT_RE)) {
+        medidas.push({ qty: m[1] ? Number(m[1]) : undefined, larg: cleanNum(m[2]), alt: cleanNum(m[3]) });
+        found = true;
+      }
     }
     if (!found) {
       for (const m of line.matchAll(ALT_LARG_RE)) {
@@ -224,56 +232,159 @@ function extractMedidas(blockText: string, mosquiteira: boolean): { medidas: Med
 
 const fmtQty = (n: number) => n.toFixed(2).replace(".", ",");
 
-/**
- * Leitura melhorada de um artigo: medidas em "Dimensões: Larg. W x Alt. H"
- * e, se houver várias medidas, um artigo por medida.
- */
+// ============================================================================
+// Leitura melhorada dos artigos (pedido do utilizador de 2026-10-29: "não
+// quero colocar as medidas à mão, quero que faça uma melhor leitura das
+// dimensões em mosquiteiras e painéis principalmente, e dos acabamentos em
+// tudo"). Afinada com os PDFs reais das OS 2026/505–567:
+//
+//  - linhas com vários campos ("Modelo: MF.TVL-29; Dimensões: 2000x800x28",
+//    "Enchimento: XPS; Vidro: Fosco/Fosco; V/ ref.: …") partem-se num campo
+//    por linha; uma linha partida a meio ("…; Lac.\n9006; V/ ref.: …", OS
+//    2026/547) volta a juntar-se;
+//  - "Acabamento.:" / "Vidro :" (pontuação fora do sítio) são reconhecidos;
+//  - dimensões ficam sempre no mesmo formato ("2160 x 1077" e "2100X900X28"
+//    -> "2160x1077", "2100x900x28"); medidas sem rótulo ("446x400x0,8",
+//    "2 - 230x40x38x1280") passam a "Dimensões:" (com a quantidade de peças);
+//  - acabamento também quando vem como "Lacado 9016 Mate", "Lacar 7016 Txt
+//    fino", "Lac. Noir 200", "Cor 1019 Mate", ou só na descrição das
+//    mosquiteiras ("… Branca", "… Acetinado Champanhe");
+//  - "Ref. Sá" conta como V/Ref.
+// ============================================================================
+
+const FIELD_LABEL = "(?:Modelo|Dimens[õo]es|Acabamento|Enchimento|Espessura|Vidro|Relevo|Medidas?|V\\s*\\/\\s*(?:ref|enc))";
+
+/** Junta linhas partidas a meio e parte linhas com vários campos. */
+export function normalizeBlock(blockText: string): string {
+  const raw = blockText.split("\n").map((l) => l.replace(/\s+$/, ""));
+  const joined: string[] = [];
+  for (const line of raw) {
+    const t = line.trim();
+    if (!t) continue;
+    const prev = joined.length ? joined[joined.length - 1] : null;
+    // continuação: a anterior não fecha com ";" e esta começa por um número
+    // seguido de ";" (ex.: "…; Lac." + "9006; V/ ref.: Cimiterio;")
+    if (prev && !/;\s*$/.test(prev) && /^[\d.,]+\s*;/.test(t) && /;/.test(prev)) {
+      joined[joined.length - 1] = `${prev} ${t}`;
+      continue;
+    }
+    joined.push(t);
+  }
+  const out: string[] = [];
+  // parte antes de um campo com rótulo, e antes de "Chapa Quinada" dentro do
+  // Enchimento (OS 2026/547: "Enchimento: XPS; Chapa Quinada; 2 - 3000; …")
+  const splitRe = new RegExp(`;\\s*(?=${FIELD_LABEL}\\s*\\.?\\s*:|Chapa\\s+Quinada\\s*;)`, "i");
+  for (const line of joined) {
+    for (let part of line.split(splitRe)) {
+      part = part
+        .trim()
+        .replace(/^(Acabamento|Dimens[õo]es|Modelo|Enchimento|Espessura|Vidro|Relevo)\s*\.?\s*:\s*/i, (_m, l: string) => `${l.charAt(0).toUpperCase()}${l.slice(1)}: `)
+        .replace(/^(Chapa\s+Quinada)\s*;\s*/i, "$1: ")
+        .replace(/\s*;\s*$/, "");
+      if (part) out.push(part);
+    }
+  }
+  return out.join("\n") + "\n";
+}
+
+const normDims = (v: string) =>
+  v
+    .replace(/\s*[xX×*]\s*/g, "x")
+    .replace(/\s+/g, " ")
+    .replace(/[;,]\s*$/, "")
+    .trim();
+
+const BARE_DIMS_RE = /^(?:(\d{1,3})\s*-\s*)?(\d+(?:[.,]\d+)?(?:\s*[xX×*]\s*\d+(?:[.,]\d+)?){1,4})\s*;?$/;
+const LACAGEM_RE = /^(DCLP|DCLACH)/i;
+const FINISH_LINE_RE = /^(Lacar|Lacado|Lacada|Lac\.|Cor)\s+(.+?)\s*;?$/i;
+const MOSQ_COLORS =
+  /\b(Branc[oa]|Castanh[oa]|Bronze|Pret[oa]|Champanhe|Cinzent[oa]|Anodizad[oa]|Inox|Prata|Bege|Creme|Acetinad[oa]\s+\w+|Lacad[oa].*|Cor RAL.*)$/i;
+
+function finishFromLine(l: string): string | null {
+  const m = l.match(FINISH_LINE_RE);
+  if (!m) return null;
+  const v = m[2].replace(/[;,]\s*$/, "").trim();
+  return /^cor$/i.test(m[1]) ? v : `L. ${v}`;
+}
+
+/** Leitura melhorada de um artigo (ver nota acima). Pode devolver vários artigos (um por medida). */
 function applyMedidas(a: ParsedArtigo, blockText: string): ParsedArtigo[] {
   const mosq = isMosquiteiraArtigo(a.codigoArtigo, a.descricaoArtigo);
-  // Painéis e afins já trazem "Dimensões:" com o seu próprio formato — não mexer.
-  if (a.dimensoes && !mosq) return [a];
+  const lacagem = LACAGEM_RE.test(a.codigoArtigo);
+  const lines = blockText
+    .split("\n")
+    .map((l) => l.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const body: string[] = [];
+  for (const l of lines) {
+    if (FOOTER_RE.test(l)) break;
+    body.push(l);
+  }
+  const used = new Set<string>();
+  let art: ParsedArtigo = { ...a };
 
-  // Almofadas/painéis com uma lista "Medidas: ; 1 = 600x700x28; 1 = 700x800x28"
-  // (OS 2026/566, DCALMREL001 — 2026-10-29): uma peça por medida, cada uma com
-  // a sua quantidade, para sair uma etiqueta por peça com a medida certa. A
-  // medida fica tal como vem (sem dizer o que é largura/altura).
+  // Dimensões já com rótulo: formato uniforme.
+  if (art.dimensoes && !/Larg\./i.test(art.dimensoes)) art.dimensoes = normDims(art.dimensoes);
+
+  // Acabamento: linhas "Lacado/Lacar/Lac./Cor …" quando não há "Acabamento:".
+  if (!art.acabamento) {
+    for (const l of body) {
+      const f = finishFromLine(l);
+      if (f) {
+        art.acabamento = f;
+        used.add(l);
+        break;
+      }
+    }
+  }
+  // Mosquiteiras: a cor vem na descrição ("Mosquiteira enrolar vertical Branca").
+  if (!art.acabamento && mosq && art.descricaoArtigo) {
+    const c = art.descricaoArtigo.match(MOSQ_COLORS);
+    if (c && !/^Cor RAL/i.test(c[1])) art.acabamento = c[1].trim();
+  }
+  // V/Ref. escrita como "Ref. Sá".
+  if (!art.vRefArtigo) {
+    const r = body.find((l) => /^Ref\.?\s*:?\s+\S/i.test(l));
+    if (r) {
+      art.vRefArtigo = r.replace(/^Ref\.?\s*:?\s*/i, "").replace(/[;,]\s*$/, "").trim();
+      used.add(r);
+    }
+  }
+  const clean = (x: ParsedArtigo): ParsedArtigo => ({ ...x, outras: (x.outras ?? []).filter((l) => !used.has(l)) });
+
   if (!mosq) {
-    const lines = blockText.split("\n").map((l) => l.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim());
-    const medLine = lines.find((l) => /^Medidas?\s*:/i.test(l));
+    if (art.dimensoes) return [clean(art)];
+    // "Medidas: ; 1 = 600x700x28; 1 = 700x800x28" (OS 2026/566): uma peça por medida.
+    const medLine = body.find((l) => /^Medidas?\s*:/i.test(l));
     const entries = medLine
-      ? [...medLine.matchAll(/(\d{1,3})\s*=\s*(\d+(?:[.,]\d+)?(?:\s*[x×*]\s*\d+(?:[.,]\d+)?){1,2})/gi)]
+      ? [...medLine.matchAll(/(\d{1,3})\s*=\s*(\d+(?:[.,]\d+)?(?:\s*[x×*]\s*\d+(?:[.,]\d+)?){1,3})/gi)]
       : [];
-    if (!entries.length) return [a];
-    const outras = (a.outras ?? []).filter((l) => l !== medLine);
-    return entries.map((m) => ({
-      ...a,
-      dimensoes: m[2].replace(/\s+/g, "").replace(/[×*]/g, "x"),
-      quantidade: fmtQty(Number(m[1])),
-      unidade: a.unidade ?? "uni",
-      outras,
-    }));
+    if (entries.length) {
+      used.add(medLine!);
+      return entries.map((m) => clean({ ...art, dimensoes: normDims(m[2]), quantidade: fmtQty(Number(m[1])), unidade: art.unidade ?? "uni" }));
+    }
+    // Medidas sem rótulo ("446x400x0,8", "2 - 230x40x38x1280"). Nas lacagens
+    // de perfis as linhas são listas de perfis — ficam como estão.
+    if (lacagem) return [clean(art)];
+    const bare = body.map((l) => ({ l, m: l.match(BARE_DIMS_RE) })).filter((x) => x.m);
+    if (!bare.length) return [clean(art)];
+    bare.forEach((x) => used.add(x.l));
+    if (bare.length === 1 && !bare[0].m![1]) return [clean({ ...art, dimensoes: normDims(bare[0].m![2]) })];
+    return bare.map((x) =>
+      clean({ ...art, dimensoes: normDims(x.m![2]), quantidade: fmtQty(Number(x.m![1] ?? 1)), unidade: art.unidade ?? "uni" })
+    );
   }
 
   const { medidas, usedLines } = extractMedidas(blockText, mosq);
-  if (!medidas.length) return [a];
-
-  // Tira das "outras linhas" as que já foram lidas como medidas.
-  const usedText = new Set(
-    [...usedLines].map((i) => blockText.split("\n")[i].replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim())
-  );
-  const outras = (a.outras ?? []).filter((l) => !usedText.has(l));
+  if (!medidas.length) return [clean(art)];
+  const blockLines = blockText.split("\n");
+  usedLines.forEach((i) => used.add(blockLines[i].replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim()));
   const dims = (m: Medida) => `Larg. ${m.larg} x Alt. ${m.alt}`;
 
-  if (medidas.length === 1 || (a.dimensoes && /Larg\.\s*[\d.,]+\s*x\s*Alt\./i.test(a.dimensoes))) {
-    return [{ ...a, dimensoes: dims(medidas[0]), outras }];
+  if (medidas.length === 1 || (art.dimensoes && /Larg\.\s*[\d.,]+\s*x\s*Alt\./i.test(art.dimensoes))) {
+    return [clean({ ...art, dimensoes: dims(medidas[0]) })];
   }
-  return medidas.map((m) => ({
-    ...a,
-    dimensoes: dims(m),
-    quantidade: fmtQty(m.qty ?? 1),
-    unidade: a.unidade ?? "uni",
-    outras,
-  }));
+  return medidas.map((m) => clean({ ...art, dimensoes: dims(m), quantidade: fmtQty(m.qty ?? 1), unidade: art.unidade ?? "uni" }));
 }
 
 /**
@@ -381,7 +492,8 @@ export function parseText(text: string, opts: ParseOptions = {}): ParsedOrdemSer
   const artigos: ParsedArtigo[] = artigoMatches.flatMap((m, i) => {
     const blockStart = m.index! + m[0].length;
     const blockEnd = i + 1 < artigoMatches.length ? artigoMatches[i + 1].index! : afterHeader.length;
-    const blockText = afterHeader.slice(blockStart, blockEnd);
+    const rawBlock = afterHeader.slice(blockStart, blockEnd);
+    const blockText = opts.medidas ? normalizeBlock(rawBlock) : rawBlock;
     const artigo: ParsedArtigo = {
       codigoArtigo: m[1],
       descricaoArtigo: m[2]?.trim(),

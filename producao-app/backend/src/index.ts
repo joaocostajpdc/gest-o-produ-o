@@ -5,6 +5,7 @@ import { fixVRefOS20260916 } from "./scripts/fixVRefOS20260916";
 import { startEmailScheduler } from "./services/emailReportsService";
 import { goldylocksProbe } from "./scripts/goldylocksProbe";
 import { announceTelegram } from "./scripts/announceTelegram";
+import { launchOS20261029 } from "./scripts/launchOS20261029";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -31,6 +32,9 @@ startEmailScheduler();
 
 // Aviso geral pontual por Telegram (só com TELEGRAM_ANNOUNCE definido; não repete).
 void announceTelegram();
+
+// Lançamento pontual das OS 2026/557 e 2026/558 na Lacagem (Alumiasas) — 2026-10-29.
+void launchOS20261029();
 
 // Sonda temporária da API do Goldylocks (só com GOLDYLOCKS_PROBE=1).
 void goldylocksProbe();

@@ -7,6 +7,7 @@ import { FeatureTestBanner } from "../components/FeatureTestBanner";
 import { CutPlansPanel } from "../components/CutPlansPanel";
 import { CutPlanEditor, EditorInitial, editorInitialFromPlan } from "../components/CutPlanEditor";
 import { CutPlanView } from "../components/CutPlanView";
+import { printCutProductionSheet } from "../components/cutProductionSheet";
 import { CutPlan, CutPlanInput } from "../types";
 
 // ============================================================================
@@ -107,6 +108,8 @@ export function CutPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Folha de corte para a produção (2026-10-29) — em teste: "folhaCorte".
+  const folhaCorte = useFeature("folhaCorte");
 
   useEffect(() => {
     if (!id) return;
@@ -169,7 +172,12 @@ export function CutPlanPage() {
           PC-{plan.number} — {plan.name}
         </h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn" onClick={() => window.print()}>
+          {plan.mode === "BARRAS" && folhaCorte.available && (
+            <button className="btn" onClick={() => printCutProductionSheet(plan)} title="Folha para levar para a máquina: lista de corte, barras e mosquiteiras">
+              Folha para a produção
+            </button>
+          )}
+          <button className={plan.mode === "BARRAS" && folhaCorte.available ? "btn secondary" : "btn"} onClick={() => window.print()}>
             Imprimir
           </button>
           {canWrite && (
@@ -195,6 +203,11 @@ export function CutPlanPage() {
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}
+      {plan.mode === "BARRAS" && folhaCorte.available && !folhaCorte.released && (
+        <div className="no-print">
+          <FeatureTestBanner featureKey="folhaCorte" label="a Folha para a produção" />
+        </div>
+      )}
 
       <div className="card cut-print-head">
         <div className="cut-print-brand">Minho Ferragens · Plano de Corte</div>

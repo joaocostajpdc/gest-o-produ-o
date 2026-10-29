@@ -33,13 +33,26 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     const { status, stageId, supplierId, clientId, priority, category, search, format } = req.query;
 
+    // Vários valores no mesmo filtro, separados por vírgula (pedido do
+    // utilizador de 2026-10-29: "selecionar dentro do mesmo filtro várias
+    // coisas"). Um só valor continua a funcionar como antes.
+    const list = (v: unknown): string[] =>
+      v == null || v === "" ? [] : String(v).split(",").map((x) => x.trim()).filter(Boolean);
+    const one = (vals: string[]) => (vals.length === 1 ? vals[0] : { in: vals });
+    const statuses = list(status);
+    const clientIds = list(clientId);
+    const categories = list(category);
+    const stageIds = list(stageId);
+    const supplierIds = list(supplierId);
+    const priorities = list(priority);
+
     const where: any = {};
-    if (status) where.status = String(status);
-    if (clientId) where.clientId = String(clientId);
+    if (statuses.length) where.status = one(statuses);
+    if (clientIds.length) where.clientId = one(clientIds);
     // Mesmos filtros de categoria e pesquisa livre (OS, cliente, número de
     // cliente, produto) da listagem principal de Ordens de Serviço, para que
     // esta listagem imprimível possa refletir exatamente a mesma seleção.
-    if (category) where.product = { category: String(category) };
+    if (categories.length) where.product = { category: one(categories) };
     if (search) {
       where.OR = [
         { externalId: { contains: String(search), mode: "insensitive" } },
@@ -48,10 +61,10 @@ reportsRouter.get(
         { product: { name: { contains: String(search), mode: "insensitive" } } },
       ];
     }
-    if (stageId || supplierId) {
+    if (stageIds.length || supplierIds.length) {
       where.currentStageInstance = {
-        ...(stageId ? { stageId: String(stageId) } : {}),
-        ...(supplierId ? { supplierId: String(supplierId) } : {}),
+        ...(stageIds.length ? { stageId: one(stageIds) } : {}),
+        ...(supplierIds.length ? { supplierId: one(supplierIds) } : {}),
       };
     }
 
@@ -84,7 +97,7 @@ reportsRouter.get(
       };
     });
 
-    if (priority) rows = rows.filter((r) => r._priority === String(priority));
+    if (priorities.length) rows = rows.filter((r) => r._priority != null && priorities.includes(r._priority));
     rows.sort((a, b) => comparePriority({ priority: a._priority, deadlineAt: a._deadline }, { priority: b._priority, deadlineAt: b._deadline }));
     const cleanRows = rows.map(({ _priority, _deadline, ...rest }) => rest);
 
@@ -108,9 +121,10 @@ reportsRouter.get(
         CANCELADA: "Cancelada",
       };
       const filterParts: string[] = [];
-      if (status) filterParts.push(`Estado: ${STATUS_LABELS[String(status)] ?? String(status)}`);
-      if (priority) filterParts.push(`Prioridade: ${PRIORITY_LABELS[String(priority) as keyof typeof PRIORITY_LABELS]}`);
-      if (category) filterParts.push(`Categoria: ${String(category)}`);
+      if (statuses.length) filterParts.push(`Estado: ${statuses.map((x) => STATUS_LABELS[x] ?? x).join(", ")}`);
+      if (priorities.length)
+        filterParts.push(`Prioridade: ${priorities.map((x) => PRIORITY_LABELS[x as keyof typeof PRIORITY_LABELS] ?? x).join(", ")}`);
+      if (categories.length) filterParts.push(`Categoria: ${categories.join(", ")}`);
       if (search) filterParts.push(`Pesquisa: "${String(search)}"`);
       const filtersSummary = filterParts.length ? filterParts.join(" · ") : "Sem filtros aplicados";
 

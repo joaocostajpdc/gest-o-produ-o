@@ -3,6 +3,7 @@ import { api, buildQuery, downloadBlob } from "../api/client";
 import { PriorityBadge, StatusBadge } from "../components/Badges";
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "../components/FeatureTestBanner";
+import { MultiSelect } from "../components/MultiSelect";
 import { Client, PriorityLevel, Product, ServiceOrderStatus, Stage, Supplier } from "../types";
 
 interface ReportRow {
@@ -36,6 +37,8 @@ const PRIORITY_OPTIONS = [
 export function PrintableListPage() {
   // Coluna Acabamento (2026-10-29) — em teste, só o administrador até aprovar.
   const showAcab = useFeature("listagemAcabamento").available;
+  // Várias escolhas no mesmo filtro (2026-10-29) — em teste.
+  const multi = useFeature("filtrosMultiplos").available;
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<"csv" | "pdf" | null>(null);
@@ -132,6 +135,23 @@ export function PrintableListPage() {
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
+          {multi ? (
+            <>
+              <MultiSelect placeholder="Estado (todos)" options={STATUS_OPTIONS} value={filters.status} onChange={(v) => setFilters((f) => ({ ...f, status: v }))} />
+              <MultiSelect placeholder="Prioridade (todas)" options={PRIORITY_OPTIONS} value={filters.priority} onChange={(v) => setFilters((f) => ({ ...f, priority: v }))} />
+              <MultiSelect placeholder="Etapa (todas)" options={stages.map((x) => ({ value: x.id, label: x.name }))} value={filters.stageId} onChange={(v) => setFilters((f) => ({ ...f, stageId: v }))} />
+              <MultiSelect placeholder="Fornecedor (todos)" options={suppliers.map((x) => ({ value: x.id, label: x.name }))} value={filters.supplierId} onChange={(v) => setFilters((f) => ({ ...f, supplierId: v }))} />
+              <MultiSelect
+                placeholder="Cliente (todos)"
+                wide
+                options={clients.map((c) => ({ value: c.id, label: c.externalId ? `${c.externalId} — ${c.name}` : c.name }))}
+                value={filters.clientId}
+                onChange={(v) => setFilters((f) => ({ ...f, clientId: v }))}
+              />
+              <MultiSelect placeholder="Categoria (todas)" options={categories.map((c) => ({ value: c, label: c }))} value={filters.category} onChange={(v) => setFilters((f) => ({ ...f, category: v }))} />
+            </>
+          ) : (
+            <>
           <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
             <option value="">Estado (todos)</option>
             {STATUS_OPTIONS.map((s) => (
@@ -186,6 +206,8 @@ export function PrintableListPage() {
               </option>
             ))}
           </select>
+            </>
+          )}
           <button className="btn" onClick={loadReport} disabled={loading}>
             {loading ? "A gerar..." : "Gerar listagem"}
           </button>
@@ -209,6 +231,7 @@ export function PrintableListPage() {
         </div>
         {error && <p className="error-text">{error}</p>}
         <FeatureTestBanner featureKey="listagemAcabamento" label="a coluna Acabamento na listagem" />
+        <FeatureTestBanner featureKey="filtrosMultiplos" label="os filtros com várias escolhas" />
       </div>
 
       <div className="card report-sheet">
@@ -278,11 +301,13 @@ function describeFilters(filters: {
   search: string;
 }): string {
   const parts: string[] = [];
-  const statusLabel = STATUS_OPTIONS.find((s) => s.value === filters.status)?.label;
-  const priorityLabel = PRIORITY_OPTIONS.find((p) => p.value === filters.priority)?.label;
+  const labels = (v: string, opts: { value: string; label: string }[]) =>
+    v.split(",").filter(Boolean).map((x) => opts.find((o) => o.value === x)?.label ?? x).join(", ");
+  const statusLabel = labels(filters.status, STATUS_OPTIONS);
+  const priorityLabel = labels(filters.priority, PRIORITY_OPTIONS);
   if (statusLabel) parts.push(`Estado: ${statusLabel}`);
   if (priorityLabel) parts.push(`Prioridade: ${priorityLabel}`);
-  if (filters.category) parts.push(`Categoria: ${filters.category}`);
+  if (filters.category) parts.push(`Categoria: ${filters.category.split(",").join(", ")}`);
   if (filters.search) parts.push(`Pesquisa: "${filters.search}"`);
   return parts.length ? parts.join(" · ") : "Sem filtros aplicados";
 }

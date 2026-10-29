@@ -12,9 +12,9 @@ import { useFeature } from "../contexts/FeaturesContext";
 //
 //  - Alturas: sempre o mesmo perfil, 2 por mosquiteira, medida = altura − x.
 //  - Larguras: até 1400 (inclusive) é um perfil e desconta f; acima de 1400 é
-//    outro perfil e desconta y. 2026-10-29: "larguras são duas" — passam a
-//    2 por mosquiteira por omissão (o servidor devolve esse valor enquanto
-//    ninguém gravar outras regras), e alturas/larguras nunca se juntam.
+//    outro perfil e desconta y. 1 largura por mosquiteira (confirmado pelo
+//    utilizador em 2026-10-29: "largura é só uma unidade, as alturas é que é
+//    x2"); alturas e larguras nunca se juntam.
 // Os valores x, f, y (e o limite, quantidades e nomes dos perfis) ficam
 // guardados no programa e o administrador muda-os aqui.
 // ============================================================================

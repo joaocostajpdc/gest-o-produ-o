@@ -249,9 +249,9 @@ cutPlansRouter.get(
   requirePermission("cutPlans:read"),
   asyncHandler(async (req, res) => {
     const row = await prisma.appSetting.findUnique({ where: { key: MOSQUITO_RULES_KEY } });
-    // 2026-10-29: "larguras são duas" por mosquiteira — novo valor por omissão
-    // (em teste com "medidasOS"; quem já gravou as suas regras mantém-nas).
-    const twoWidths = await canUseFeature("medidasOS", req.user);
+    // Por mosquiteira: 2 alturas e 1 largura (corrigido pelo utilizador em
+    // 2026-10-29: "largura é só uma unidade, as alturas é que é x2").
+    const twoWidths = false;
     res.json(
       mosquitoRulesSchema.parse(
         row?.value ?? { heightDeduct: null, widthDeductSmall: null, widthDeductLarge: null, widthsPerUnit: twoWidths ? 2 : 1 }

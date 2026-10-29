@@ -5,7 +5,7 @@ import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { asyncHandler } from "../utils/asyncHandler";
-import { canUseFeature } from "../config/featureReleases";
+import { canUseFeature, requireFeature } from "../config/featureReleases";
 import { comparePriority, computePriority, PRIORITY_COLORS, PRIORITY_LABELS } from "../services/priorityService";
 import { getCurrentProductionMinutes, getStageResidenceMinutes, startProduction } from "../services/timeTrackingService";
 import {
@@ -24,6 +24,7 @@ import {
   deleteServiceOrder,
 } from "../services/serviceOrderService";
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
+import { readSpecBlocks, writeSpecMeasures } from "../services/specMeasures";
 import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
 import {
   streamBarcodeLabelPdf,
@@ -392,8 +393,30 @@ serviceOrdersRouter.post(
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return res.status(400).json({ error: "Nenhum ficheiro PDF recebido." });
     }
-    const goldOrder = await parseOrdemServicoPdf(req.body);
-    const result = await importSingleGoldylocksOrder(goldOrder, req.user?.id);
+    // Leitura melhorada das medidas (2026-10-29) — em teste só para quem tem
+    // acesso a "medidasOS" (o administrador, até ele aprovar).
+    const medidas = await canUseFeature("medidasOS", req.user ? { id: req.user.id, role: req.user.role } : null);
+    const goldOrder = await parseOrdemServicoPdf(req.body, { medidas });
+    let result = await importSingleGoldylocksOrder(goldOrder, req.user?.id);
+
+    // OS já importada: com a leitura nova, voltar a carregar o PDF atualiza as
+    // Características do Produto (é assim que as OS antigas ficam com medidas).
+    if (medidas && result.status === "skipped" && goldOrder.notes) {
+      const existing = await prisma.serviceOrder.findUnique({
+        where: { externalId: goldOrder.externalId },
+        select: { id: true, specifications: true },
+      });
+      if (existing && (existing.specifications ?? "").trim() !== goldOrder.notes.trim()) {
+        await prisma.serviceOrder.update({ where: { id: existing.id }, data: { specifications: goldOrder.notes } });
+        await logHistoryEvent({
+          serviceOrderId: existing.id,
+          type: "OUTRA_ALTERACAO",
+          description: "Características do Produto atualizadas a partir do PDF da Ordem Serviço (medidas lidas de novo).",
+          userId: req.user?.id,
+        });
+        result = { status: "skipped", externalId: goldOrder.externalId, reason: "Já existia — medidas atualizadas a partir do PDF." };
+      }
+    }
 
     // Guarda o próprio PDF da Ordem Serviço dentro da OS (separador Anexos e
     // botão "Ordem Serviço (PDF)") — pedido do utilizador de 2026-10-21:
@@ -826,5 +849,66 @@ serviceOrdersRouter.delete(
       userId: req.user?.id,
     });
     res.status(204).send();
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Medidas de cada artigo, escritas à mão (pedido do utilizador de 2026-10-29).
+// Ficam nas Características do Produto como "Dimensões: Larg. W x Alt. H", por
+// isso saem nas etiquetas e no plano de corte. Em teste: "medidasOS".
+// ---------------------------------------------------------------------------
+serviceOrdersRouter.get(
+  "/:id/measures",
+  requirePermission("serviceOrders:read"),
+  requireFeature("medidasOS"),
+  asyncHandler(async (req, res) => {
+    const so = await prisma.serviceOrder.findUnique({ where: { id: req.params.id }, select: { specifications: true } });
+    if (!so) throw new Error("Ordem de Serviço não encontrada.");
+    res.json(readSpecBlocks(so.specifications));
+  })
+);
+
+const measuresSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        index: z.number().int().min(0).max(500),
+        width: z.coerce.number().positive().max(20000).nullable(),
+        height: z.coerce.number().positive().max(20000).nullable(),
+      })
+    )
+    .max(500),
+});
+
+serviceOrdersRouter.put(
+  "/:id/measures",
+  requirePermission("serviceOrders:changeStatus"),
+  requireFeature("medidasOS"),
+  asyncHandler(async (req, res) => {
+    const { items } = measuresSchema.parse(req.body);
+    const so = await prisma.serviceOrder.findUnique({ where: { id: req.params.id }, select: { id: true, specifications: true } });
+    if (!so) throw new Error("Ordem de Serviço não encontrada.");
+    const before = readSpecBlocks(so.specifications);
+    const specifications = writeSpecMeasures(so.specifications, items);
+    if (specifications !== (so.specifications ?? "")) {
+      await prisma.serviceOrder.update({ where: { id: so.id }, data: { specifications } });
+      const changed = items
+        .filter((it) => {
+          const b = before[it.index];
+          return b && (b.width !== it.width || b.height !== it.height);
+        })
+        .map((it) => {
+          const b = before[it.index];
+          const label = b.title ? b.title.replace(/\s*—.*$/, "") : "Artigo";
+          return it.width && it.height ? `${label}: ${it.width} x ${it.height}` : `${label}: sem medida`;
+        });
+      await logHistoryEvent({
+        serviceOrderId: so.id,
+        type: "OUTRA_ALTERACAO",
+        description: `Medidas alteradas à mão (Larg. x Alt.) — ${changed.join("; ") || "sem alterações"}.`,
+        userId: req.user?.id,
+      });
+    }
+    res.json(readSpecBlocks(specifications));
   })
 );

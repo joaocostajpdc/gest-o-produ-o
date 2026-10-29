@@ -34,6 +34,7 @@ export const FEATURES = {
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",
   abas: "Abas (várias páginas abertas) e Início só com ícones",
+  medidasOS: "Medidas nas OS (leitura do PDF, editar medidas, etiquetas e corte das mosquiteiras)",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

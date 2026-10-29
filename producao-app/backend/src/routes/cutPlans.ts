@@ -4,7 +4,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
-import { requireFeature } from "../config/featureReleases";
+import { canUseFeature, requireFeature } from "../config/featureReleases";
+import { readSpecBlocks } from "../services/specMeasures";
 import { asyncHandler } from "../utils/asyncHandler";
 import { logHistoryEvent } from "../services/historyService";
 import { CutResult, optimizeBars, optimizeSheets } from "../services/cutOptimizer";
@@ -246,9 +247,16 @@ const MOSQUITO_RULES_KEY = "mosquitoRules";
 cutPlansRouter.get(
   "/mosquito-rules",
   requirePermission("cutPlans:read"),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const row = await prisma.appSetting.findUnique({ where: { key: MOSQUITO_RULES_KEY } });
-    res.json(mosquitoRulesSchema.parse(row?.value ?? { heightDeduct: null, widthDeductSmall: null, widthDeductLarge: null }));
+    // 2026-10-29: "larguras são duas" por mosquiteira — novo valor por omissão
+    // (em teste com "medidasOS"; quem já gravou as suas regras mantém-nas).
+    const twoWidths = await canUseFeature("medidasOS", req.user);
+    res.json(
+      mosquitoRulesSchema.parse(
+        row?.value ?? { heightDeduct: null, widthDeductSmall: null, widthDeductLarge: null, widthsPerUnit: twoWidths ? 2 : 1 }
+      )
+    );
   })
 );
 
@@ -292,6 +300,27 @@ cutPlansRouter.get(
 
     const items: { width: number; height: number; qty: number; finish: string | null }[] = [];
     const missing: string[] = [];
+
+    // Leitura nova (medidasOS): também OS com um só artigo (sem "Artigo N —")
+    // e medidas escritas à mão na OS.
+    if (await canUseFeature("medidasOS", req.user)) {
+      const text = so.specifications ?? "";
+      const finish = text.match(/Acabamento:\s*(.+)/i)?.[1]?.trim() ?? null;
+      for (const b of readSpecBlocks(text)) {
+        const title = b.title ?? `${so.product.name}`;
+        if (b.width && b.height) {
+          items.push({ width: b.width, height: b.height, qty: Math.max(1, Math.round(b.qty ?? 1)), finish });
+        } else {
+          missing.push(title);
+        }
+      }
+      return res.json({
+        serviceOrder: { id: so.id, externalId: so.externalId, client: so.client, product: so.product },
+        items,
+        missing,
+      });
+    }
+
     const blocks = (so.specifications ?? "").split(/\n\s*\n/);
     for (const block of blocks) {
       if (!/Artigo/i.test(block) || /Valor Total/i.test(block)) continue;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { MosquitoItem, MosquitoRules } from "../types";
 import { osColor } from "./CutPlanView";
+import { useFeature } from "../contexts/FeaturesContext";
 
 // ============================================================================
 // Mosquiteiras → peças a cortar (pedido do utilizador de 2026-10-16):
@@ -10,8 +11,10 @@ import { osColor } from "./CutPlanView";
 //  quando tem mais de 1400 desconta y."
 //
 //  - Alturas: sempre o mesmo perfil, 2 por mosquiteira, medida = altura − x.
-//  - Larguras: 1 por mosquiteira; até 1400 (inclusive) é um perfil e desconta
-//    f; acima de 1400 é outro perfil e desconta y.
+//  - Larguras: até 1400 (inclusive) é um perfil e desconta f; acima de 1400 é
+//    outro perfil e desconta y. 2026-10-29: "larguras são duas" — passam a
+//    2 por mosquiteira por omissão (o servidor devolve esse valor enquanto
+//    ninguém gravar outras regras), e alturas/larguras nunca se juntam.
 // Os valores x, f, y (e o limite, quantidades e nomes dos perfis) ficam
 // guardados no programa e o administrador muda-os aqui.
 // ============================================================================
@@ -65,8 +68,28 @@ export function rowsToItems(rows: MosquitoRow[]): MosquitoItem[] {
     }));
 }
 
+/**
+ * Nomes dos perfis sempre diferentes entre alturas, larguras até ao limite e
+ * larguras acima (pedido do utilizador de 2026-10-29: "nas mosquiteiras não
+ * pode juntar larguras com alturas" / "separar nas larguras até 1400 e
+ * superior a 1400"). Se tiverem ficado com o mesmo nome nas regras, ganham um
+ * acrescento — o otimizador corta cada perfil em barras à parte.
+ */
+function distinctProfiles(rules: MosquitoRules) {
+  const h = rules.heightProfile.trim() || "Alturas";
+  let s = rules.widthSmallProfile.trim() || `Larguras até ${rules.widthLimit}`;
+  let l = rules.widthLargeProfile.trim() || `Larguras acima de ${rules.widthLimit}`;
+  if (s.toLowerCase() === h.toLowerCase()) s = `${s} — larguras até ${rules.widthLimit}`;
+  if (l.toLowerCase() === h.toLowerCase() || l.toLowerCase() === s.toLowerCase()) l = `${l} — larguras acima de ${rules.widthLimit}`;
+  return { h, s, l };
+}
+
 /** Aplica as regras e devolve as peças por perfil (medidas iguais juntas). */
-export function generatePieces(items: MosquitoItem[], rules: MosquitoRules): GeneratedPiece[] {
+export function generatePieces(items: MosquitoItem[], rules: MosquitoRules, opts: { separate?: boolean } = {}): GeneratedPiece[] {
+  if (opts.separate) {
+    const p = distinctProfiles(rules);
+    rules = { ...rules, heightProfile: p.h, widthSmallProfile: p.s, widthLargeProfile: p.l };
+  }
   const missing: string[] = [];
   if (rules.heightsPerUnit > 0 && rules.heightDeduct == null) missing.push("x (alturas)");
   const needSmall = items.some((i) => i.width <= rules.widthLimit);
@@ -87,7 +110,8 @@ export function generatePieces(items: MosquitoItem[], rules: MosquitoRules): Gen
   const add = (profile: string, prefix: string, length: number, qty: number, from: string) => {
     if (qty <= 0) return;
     if (!(length > 0)) throw new Error(`Medida final inválida (${fmt(length)} mm) — confirma os descontos.`);
-    const key = `${profile}|${length}|${os ?? ""}`;
+    // Alturas e larguras nunca se juntam na mesma linha, mesmo com a mesma medida.
+    const key = opts.separate ? `${prefix}|${profile}|${length}|${os ?? ""}` : `${profile}|${length}|${os ?? ""}`;
     const e = acc.get(key) ?? { profile, prefix, length, qty: 0, from: new Set<string>(), os };
     e.qty += qty;
     e.from.add(from);
@@ -148,6 +172,8 @@ export function MosquitoPanel({
   onServiceOrderFound: (externalId: string, client?: string, isMain?: boolean) => void;
   autoImport?: boolean;
 }) {
+  // 2026-10-29 (em teste, "medidasOS"): alturas e larguras sempre separadas.
+  const separate = useFeature("medidasOS").available;
   const [busy, setBusy] = useState<"import" | "rules" | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -218,7 +244,7 @@ export function MosquitoPanel({
     try {
       const items = rowsToItems(rows);
       if (!items.length) throw new Error("Não há mosquiteiras — importa da OS ou escreve as medidas.");
-      onGenerate(generatePieces(items, rules));
+      onGenerate(generatePieces(items, rules, { separate }));
       setMsg({ ok: true, text: "Peças geradas na lista abaixo. Carrega em Otimizar." });
     } catch (err) {
       setMsg({ ok: false, text: (err as Error).message });

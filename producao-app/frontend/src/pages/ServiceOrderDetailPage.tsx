@@ -6,6 +6,7 @@ import { useFeature } from "../contexts/FeaturesContext";
 import { GlassOrdersPanel } from "../components/GlassOrdersPanel";
 import { CutPlansPanel } from "../components/CutPlansPanel";
 import { FeatureTestBanner } from "../components/FeatureTestBanner";
+import { MeasuresToolbar } from "../components/MeasuresEditor";
 import {
   Attachment,
   HistoryEvent,
@@ -109,6 +110,8 @@ export function ServiceOrderDetailPage() {
   const cutPlansFeature = useFeature("cutPlans");
   // Nova etiqueta dos painéis (2026-10-21): em teste só para o administrador.
   const etiquetaPainelFeature = useFeature("etiquetaPainel");
+  // Medidas nas OS (2026-10-29): em teste só para o administrador.
+  const medidasFeature = useFeature("medidasOS");
   const [order, setOrder] = useState<ServiceOrderDetail | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -367,7 +370,7 @@ export function ServiceOrderDetailPage() {
           global.css: break-inside/page-break-inside: avoid) — pedido do
           utilizador de 2026-09-27. A descrição do produto (order.product.description)
           sai no topo do cartão, centrada — pedido do utilizador de 2026-09-27. */}
-      {(order.product.description || order.specifications || order.currentStage?.expectedReturnAt) && (
+      {(order.product.description || order.specifications || order.currentStage?.expectedReturnAt || medidasFeature.available) && (
         <div className="card spec-card">
           {order.product.description && (
             <div className="spec-product-description">{order.product.description}</div>
@@ -378,6 +381,10 @@ export function ServiceOrderDetailPage() {
               <div className="spec-card-label">Características do Produto</div>
               <SpecificationsBody specifications={order.specifications} />
             </>
+          )}
+
+          {medidasFeature.available && canFlow && (
+            <MeasuresToolbar orderId={order.id} externalId={order.externalId} onChanged={load} />
           )}
 
           {order.currentStage?.expectedReturnAt && (

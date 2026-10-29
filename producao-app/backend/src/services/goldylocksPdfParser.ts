@@ -129,6 +129,132 @@ function extractLargAlt(text: string): string | undefined {
   return `Larg. ${match[1]} x Alt. ${match[2]}`;
 }
 
+// ============================================================================
+// Medidas das mosquiteiras (pedido do utilizador de 2026-10-29: "melhorar a
+// leitura dos PDF pondo aqui as medidas para que depois saia nas etiquetas e
+// poder calcular o plano de corte"). Várias OS de mosquiteiras de enrolar
+// (MF1100 — ex.: 2026/541, 2026/464) entravam sem medida nenhuma, porque o
+// Goldylocks nem sempre as imprime no formato "Larg. 1370 * Alt. 1000" que
+// extractLargAlt reconhece — e a linha "Larg. ..." que não batesse certo era
+// ainda descartada (KNOWN_LINE_RE), perdendo-se de vez.
+//
+// extractMedidas aceita os formatos que aparecem no Goldylocks:
+//   - "Larg. 1370 * Alt. 1000", "Larg 1370 x Alt 1000", "Larg.: 1370 Alt.: 1000",
+//     "Largura: 1370 Altura: 1000" (e a ordem inversa, Alt. antes de Larg.);
+//   - "Largura: 1370" e "Altura: 1000" em linhas separadas;
+//   - nas mosquiteiras, linhas só com números ("1370x1000", "Medida: 1370 x 1000")
+//     e listas com quantidades ("Medidas: ; 2 = 1370x1000; 1 = 900x1000"),
+//     sempre Largura × Altura, como no resto das mosquiteiras.
+// Quando um artigo traz várias medidas, é partido num artigo por medida (com
+// a sua quantidade), para cada uma ter as suas etiquetas e peças de corte.
+//
+// Só é usado por quem já tem acesso a "medidasOS" (em teste, só o
+// administrador, até ele aprovar — ver config/featureReleases.ts).
+// ============================================================================
+
+interface Medida {
+  qty?: number;
+  larg: string;
+  alt: string;
+}
+
+const N = "(\\d{2,5}(?:[.,]\\d{1,2})?)";
+const SEP = "\\s*(?:mm)?\\s*[*x×X,;/|-]?\\s*";
+const LARG = "Larg(?:ura)?\\.?\\s*:?\\s*";
+const ALT = "Alt(?:ura)?\\.?\\s*:?\\s*";
+const QTY_PREFIX = "(?:(\\d{1,3})\\s*(?:=|uni?\\.?|un\\.?|x|×)\\s*)?";
+const LARG_ALT_RE = new RegExp(`${QTY_PREFIX}${LARG}${N}${SEP}${ALT}${N}`, "gi");
+const ALT_LARG_RE = new RegExp(`${QTY_PREFIX}${ALT}${N}${SEP}${LARG}${N}`, "gi");
+const LARG_ONLY_RE = new RegExp(`^${LARG}${N}\\s*(?:mm)?$`, "i");
+const ALT_ONLY_RE = new RegExp(`^${ALT}${N}\\s*(?:mm)?$`, "i");
+// "2 = 1370x1000" / "1370 x 1000" (só números — usado só nas mosquiteiras)
+const PAIR_RE = new RegExp(`(?:(\\d{1,3})\\s*=\\s*)?${N}\\s*(?:mm)?\\s*[x×*]\\s*${N}(?:\\s*[x×*]\\s*\\d+)?`, "gi");
+const PAIR_LINE_RE = /^(?:medidas?|dimens[õo]es|dim\.?)\s*:?|^[\s;:=\dx×*.,mm]+$/i;
+
+const cleanNum = (v: string) => v.replace(",", ".").replace(/\.0+$/, "");
+
+export function isMosquiteiraArtigo(codigo: string, descricao?: string): boolean {
+  return /^(MF\d|DCMOSQ)/i.test(codigo) || /mosquit/i.test(descricao ?? "");
+}
+
+function extractMedidas(blockText: string, mosquiteira: boolean): { medidas: Medida[]; usedLines: Set<number> } {
+  const lines = blockText.split("\n").map((l) => l.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim());
+  const medidas: Medida[] = [];
+  const usedLines = new Set<number>();
+  let soloLarg: { v: string; line: number } | null = null;
+  let soloAlt: { v: string; line: number } | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    if (FOOTER_RE.test(line)) break;
+    let found = false;
+    for (const m of line.matchAll(LARG_ALT_RE)) {
+      medidas.push({ qty: m[1] ? Number(m[1]) : undefined, larg: cleanNum(m[2]), alt: cleanNum(m[3]) });
+      found = true;
+    }
+    if (!found) {
+      for (const m of line.matchAll(ALT_LARG_RE)) {
+        medidas.push({ qty: m[1] ? Number(m[1]) : undefined, larg: cleanNum(m[3]), alt: cleanNum(m[2]) });
+        found = true;
+      }
+    }
+    if (!found) {
+      const l = line.match(LARG_ONLY_RE);
+      const a = line.match(ALT_ONLY_RE);
+      if (l) soloLarg = { v: cleanNum(l[1]), line: i };
+      if (a) soloAlt = { v: cleanNum(a[1]), line: i };
+      if (l || a) continue;
+    }
+    if (!found && mosquiteira && PAIR_LINE_RE.test(line)) {
+      for (const m of line.matchAll(PAIR_RE)) {
+        medidas.push({ qty: m[1] ? Number(m[1]) : undefined, larg: cleanNum(m[2]), alt: cleanNum(m[3]) });
+        found = true;
+      }
+    }
+    if (found) usedLines.add(i);
+  }
+  if (!medidas.length && soloLarg && soloAlt) {
+    medidas.push({ larg: soloLarg.v, alt: soloAlt.v });
+    usedLines.add(soloLarg.line);
+    usedLines.add(soloAlt.line);
+  }
+  return { medidas, usedLines };
+}
+
+const fmtQty = (n: number) => n.toFixed(2).replace(".", ",");
+
+/**
+ * Leitura melhorada de um artigo: medidas em "Dimensões: Larg. W x Alt. H"
+ * e, se houver várias medidas, um artigo por medida.
+ */
+function applyMedidas(a: ParsedArtigo, blockText: string): ParsedArtigo[] {
+  const mosq = isMosquiteiraArtigo(a.codigoArtigo, a.descricaoArtigo);
+  // Painéis e afins já trazem "Dimensões:" com o seu próprio formato — não mexer.
+  if (a.dimensoes && !mosq) return [a];
+
+  const { medidas, usedLines } = extractMedidas(blockText, mosq);
+  if (!medidas.length) return [a];
+
+  // Tira das "outras linhas" as que já foram lidas como medidas.
+  const usedText = new Set(
+    [...usedLines].map((i) => blockText.split("\n")[i].replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim())
+  );
+  const outras = (a.outras ?? []).filter((l) => !usedText.has(l));
+  const dims = (m: Medida) => `Larg. ${m.larg} x Alt. ${m.alt}`;
+
+  if (medidas.length === 1 || (a.dimensoes && /Larg\.\s*[\d.,]+\s*x\s*Alt\./i.test(a.dimensoes))) {
+    return [{ ...a, dimensoes: dims(medidas[0]), outras }];
+  }
+  return medidas.map((m) => ({
+    ...a,
+    dimensoes: dims(m),
+    quantidade: fmtQty(m.qty ?? 1),
+    unidade: a.unidade ?? "uni",
+    outras,
+  }));
+}
+
 /**
  * Uma linha de artigo da Ordem Serviço (uma OS pode ter mais do que uma —
  * ver ParsedOrdemServico.artigos abaixo).
@@ -192,7 +318,7 @@ function parsePrazoEntregaDate(value: string): string | undefined {
   return date.toISOString();
 }
 
-function parseText(text: string): ParsedOrdemServico {
+export function parseText(text: string, opts: ParseOptions = {}): ParsedOrdemServico {
   const headerMatch = text.match(
     /(\d{4}\/\d+)\s*\|\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*\|\s*(\S+)/
   );
@@ -231,11 +357,11 @@ function parseText(text: string): ParsedOrdemServico {
     throw new Error("Não foi possível encontrar a linha do artigo (Código / Descrição / Quantidade) no PDF.");
   }
 
-  const artigos: ParsedArtigo[] = artigoMatches.map((m, i) => {
+  const artigos: ParsedArtigo[] = artigoMatches.flatMap((m, i) => {
     const blockStart = m.index! + m[0].length;
     const blockEnd = i + 1 < artigoMatches.length ? artigoMatches[i + 1].index! : afterHeader.length;
     const blockText = afterHeader.slice(blockStart, blockEnd);
-    return {
+    const artigo: ParsedArtigo = {
       codigoArtigo: m[1],
       descricaoArtigo: m[2]?.trim(),
       quantidade: m[3]?.trim(),
@@ -252,6 +378,7 @@ function parseText(text: string): ParsedOrdemServico {
       vRefArtigo: extractVRefArtigo(blockText),
       outras: extractOtherLines(blockText),
     };
+    return opts.medidas ? applyMedidas(artigo, blockText) : [artigo];
   });
 
   return {
@@ -287,7 +414,7 @@ function buildArtigoParts(a: ParsedArtigo): string[] {
   return parts;
 }
 
-function buildNotes(parsed: ParsedOrdemServico): string | undefined {
+export function buildNotes(parsed: ParsedOrdemServico): string | undefined {
   // Uma só linha de artigo: mantém exatamente o formato anterior (sem
   // cabeçalhos "Artigo N —"), para não alterar o texto de "Características
   // do Produto" das Ordens de Serviço já existentes/normais (a grande
@@ -319,9 +446,14 @@ function buildNotes(parsed: ParsedOrdemServico): string | undefined {
  * formato usado pelos adaptadores de integração (mock/API real), para que a
  * criação da Ordem de Serviço na aplicação siga sempre o mesmo caminho.
  */
-export async function parseOrdemServicoPdf(pdfBuffer: Buffer): Promise<GoldylocksServiceOrder> {
+export interface ParseOptions {
+  /** Leitura melhorada das medidas (funcionalidade "medidasOS"). */
+  medidas?: boolean;
+}
+
+export async function parseOrdemServicoPdf(pdfBuffer: Buffer, opts: ParseOptions = {}): Promise<GoldylocksServiceOrder> {
   const data = await pdfParse(pdfBuffer, { pagerender: renderPageWithColumns });
-  const parsed = parseText(data.text);
+  const parsed = parseText(data.text, opts);
   // A aplicação continua a acompanhar um único "produto" por Ordem de
   // Serviço (etapas, tempos, etc.) — quando a OS tem vários artigos, é o
   // primeiro que fica associado a esse acompanhamento; os restantes ficam

@@ -822,3 +822,34 @@ model MovimentoFinanceiro {
   @@index([estado])
   @@map("financeiro_movimentos")
 }
+
+// ---------------------------------------------------------------------------
+// Planeamento semanal (pedido do utilizador de 2026-10-29: "prepara uma parte
+// para planeamento semanal" — OS por dia, colaboradores, entregas e
+// lacagens, carrinhas/voltas; todos veem, o administrador edita).
+// Cada linha é uma coisa marcada num dia: uma OS a trabalhar, uma entrega,
+// um envio ou recolha da lacagem, ou outra tarefa. As ligações (OS,
+// fornecedor, carrinha, condutor, colaboradores) guardam só o id, para não
+// mexer nas tabelas existentes; a API resolve os nomes.
+// ---------------------------------------------------------------------------
+model PlanItem {
+  id             String   @id @default(cuid())
+  date           DateTime @db.Date
+  kind           String   // OS | ENTREGA | ENVIO_LACAGEM | RECOLHA_LACAGEM | OUTRO
+  title          String?
+  serviceOrderId String?
+  supplierId     String?
+  colaboradorIds String[] @default([])
+  vehicleId      String?
+  driverId       String?
+  period         String?  // "Manhã", "Tarde" ou hora "09:30"
+  notes          String?
+  done           Boolean  @default(false)
+  position       Int      @default(0)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([date])
+  @@map("plan_items")
+}

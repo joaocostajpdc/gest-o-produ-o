@@ -25,6 +25,7 @@ import { KmPage } from "./pages/KmPage";
 import { FinanceiroPage } from "./pages/FinanceiroPage";
 import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { ChatPage } from "./pages/ChatPage";
+import { PlaneamentoPage } from "./pages/PlaneamentoPage";
 
 // ============================================================================
 // Páginas da área protegida, num só sítio: usadas pelo App (rota normal) e
@@ -47,6 +48,7 @@ export const protectedRoutes = (
     <Route path="/scan" element={<ScanPage />} />
     <Route path="/service-orders/:id" element={<ServiceOrderDetailPage />} />
     <Route path="/material-lacagem" element={<MaterialLacagemPage />} />
+    <Route path="/planeamento" element={<PlaneamentoPage />} />
     <Route path="/material-a-pedir" element={<MaterialRequestsPage />} />
     <Route path="/po-em-stock" element={<PowderStockPage />} />
     <Route path="/pedidos-vidros" element={<GlassOrdersPage />} />

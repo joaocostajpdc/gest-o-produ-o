@@ -157,6 +157,15 @@ function IconSend(props: SVGProps<SVGSVGElement>) {
 }
 
 // Ícones da "Equipa e Frota" (relógio e carrinha).
+function IconCalendar(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3" />
+    </svg>
+  );
+}
+
 function IconClock(props: SVGProps<SVGSVGElement>) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -242,6 +251,7 @@ export function Layout() {
   const powderStock = useFeature("powderStock");
   const glassOrders = useFeature("glassOrders");
   const cutPlans = useFeature("cutPlans");
+  const planeamento = useFeature("planeamento");
   // Orçamentos: acesso restrito (João Costa e David Costa), nunca para todos.
   const orcamentos = useFeature("orcamentos");
   const compras = useFeature("compras");
@@ -358,6 +368,12 @@ export function Layout() {
           <NavLink to="/scan">
             <IconScan /> Ler Código
           </NavLink>
+          {planeamento.available && (
+            <NavLink to="/planeamento">
+              <IconCalendar /> Planeamento Semanal
+              {!planeamento.released && <TestBadge />}
+            </NavLink>
+          )}
           <NavLink to="/material-lacagem">
             <IconDroplet /> Material em Lacagem
           </NavLink>

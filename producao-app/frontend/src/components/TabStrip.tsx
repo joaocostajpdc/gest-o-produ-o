@@ -26,6 +26,7 @@ const P = {
 };
 
 const tabIcons = {
+  calendar: <svg {...P}><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3" /></svg>,
   home: <svg {...P}><path d="M3 11 12 4l9 7" /><path d="M5 10v10h14V10M10 20v-6h4v6" /></svg>,
   os: <svg {...P}><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h6" /></svg>,
   scan: <svg {...P}><path d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3M7 12h10" /></svg>,
@@ -60,6 +61,7 @@ const PAGES: { prefix: string; title: string; icon: ReactNode }[] = [
   { prefix: "/otimizacao-corte/novo", title: "Novo Plano de Corte", icon: tabIcons.cut },
   { prefix: "/otimizacao-corte/", title: "Plano de Corte", icon: tabIcons.cut },
   { prefix: "/otimizacao-corte", title: "Planos de Corte", icon: tabIcons.cut },
+  { prefix: "/planeamento", title: "Planeamento Semanal", icon: tabIcons.calendar },
   { prefix: "/material-lacagem", title: "Material em Lacagem", icon: tabIcons.drop },
   { prefix: "/reports", title: "Listagens", icon: tabIcons.print },
   { prefix: "/compras", title: "Resumo de Compras", icon: tabIcons.cart },

@@ -28,6 +28,7 @@ const S = {
 };
 
 const icons = {
+  planeamento: <svg {...S}><rect x="3.5" y="5" width="17" height="15" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3" /></svg>,
   os: <svg {...S}><rect x="6" y="4" width="12" height="17" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3" /></svg>,
   scan: <svg {...S}><path d="M4 8V5a1 1 0 0 1 1-1h3M20 8V5a1 1 0 0 0-1-1h-3M4 16v3a1 1 0 0 0 1 1h3M20 16v3a1 1 0 0 1-1 1h-3" /><path d="M7 12h10" /></svg>,
   cut: <svg {...S}><rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 12h18M10 5v7M15 12v7" strokeDasharray="2.5 2" /></svg>,
@@ -112,6 +113,7 @@ export function HomePage() {
   const { user, logout } = useAuth();
   const inicio = useFeature("inicio");
   const cutPlans = useFeature("cutPlans");
+  const planeamento = useFeature("planeamento");
   const compras = useFeature("compras");
   const glassOrders = useFeature("glassOrders");
   const powderStock = useFeature("powderStock");
@@ -140,6 +142,7 @@ export function HomePage() {
       soft: "#e8eeff",
       tiles: [
         { to: "/ordens-servico", title: "Ordens de Serviço", sub: "Lançar OS, prioridades e prazos", icon: icons.os },
+        ...(planeamento.available ? [{ to: "/planeamento", title: "Planeamento Semanal", sub: "OS, equipas, entregas e lacagens por dia", icon: icons.planeamento }] : []),
         { to: "/scan", title: "Ler Código", sub: "Entradas e saídas por código", icon: icons.scan },
         ...(cutPlans.available ? [{ to: "/otimizacao-corte", title: "Planos de Corte", sub: "Mosquiteiras, chapas e perfis", icon: icons.cut }] : []),
         { to: "/material-lacagem", title: "Material em Lacagem", sub: "O que está fora a lacar", icon: icons.lacagem },

@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { canManageConfig, useAuth } from "../contexts/AuthContext";
 import { GLASS_ORDER_STATUS_LABELS, GlassOrder, GlassOrderStatus, Supplier } from "../types";
+import { useFeature } from "../contexts/FeaturesContext";
+import { FeatureTestBanner } from "./FeatureTestBanner";
+import { exportGlassCsv, printGlassListing } from "./glassListing";
 
 // ============================================================================
 // Pedidos de Vidros — tabela + formulário, partilhados pela página "Pedidos
@@ -56,6 +59,8 @@ export function GlassOrdersPanel({
   const { user } = useAuth();
   const canWrite = canManageConfig(user?.role);
   const inOrder = !!serviceOrder;
+  // Listagem dos pedidos (2026-10-29) — em teste: "listagemVidros".
+  const listagem = useFeature("listagemVidros").available && !inOrder;
 
   const [items, setItems] = useState<GlassOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -230,6 +235,17 @@ export function GlassOrdersPanel({
     setFOrder("");
     setFPeriod("");
     setSearch("");
+  }
+
+  function filtersSummary() {
+    const parts: string[] = [];
+    if (fStatus) parts.push(`Estado: ${GLASS_ORDER_STATUS_LABELS[fStatus]}`);
+    else if (!showFinished) parts.push("Sem os finalizados");
+    if (fSupplier) parts.push(`Fornecedor: ${supplierOpts.find(([id]) => id === fSupplier)?.[1] ?? fSupplier}`);
+    if (fOrder) parts.push(`Nº encomenda: ${fOrder === "__sem" ? "sem nº" : fOrder}`);
+    if (fPeriod) parts.push(`Últimos ${fPeriod} dias`);
+    if (search.trim()) parts.push(`Pesquisa: "${search.trim()}"`);
+    return parts.length ? parts.join(" · ") : "Todos os pedidos";
   }
 
   const finishedCount = items.filter((o) => o.status === "FINALIZADO").length;
@@ -419,8 +435,25 @@ export function GlassOrdersPanel({
               {hasFilters ? `${filtered.length} de ${items.length} · ` : ""}
               {pendingCount} por receber
             </span>
+            {listagem && (
+              <>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  disabled={filtered.length === 0}
+                  onClick={() => printGlassListing(filtered, filtersSummary())}
+                  title="Imprimir ou guardar em PDF o que está na tabela"
+                >
+                  Listagem (imprimir/PDF)
+                </button>
+                <button type="button" className="btn secondary" disabled={filtered.length === 0} onClick={() => exportGlassCsv(filtered)}>
+                  Exportar CSV
+                </button>
+              </>
+            )}
           </div>
         )}
+        {listagem && <FeatureTestBanner featureKey="listagemVidros" label="a listagem dos Pedidos de Vidros" />}
         {loading ? (
           <p className="muted">A carregar...</p>
         ) : (

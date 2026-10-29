@@ -5,6 +5,14 @@ import { requirePermission } from "../middleware/permissions";
 import { asyncHandler } from "../utils/asyncHandler";
 import { comparePriority, computePriority, PRIORITY_COLORS, PRIORITY_LABELS } from "../services/priorityService";
 import { streamServiceOrdersPdf } from "../services/pdfReportService";
+import { canUseFeature } from "../config/featureReleases";
+
+// Acabamento(s) de uma OS, a partir das Características do Produto (uma linha
+// "Acabamento:" por artigo; repetidos só aparecem uma vez).
+function acabamentoOf(spec: string | null | undefined): string {
+  const vals = [...(spec ?? "").matchAll(/^Acabamento:\s*(.+)$/gim)].map((m) => m[1].trim().replace(/[;,]\s*$/, "")).filter(Boolean);
+  return [...new Set(vals)].join(", ") || "-";
+}
 
 // ============================================================================
 // Listagens Imprimíveis
@@ -56,6 +64,9 @@ reportsRouter.get(
       },
     });
 
+    // Coluna Acabamento (pedido do utilizador de 2026-10-29) — em teste,
+    // "listagemAcabamento" (só o administrador até ele aprovar).
+    const withAcab = await canUseFeature("listagemAcabamento", req.user);
     const now = new Date();
     let rows = orders.map((o) => {
       const p = computePriority(o.deadlineAt, o.status, now);
@@ -63,6 +74,7 @@ reportsRouter.get(
         externalId: o.externalId,
         cliente: o.client.name,
         produto: o.product.name,
+        ...(withAcab ? { acabamento: acabamentoOf(o.specifications) } : {}),
         estado: o.status,
         etapaAtual: o.currentStageInstance?.stage.name ?? "-",
         prazo: o.deadlineAt ? o.deadlineAt.toISOString() : "-",
@@ -77,7 +89,7 @@ reportsRouter.get(
     const cleanRows = rows.map(({ _priority, _deadline, ...rest }) => rest);
 
     if (format === "csv") {
-      const header = Object.keys(cleanRows[0] ?? { externalId: "", cliente: "", produto: "", estado: "", etapaAtual: "", prazo: "", prioridade: "" });
+      const header = Object.keys(cleanRows[0] ?? { externalId: "", cliente: "", produto: "", ...(withAcab ? { acabamento: "" } : {}), estado: "", etapaAtual: "", prazo: "", prioridade: "" });
       const csv = [
         header.join(";"),
         ...cleanRows.map((row) => header.map((h) => `"${String((row as any)[h] ?? "").replace(/"/g, '""')}"`).join(";")),
@@ -106,6 +118,7 @@ reportsRouter.get(
         externalId: r.externalId,
         cliente: r.cliente,
         produto: r.produto,
+        acabamento: (r as { acabamento?: string }).acabamento,
         estado: STATUS_LABELS[r.estado] ?? r.estado,
         etapaAtual: r.etapaAtual,
         prazo: r.prazo,
@@ -113,7 +126,7 @@ reportsRouter.get(
         prioridadeNivel: r._priority,
       }));
 
-      return streamServiceOrdersPdf(res, pdfRows, filtersSummary);
+      return streamServiceOrdersPdf(res, pdfRows, filtersSummary, { acabamento: withAcab });
     }
 
     // Resposta JSON (usada pela UI): inclui o nível e a cor de prioridade,

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, buildQuery, downloadBlob } from "../api/client";
 import { PriorityBadge, StatusBadge } from "../components/Badges";
+import { useFeature } from "../contexts/FeaturesContext";
+import { FeatureTestBanner } from "../components/FeatureTestBanner";
 import { Client, PriorityLevel, Product, ServiceOrderStatus, Stage, Supplier } from "../types";
 
 interface ReportRow {
   externalId: string;
   cliente: string;
   produto: string;
+  acabamento?: string;
   estado: ServiceOrderStatus;
   etapaAtual: string;
   prazo: string;
@@ -31,6 +34,8 @@ const PRIORITY_OPTIONS = [
 ];
 
 export function PrintableListPage() {
+  // Coluna Acabamento (2026-10-29) — em teste, só o administrador até aprovar.
+  const showAcab = useFeature("listagemAcabamento").available;
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<"csv" | "pdf" | null>(null);
@@ -203,6 +208,7 @@ export function PrintableListPage() {
           </button>
         </div>
         {error && <p className="error-text">{error}</p>}
+        <FeatureTestBanner featureKey="listagemAcabamento" label="a coluna Acabamento na listagem" />
       </div>
 
       <div className="card report-sheet">
@@ -227,6 +233,7 @@ export function PrintableListPage() {
               <th>OS</th>
               <th>Cliente</th>
               <th>Produto</th>
+              {showAcab && <th>Acabamento</th>}
               <th>Estado</th>
               <th>Etapa atual</th>
               <th>Prazo</th>
@@ -239,6 +246,7 @@ export function PrintableListPage() {
                 <td>{r.externalId}</td>
                 <td>{r.cliente}</td>
                 <td>{r.produto}</td>
+                {showAcab && <td>{r.acabamento ?? "-"}</td>}
                 <td>
                   <StatusBadge status={r.estado} />
                 </td>
@@ -251,7 +259,7 @@ export function PrintableListPage() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">
+                <td colSpan={showAcab ? 8 : 7} className="muted">
                   Sem dados. Escolhe os filtros e clica em "Gerar listagem".
                 </td>
               </tr>

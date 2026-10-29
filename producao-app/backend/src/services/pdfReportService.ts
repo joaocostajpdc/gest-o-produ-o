@@ -15,6 +15,8 @@ export interface PdfReportRow {
   externalId: string;
   cliente: string;
   produto: string;
+  /** Acabamento(s) da OS (2026-10-29) — só quando a coluna está ativa. */
+  acabamento?: string;
   estado: string;
   etapaAtual: string;
   prazo: string; // ISO ou "-"
@@ -31,7 +33,8 @@ const COLORS = {
   primary: "#2f5ce0",
 };
 
-const COLUMNS: { key: keyof PdfReportRow; label: string; width: number }[] = [
+type Column = { key: keyof PdfReportRow; label: string; width: number };
+const BASE_COLUMNS: Column[] = [
   { key: "externalId", label: "OS", width: 60 },
   { key: "cliente", label: "Cliente", width: 155 },
   { key: "produto", label: "Produto", width: 150 },
@@ -40,6 +43,19 @@ const COLUMNS: { key: keyof PdfReportRow; label: string; width: number }[] = [
   { key: "prazo", label: "Prazo", width: 105 },
   { key: "prioridade", label: "Prioridade", width: 110 },
 ];
+// Com a coluna Acabamento (pedido do utilizador de 2026-10-29) — mesma
+// largura total (770), as outras colunas encolhem um pouco.
+const ACAB_COLUMNS: Column[] = [
+  { key: "externalId", label: "OS", width: 55 },
+  { key: "cliente", label: "Cliente", width: 135 },
+  { key: "produto", label: "Produto", width: 125 },
+  { key: "acabamento", label: "Acabamento", width: 100 },
+  { key: "estado", label: "Estado", width: 75 },
+  { key: "etapaAtual", label: "Etapa atual", width: 90 },
+  { key: "prazo", label: "Prazo", width: 95 },
+  { key: "prioridade", label: "Prioridade", width: 95 },
+];
+let COLUMNS: Column[] = BASE_COLUMNS;
 
 const PRIORITY_PILL_LABELS: Record<PriorityLevel, string> = {
   PRAZO_ULTRAPASSADO: "Atrasado",
@@ -51,7 +67,8 @@ const PRIORITY_PILL_LABELS: Record<PriorityLevel, string> = {
 const ROW_HEIGHT = 22;
 const HEADER_ROW_HEIGHT = 22;
 
-export function streamServiceOrdersPdf(res: Response, rows: PdfReportRow[], filtersSummary: string) {
+export function streamServiceOrdersPdf(res: Response, rows: PdfReportRow[], filtersSummary: string, opts: { acabamento?: boolean } = {}) {
+  COLUMNS = opts.acabamento ? ACAB_COLUMNS : BASE_COLUMNS;
   const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 40, bufferPages: true });
 
   res.setHeader("Content-Type", "application/pdf");

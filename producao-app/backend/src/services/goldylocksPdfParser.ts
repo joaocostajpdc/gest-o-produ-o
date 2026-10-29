@@ -233,6 +233,27 @@ function applyMedidas(a: ParsedArtigo, blockText: string): ParsedArtigo[] {
   // Painéis e afins já trazem "Dimensões:" com o seu próprio formato — não mexer.
   if (a.dimensoes && !mosq) return [a];
 
+  // Almofadas/painéis com uma lista "Medidas: ; 1 = 600x700x28; 1 = 700x800x28"
+  // (OS 2026/566, DCALMREL001 — 2026-10-29): uma peça por medida, cada uma com
+  // a sua quantidade, para sair uma etiqueta por peça com a medida certa. A
+  // medida fica tal como vem (sem dizer o que é largura/altura).
+  if (!mosq) {
+    const lines = blockText.split("\n").map((l) => l.replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim());
+    const medLine = lines.find((l) => /^Medidas?\s*:/i.test(l));
+    const entries = medLine
+      ? [...medLine.matchAll(/(\d{1,3})\s*=\s*(\d+(?:[.,]\d+)?(?:\s*[x×*]\s*\d+(?:[.,]\d+)?){1,2})/gi)]
+      : [];
+    if (!entries.length) return [a];
+    const outras = (a.outras ?? []).filter((l) => l !== medLine);
+    return entries.map((m) => ({
+      ...a,
+      dimensoes: m[2].replace(/\s+/g, "").replace(/[×*]/g, "x"),
+      quantidade: fmtQty(Number(m[1])),
+      unidade: a.unidade ?? "uni",
+      outras,
+    }));
+  }
+
   const { medidas, usedLines } = extractMedidas(blockText, mosq);
   if (!medidas.length) return [a];
 

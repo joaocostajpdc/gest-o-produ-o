@@ -26,6 +26,7 @@ import {
 import { parseOrdemServicoPdf } from "../services/goldylocksPdfParser";
 import { readSpecBlocks, writeSpecMeasures } from "../services/specMeasures";
 import { streamServiceOrderTravelerPdf, TravelerData } from "../services/serviceOrderPdfService";
+import { streamServiceOrderTravelerPdfV2 } from "../services/serviceOrderPdfV2Service";
 import {
   streamBarcodeLabelPdf,
   streamProductLabelPdf,
@@ -294,7 +295,9 @@ serviceOrdersRouter.get(
       })),
     };
 
-    await streamServiceOrderTravelerPdf(res, data);
+    // Layout novo da ficha (2026-10-30), em teste: só para quem tem "fichaNova".
+    if (await canUseFeature("fichaNova", req.user)) await streamServiceOrderTravelerPdfV2(res, data);
+    else await streamServiceOrderTravelerPdf(res, data);
   })
 );
 

@@ -47,6 +47,8 @@ export const FEATURES = {
   filtrosDatas: "Listagens: intervalo de datas (lançamento da OS e entrada numa etapa, ex.: Lacagem)",
   medidasOS: "Medidas nas OS (leitura do PDF, editar medidas, etiquetas e corte das mosquiteiras)",
   guiaLacagem: "Material em Lacagem: submeter a guia (foto ou PDF) para enviar ou retirar as OS da Lacagem",
+  fichaNova: "Ficha de Produção com layout novo (etapa atual, tabela de etapas com data e rubrica, notas)",
+  leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

@@ -2,6 +2,7 @@ import { SVGProps, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
+import { ScanOrderHost } from "./ScanOrderPopup";
 import { api } from "../api/client";
 import { FeatureTestBanner } from "./FeatureTestBanner";
 import { TabsProvider } from "../contexts/TabsContext";
@@ -307,7 +308,12 @@ export function Layout() {
   // Ecrã inicial: sem menu lateral nem barra do telemóvel; o menu só aparece
   // depois de entrar numa área (pedido do utilizador de 2026-10-20).
   if (isHome && !abas.available) {
-    return <Outlet />;
+    return (
+      <>
+        <Outlet />
+        <ScanOrderHost />
+      </>
+    );
   }
 
   const sidebarParts = (
@@ -536,6 +542,7 @@ export function Layout() {
         {menuHoverBanner}
         <Outlet />
       </main>
+      <ScanOrderHost />
     </div>
   );
 }

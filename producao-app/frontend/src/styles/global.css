@@ -3254,3 +3254,28 @@ tr.fin-row-empty td { color: #98a2b3; }
 .guia-results li.fail { color: #b91c1c; }
 .guia-busy { margin-top: 10px; }
 .muted.small, .small { font-size: 12px; }
+
+/* Leitura de código de barras → janela da OS (2026-10-30) */
+.scan-pop-backdrop { align-items: center; z-index: 400; }
+.scan-pop { max-width: 520px; padding: 22px; }
+.scan-pop-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.scan-pop-kicker { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-primary); }
+.scan-pop-title { margin: 2px 0 2px; font-size: 26px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.scan-pop-sub { margin: 0; }
+.scan-pop-x { border: 0; background: transparent; font-size: 18px; line-height: 1; padding: 6px; cursor: pointer; color: var(--color-text-muted); border-radius: 6px; }
+.scan-pop-x:hover { background: var(--color-bg); }
+.scan-pop-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px; }
+.scan-pop-desc { background: var(--color-bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.scan-pop-desc-text { white-space: pre-wrap; font-size: 14px; max-height: 160px; overflow-y: auto; }
+.scan-pop-stage { display: flex; justify-content: space-between; gap: 12px; background: var(--color-primary-soft); border-left: 4px solid var(--color-primary); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.scan-pop-stage-name { font-size: 20px; font-weight: 700; }
+.scan-pop-next { text-align: right; font-weight: 600; }
+.scan-pop-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0 0 12px; }
+.scan-step { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--color-border); color: var(--color-text-muted); }
+.scan-step.is-concluida { background: var(--color-primary-soft); color: var(--color-primary-dark); border-color: transparent; }
+.scan-step.is-concluida::before { content: "✓ "; }
+.scan-step.is-ativa { background: var(--color-primary); color: #fff; border-color: transparent; font-weight: 600; }
+.scan-pop-done { color: #15803d; font-weight: 600; margin: 4px 0 8px; }
+.scan-pop-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.scan-pop-primary { flex: 1 1 220px; font-size: 16px; padding: 12px 16px; }
+@media (max-width: 520px) { .scan-pop-actions .btn { flex: 1 1 100%; } .scan-pop-stage { flex-direction: column; } .scan-pop-next { text-align: left; } }

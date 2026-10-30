@@ -4,6 +4,7 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { api } from "../api/client";
 import { Powder, ServiceOrderListItem } from "../types";
 import { useFeature } from "../contexts/FeaturesContext";
+import { openScanPopup } from "../components/ScanOrderPopup";
 
 // ============================================================================
 // Ler Código — lê o código de barras impresso na Etiqueta de Código de
@@ -40,6 +41,10 @@ export function ScanPage() {
   // caixas de pó — se o código lido for de um pó, abre-o no Pó em Stock para
   // dar entrada/saída; senão, procura uma Ordem de Serviço como antes.
   const powderStock = useFeature("powderStock");
+  // 2026-10-30: com "leituraCodigo", ler o código de uma OS abre uma janela
+  // com a descrição, a etapa atual e o botão para passar à seguinte, em vez
+  // de navegar logo para a página da OS.
+  const leituraCodigo = useFeature("leituraCodigo");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   // "Pedido" do utilizador (torna o contentor visível) vs. "scanning"
   // (câmara já efetivamente a correr) — propositadamente dois estados
@@ -79,7 +84,8 @@ export function ScanPage() {
         return;
       }
       setWantsCamera(false);
-      navigate(`/service-orders/${match.id}`);
+      if (leituraCodigo.available) openScanPopup(match.externalId);
+      else navigate(`/service-orders/${match.id}`);
     } catch (err) {
       setLookupError(err instanceof Error ? err.message : "Erro ao procurar a Ordem de Serviço.");
     } finally {

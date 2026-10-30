@@ -17,7 +17,7 @@ import type { TravelerData, TravelerObservation, TravelerStageRow } from "./serv
 //    na peça saber de imediato onde ela está;
 //  - os dados (estado, prioridade, data-limite, entrada) numa só linha;
 //  - características com a altura medida pelo texto (sem espaço vazio);
-//  - etapas em tabela com colunas "Data" e "Rubrica" para preencher à mão;
+//  - etapas em ponto pequeno (uma fila de etiquetas);
 //  - quadro de notas manuscritas a ocupar o espaço livre no fim da página;
 //  - rodapé com a data de impressão (hora de Lisboa).
 // ============================================================================
@@ -277,73 +277,57 @@ function stageIcon(doc: Doc, status: TravelerStageRow["status"], x: number, y: n
   doc.restore();
 }
 
+// Etapas em ponto pequeno (pedido do utilizador de 2026-10-30: "na ficha de
+// produção basta ter as etapas a pequeno"): uma fila de etiquetas com o
+// visto/etapa atual, que passa para a linha seguinte se não couber. As notas
+// associadas a uma etapa saem por baixo, com o nome da etapa à frente.
 function stagesTable(doc: Doc, stages: TravelerStageRow[]) {
   const done = stages.filter((s) => s.status === "CONCLUIDA").length;
   const total = stages.filter((s) => s.status !== "OMITIDA").length;
   sectionTitle(doc, "Etapas", total ? `${done} de ${total} concluídas` : undefined);
 
   const w = W(doc);
-  // Colunas: ícone+etapa | estado | data | rubrica
-  const colStage = M + 10;
-  const colState = M + w * 0.42;
-  const colDate = M + w * 0.64;
-  const colSign = M + w * 0.81;
-  const rowH = 30;
-
-  const head = () => {
-    const y = doc.y;
-    doc.font("Helvetica-Bold").fontSize(7).fillColor(C.muted);
-    doc.text("ETAPA", colStage, y, { characterSpacing: 0.5, lineBreak: false });
-    doc.text("ESTADO", colState, y, { characterSpacing: 0.5, lineBreak: false });
-    doc.text("DATA", colDate, y, { characterSpacing: 0.5, lineBreak: false });
-    doc.text("RUBRICA", colSign, y, { characterSpacing: 0.5, lineBreak: false });
-    doc.moveTo(M, y + 12).lineTo(M + w, y + 12).strokeColor(C.border).lineWidth(1).stroke();
-    doc.y = y + 14;
-  };
-  head();
+  const chipH = 22;
+  const gap = 6;
+  let x = M;
+  let y = doc.y;
+  ensure(doc, chipH + 4);
 
   stages.forEach((st) => {
-    const notesH = st.observations.reduce((acc, o) => {
-      doc.font("Helvetica").fontSize(8.5);
-      return acc + doc.heightOfString(o.text, { width: w - 60 }) + 20;
-    }, 0);
-    if (doc.y + rowH + notesH > bottomLimit(doc)) {
-      doc.addPage();
-      head();
-    }
-    const y = doc.y;
+    const label = st.supplierName ? `${st.stageName} · ${st.supplierName}` : st.stageName;
     const active = st.status === "ATIVA";
-    const muted = st.status === "OMITIDA";
-    if (active) {
-      doc.rect(M, y, w, rowH).fill(C.primarySoft);
-      doc.rect(M, y, 3, rowH).fill(C.primary);
+    const muted = st.status === "OMITIDA" || st.status === "PENDENTE";
+    doc.font(active ? "Helvetica-Bold" : "Helvetica").fontSize(8.5);
+    const cw = Math.min(w, doc.widthOfString(label) + 32);
+    if (x + cw > M + w) {
+      x = M;
+      y += chipH + gap;
     }
-    stageIcon(doc, st.status, colStage, y + (rowH - 13) / 2);
-    doc.font("Helvetica-Bold").fontSize(11).fillColor(muted ? C.faint : C.ink)
-      .text(st.stageName, colStage + 21, y + (st.supplierName ? 6 : 10), { width: colState - colStage - 28, lineBreak: false, ellipsis: true });
-    if (st.supplierName) {
-      doc.font("Helvetica").fontSize(8).fillColor(C.muted).text(st.supplierName, colStage + 21, y + 18.5, { width: colState - colStage - 28, lineBreak: false, ellipsis: true });
-    }
-    doc.font(active ? "Helvetica-Bold" : "Helvetica").fontSize(9).fillColor(active ? C.primaryDark : muted ? C.faint : C.muted)
-      .text(STAGE_LABEL[st.status], colState, y + 11, { lineBreak: false });
-    // linhas para escrever à mão (data e rubrica)
-    doc.moveTo(colDate, y + rowH - 8).lineTo(colSign - 12, y + rowH - 8).dash(1.5, { space: 2 }).strokeColor(C.line).lineWidth(0.8).stroke();
-    doc.moveTo(colSign, y + rowH - 8).lineTo(M + w - 6, y + rowH - 8).stroke();
-    doc.undash();
-    doc.moveTo(M, y + rowH).lineTo(M + w, y + rowH).strokeColor(C.border).lineWidth(0.8).stroke();
-    doc.y = y + rowH;
-
-    st.observations.forEach((o) => {
-      doc.font("Helvetica").fontSize(8.5);
-      const th = doc.heightOfString(o.text, { width: w - 60 });
-      const ny = doc.y + 4;
-      doc.roundedRect(colStage + 21, ny, w - 40, th + 14, 4).fill(C.note);
-      doc.font("Helvetica-Bold").fontSize(7).fillColor(C.muted).text(`${o.userName} · ${fmt(o.createdAt)}`, colStage + 29, ny + 3, { lineBreak: false });
-      doc.font("Helvetica").fontSize(8.5).fillColor(C.ink).text(o.text, colStage + 29, ny + 11, { width: w - 60 });
-      doc.y = ny + th + 16;
-    });
+    if (active) doc.roundedRect(x, y, cw, chipH, 11).fill(C.primarySoft);
+    doc.roundedRect(x, y, cw, chipH, 11).lineWidth(active ? 1.2 : 0.8).strokeColor(active ? C.primary : C.border).stroke();
+    doc.save();
+    doc.translate(x + 7, y + 5.5);
+    doc.scale(11 / 13);
+    stageIcon(doc, st.status, 0, 0);
+    doc.restore();
+    doc.font(active ? "Helvetica-Bold" : "Helvetica").fontSize(8.5).fillColor(active ? C.primaryDark : muted ? C.muted : C.ink)
+      .text(label, x + 23, y + 7, { lineBreak: false });
+    x += cw + gap;
   });
-  doc.y += 14;
+  doc.y = y + chipH + 10;
+
+  const notes = stages.flatMap((st) => st.observations.map((o) => ({ ...o, stage: st.stageName })));
+  notes.forEach((o) => {
+    doc.font("Helvetica").fontSize(8.5);
+    const th = doc.heightOfString(o.text, { width: w - 20 });
+    ensure(doc, th + 22);
+    const ny = doc.y;
+    doc.roundedRect(M, ny, w, th + 16, 4).fill(C.note);
+    doc.font("Helvetica-Bold").fontSize(7).fillColor(C.muted).text(`${o.stage} · ${o.userName} · ${fmt(o.createdAt)}`, M + 10, ny + 4, { lineBreak: false });
+    doc.font("Helvetica").fontSize(8.5).fillColor(C.ink).text(o.text, M + 10, ny + 12, { width: w - 20 });
+    doc.y = ny + th + 20;
+  });
+  doc.y += 6;
 }
 
 function generalObservations(doc: Doc, list: TravelerObservation[]) {

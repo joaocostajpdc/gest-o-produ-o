@@ -114,6 +114,7 @@ export function HomePage() {
   const inicio = useFeature("inicio");
   const cutPlans = useFeature("cutPlans");
   const planeamento = useFeature("planeamento");
+  const objetivos = useFeature("objetivos");
   const compras = useFeature("compras");
   const glassOrders = useFeature("glassOrders");
   const powderStock = useFeature("powderStock");
@@ -164,6 +165,19 @@ export function HomePage() {
       ],
     },
   ];
+  // Objetivos (2026-10-30): os números da empresa à vista de todos.
+  if (objetivos.available) {
+    const target = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.2" /></svg>;
+    areas.unshift({
+      key: "objetivos",
+      title: "Objetivos",
+      desc: "Faturação e negócio fechado",
+      icon: target,
+      color: "#16309e",
+      soft: "#eef1ff",
+      tiles: [{ to: "/objetivos", title: "Objetivos", sub: "Os nossos números do mês, trimestre e ano", icon: target }],
+    });
+  }
   if (horas.available || kmViaturas.available) {
     areas.push({
       key: "equipa",

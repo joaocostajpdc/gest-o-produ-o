@@ -157,6 +157,17 @@ function IconSend(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Objetivos (2026-10-30).
+function IconTarget(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.2" />
+    </svg>
+  );
+}
+
 // Ícones da "Equipa e Frota" (relógio e carrinha).
 function IconCalendar(props: SVGProps<SVGSVGElement>) {
   return (
@@ -253,6 +264,7 @@ export function Layout() {
   const glassOrders = useFeature("glassOrders");
   const cutPlans = useFeature("cutPlans");
   const planeamento = useFeature("planeamento");
+  const objetivos = useFeature("objetivos");
   // Orçamentos: acesso restrito (João Costa e David Costa), nunca para todos.
   const orcamentos = useFeature("orcamentos");
   const compras = useFeature("compras");
@@ -358,6 +370,12 @@ export function Layout() {
             <NavLink to="/" end>
               <IconHome /> Início
               {!inicio.released && <TestBadge />}
+            </NavLink>
+          )}
+          {objetivos.available && (
+            <NavLink to="/objetivos">
+              <IconTarget /> Objetivos
+              {!objetivos.released && <TestBadge />}
             </NavLink>
           )}
           {chat.available && (

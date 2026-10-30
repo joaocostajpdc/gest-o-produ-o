@@ -47,6 +47,7 @@ const tabIcons = {
 };
 
 const AREA_NAMES: Record<string, string> = {
+  objetivos: "Objetivos",
   producao: "Produção",
   compras: "Compras",
   equipa: "Equipa e Frota",
@@ -63,6 +64,7 @@ const PAGES: { prefix: string; title: string; icon: ReactNode }[] = [
   { prefix: "/otimizacao-corte/", title: "Plano de Corte", icon: tabIcons.cut },
   { prefix: "/otimizacao-corte", title: "Planos de Corte", icon: tabIcons.cut },
   { prefix: "/planeamento", title: "Planeamento Semanal", icon: tabIcons.calendar },
+  { prefix: "/objetivos", title: "Objetivos", icon: tabIcons.chart },
   { prefix: "/material-lacagem", title: "Material em Lacagem", icon: tabIcons.drop },
   { prefix: "/reports", title: "Listagens", icon: tabIcons.print },
   { prefix: "/compras", title: "Resumo de Compras", icon: tabIcons.cart },

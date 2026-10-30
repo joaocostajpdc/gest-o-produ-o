@@ -853,3 +853,58 @@ model PlanItem {
   @@index([date])
   @@map("plan_items")
 }
+
+// ---------------------------------------------------------------------------
+// Objetivos de negócio (pedido do utilizador de 2026-10-30): faturação e
+// negócio fechado (encomendas cliente) contra objetivos por mês, trimestre e
+// ano, à vista de toda a equipa. Os documentos vêm dos mapas "Totais de vendas
+// por dia" do Goldylocks, importados em PDF pelo administrador.
+// kind: "FATURACAO" (faturas e notas de crédito) ou "ENCOMENDAS".
+// ---------------------------------------------------------------------------
+
+model SalesDocument {
+  id         String   @id @default(cuid())
+  kind       String
+  docType    String
+  docNumber  String
+  date       DateTime @db.Date
+  clientCode String?
+  clientName String
+  gross      Float
+  net        Float
+  tax        Float
+  total      Float
+  importId   String?
+  createdAt  DateTime @default(now())
+
+  @@unique([kind, docType, docNumber])
+  @@index([kind, date])
+  @@map("sales_documents")
+}
+
+model SalesImport {
+  id         String   @id @default(cuid())
+  kind       String
+  filename   String?
+  periodFrom DateTime @db.Date
+  periodTo   DateTime @db.Date
+  count      Int
+  totalNet   Float
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@map("sales_imports")
+}
+
+model BusinessTarget {
+  id         String   @id @default(cuid())
+  kind       String
+  periodType String
+  year       Int
+  period     Int
+  value      Float
+  updatedAt  DateTime @updatedAt
+
+  @@unique([kind, periodType, year, period])
+  @@map("business_targets")
+}

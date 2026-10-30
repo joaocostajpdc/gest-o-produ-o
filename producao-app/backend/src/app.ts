@@ -12,6 +12,7 @@ import { usersRouter } from "./routes/users";
 import { clientsRouter } from "./routes/clients";
 import { serviceOrdersRouter } from "./routes/serviceOrders";
 import { lacagemGuiasRouter } from "./routes/lacagemGuias";
+import { objetivosRouter } from "./routes/objetivos";
 import { reportsRouter } from "./routes/reports";
 import { materialRequestsRouter } from "./routes/materialRequests";
 import { powdersRouter } from "./routes/powders";
@@ -81,6 +82,7 @@ export function createApp() {
   app.use("/api/relatorios", relatoriosRouter);
   app.use("/api/planeamento", planeamentoRouter);
   app.use("/api/lacagem-guias", lacagemGuiasRouter);
+  app.use("/api/objetivos", objetivosRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

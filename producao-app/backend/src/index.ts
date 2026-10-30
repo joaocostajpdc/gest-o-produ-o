@@ -8,6 +8,7 @@ import { announceTelegram } from "./scripts/announceTelegram";
 import { launchOS20261029 } from "./scripts/launchOS20261029";
 import { rereadPdfs20261029 } from "./scripts/rereadPdfs20261029";
 import { attachGuia20261030 } from "./scripts/attachGuia20261030";
+import { attachGuia20261030b } from "./scripts/attachGuia20261030b";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -41,6 +42,7 @@ void launchOS20261029();
 // Releitura pontual dos PDFs das OS abertas com a leitura melhorada (uma só vez).
 void rereadPdfs20261029();
 void attachGuia20261030();
+void attachGuia20261030b();
 
 // Sonda temporária da API do Goldylocks (só com GOLDYLOCKS_PROBE=1).
 void goldylocksProbe();

@@ -285,7 +285,7 @@ function MosquitoSource({ input }: { input: Extract<CutPlanInput, { mode: "BARRA
       <h3 style={{ margin: "0 0 4px" }}>Mosquiteiras</h3>
       {r && (
         <p className="muted" style={{ fontSize: 13, margin: "0 0 8px" }}>
-          Alturas − {nf(r.heightDeduct ?? 0, 1)} mm ({r.heightsPerUnit} por mosquiteira) · larguras até {nf(r.widthLimit, 0)} −{" "}
+          Alturas − {nf(r.heightDeduct ?? 0, 1)} mm (largura até {nf(r.widthLimit, 0)}) / − {nf(r.heightDeductLarge ?? r.heightDeduct ?? 0, 1)} mm (acima) · {r.heightsPerUnit} por mosquiteira · larguras até {nf(r.widthLimit, 0)} −{" "}
           {nf(r.widthDeductSmall ?? 0, 1)} mm · acima de {nf(r.widthLimit, 0)} − {nf(r.widthDeductLarge ?? 0, 1)} mm ({r.widthsPerUnit}{" "}
           por mosquiteira)
         </p>

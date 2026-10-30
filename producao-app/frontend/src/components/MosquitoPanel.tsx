@@ -21,6 +21,7 @@ import { useFeature } from "../contexts/FeaturesContext";
 
 export const EMPTY_RULES: MosquitoRules = {
   heightDeduct: null,
+  heightDeductLarge: null,
   widthLimit: 1400,
   widthDeductSmall: null,
   widthDeductLarge: null,
@@ -91,11 +92,14 @@ export function generatePieces(items: MosquitoItem[], rules: MosquitoRules, opts
     rules = { ...rules, heightProfile: p.h, widthSmallProfile: p.s, widthLargeProfile: p.l };
   }
   const missing: string[] = [];
-  if (rules.heightsPerUnit > 0 && rules.heightDeduct == null) missing.push("x (alturas)");
+  // Descontos (confirmados pelo utilizador em 2026-10-30): o limite de 1400 é
+  // medido na LARGURA; com largura até 1400 a altura desconta 41, acima de 1400
+  // desconta 52; a largura desconta sempre 20.
+  if (rules.heightsPerUnit > 0 && rules.heightDeduct == null) missing.push(`alturas (largura até ${rules.widthLimit})`);
   const needSmall = items.some((i) => i.width <= rules.widthLimit);
   const needLarge = items.some((i) => i.width > rules.widthLimit);
-  if (rules.widthsPerUnit > 0 && needSmall && rules.widthDeductSmall == null) missing.push(`f (larguras até ${rules.widthLimit})`);
-  if (rules.widthsPerUnit > 0 && needLarge && rules.widthDeductLarge == null) missing.push(`y (larguras acima de ${rules.widthLimit})`);
+  if (rules.widthsPerUnit > 0 && needSmall && rules.widthDeductSmall == null) missing.push(`larguras até ${rules.widthLimit}`);
+  if (rules.widthsPerUnit > 0 && needLarge && rules.widthDeductLarge == null) missing.push(`larguras acima de ${rules.widthLimit}`);
   if (missing.length) throw new Error(`Preenche o desconto ${missing.join(", ")} antes de gerar as peças.`);
 
   const bad = items.find((i) => !(i.width > 0 && i.height > 0));
@@ -121,8 +125,9 @@ export function generatePieces(items: MosquitoItem[], rules: MosquitoRules, opts
   for (const it of items) {
     os = it.os?.trim() || null;
     if (!osOrder.includes(os ?? "")) osOrder.push(os ?? "");
-    add(rules.heightProfile, "G", r1(it.height - (rules.heightDeduct ?? 0)), it.qty * rules.heightsPerUnit, `Alt. ${fmt(it.height)}`);
     const small = it.width <= rules.widthLimit;
+    const hd = small ? rules.heightDeduct : rules.heightDeductLarge ?? rules.heightDeduct;
+    add(rules.heightProfile, "G", r1(it.height - (hd ?? 0)), it.qty * rules.heightsPerUnit, `Alt. ${fmt(it.height)}`);
     add(
       small ? rules.widthSmallProfile : rules.widthLargeProfile,
       small ? "L" : "M",
@@ -323,15 +328,19 @@ export function MosquitoPanel({
       </div>
       <div className="cut-rules">
         <label className="field">
-          Alturas ({rules.heightsPerUnit} por mosquiteira): descontar <b>x</b> (mm)
+          Alturas — largura até {rules.widthLimit} ({rules.heightsPerUnit} por mosquiteira): descontar (mm)
           <input type="number" step="0.1" value={rules.heightDeduct ?? ""} onChange={(e) => setRule({ heightDeduct: numOrNull(e.target.value) })} />
         </label>
         <label className="field">
-          Larguras até {rules.widthLimit} ({rules.widthsPerUnit} por mosquiteira): descontar <b>f</b> (mm)
+          Alturas — largura acima de {rules.widthLimit}: descontar (mm)
+          <input type="number" step="0.1" value={rules.heightDeductLarge ?? ""} onChange={(e) => setRule({ heightDeductLarge: numOrNull(e.target.value) })} placeholder="igual" />
+        </label>
+        <label className="field">
+          Larguras até {rules.widthLimit} ({rules.widthsPerUnit} por mosquiteira): descontar (mm)
           <input type="number" step="0.1" value={rules.widthDeductSmall ?? ""} onChange={(e) => setRule({ widthDeductSmall: numOrNull(e.target.value) })} />
         </label>
         <label className="field">
-          Larguras acima de {rules.widthLimit} ({rules.widthsPerUnit} por mosquiteira): descontar <b>y</b> (mm)
+          Larguras acima de {rules.widthLimit} ({rules.widthsPerUnit} por mosquiteira): descontar (mm)
           <input type="number" step="0.1" value={rules.widthDeductLarge ?? ""} onChange={(e) => setRule({ widthDeductLarge: numOrNull(e.target.value) })} />
         </label>
       </div>

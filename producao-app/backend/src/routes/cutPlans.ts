@@ -50,7 +50,8 @@ const mosquitoItem = z.object({
 
 const deduct = z.coerce.number().min(-500).max(2000).nullable();
 const mosquitoRulesSchema = z.object({
-  heightDeduct: deduct, // x
+  heightDeduct: deduct, // alturas (largura até ao limite)
+  heightDeductLarge: deduct.optional(), // alturas (largura acima do limite) — 2026-10-30
   widthLimit: z.coerce.number().positive().max(10000).default(1400),
   widthDeductSmall: deduct, // f (até ao limite, inclusive)
   widthDeductLarge: deduct, // y (acima do limite)

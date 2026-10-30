@@ -113,7 +113,7 @@ export function printCutProductionSheet(plan: CutPlan) {
       .map((m) => {
         const small = rules ? m.width <= rules.widthLimit : true;
         const wd = rules ? (small ? rules.widthDeductSmall : rules.widthDeductLarge) ?? 0 : 0;
-        const hd = rules?.heightDeduct ?? 0;
+        const hd = (small ? rules?.heightDeduct : rules?.heightDeductLarge ?? rules?.heightDeduct) ?? 0;
         return `<tr>
           <td>${osChip(m.os)} ${esc(m.os ?? "")}</td>
           <td>${esc(m.client ?? "")}</td>
@@ -140,7 +140,7 @@ export function printCutProductionSheet(plan: CutPlan) {
     .map((o) => `${osChip(o.os) || ""} <b>OS ${esc(o.os)}</b>${o.client ? ` — ${esc(o.client)}` : ""}`)
     .join("&nbsp;&nbsp;&nbsp;");
   const dedLine = rules
-    ? `<div class="ded"><b>Descontos:</b> alturas ${ded(rules.heightDeduct)} (${rules.heightsPerUnit} por mosquiteira) · larguras até ${mm(rules.widthLimit)} ${ded(rules.widthDeductSmall)} · acima de ${mm(rules.widthLimit)} ${ded(rules.widthDeductLarge)} (${rules.widthsPerUnit} por mosquiteira)</div>`
+    ? `<div class="ded"><b>Descontos:</b> alturas ${ded(rules.heightDeduct)} com largura até ${mm(rules.widthLimit)} · ${ded(rules.heightDeductLarge ?? rules.heightDeduct)} acima (${rules.heightsPerUnit} por mosquiteira) · larguras até ${mm(rules.widthLimit)} ${ded(rules.widthDeductSmall)} · acima de ${mm(rules.widthLimit)} ${ded(rules.widthDeductLarge)} (${rules.widthsPerUnit} por mosquiteira)</div>`
     : "";
   const notes = (plan.notes ?? "").replace(/Descontos das mosquiteiras:[\s\S]*?(\n\n|$)/, "").trim();
 

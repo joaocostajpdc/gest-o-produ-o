@@ -349,7 +349,8 @@ export interface MosquitoItem {
 }
 
 export interface MosquitoRules {
-  heightDeduct: number | null; // x
+  heightDeduct: number | null; // alturas — mosquiteiras com largura até ao limite
+  heightDeductLarge?: number | null; // alturas — largura acima do limite (vazio = igual)
   widthLimit: number;
   widthDeductSmall: number | null; // f
   widthDeductLarge: number | null; // y

@@ -710,9 +710,9 @@ function withDeductions(prev: string, r: MosquitoRules): string {
   const v = (n: number | null) => (n == null ? "—" : `${String(n).replace(".", ",")} mm`);
   const block = [
     DED_START,
-    `• Alturas (${r.heightsPerUnit} por mosquiteira, perfil "${r.heightProfile}"): −${v(r.heightDeduct)} (x)`,
-    `• Larguras até ${r.widthLimit} (${r.widthsPerUnit} por mosquiteira, perfil "${r.widthSmallProfile}"): −${v(r.widthDeductSmall)} (f)`,
-    `• Larguras acima de ${r.widthLimit} (${r.widthsPerUnit} por mosquiteira, perfil "${r.widthLargeProfile}"): −${v(r.widthDeductLarge)} (y)`,
+    `• Alturas (${r.heightsPerUnit} por mosquiteira, perfil "${r.heightProfile}"): largura até ${r.widthLimit} −${v(r.heightDeduct)} · acima de ${r.widthLimit} −${v(r.heightDeductLarge ?? r.heightDeduct)}`,
+    `• Larguras até ${r.widthLimit} (${r.widthsPerUnit} por mosquiteira, perfil "${r.widthSmallProfile}"): −${v(r.widthDeductSmall)}`,
+    `• Larguras acima de ${r.widthLimit} (${r.widthsPerUnit} por mosquiteira, perfil "${r.widthLargeProfile}"): −${v(r.widthDeductLarge)}`,
   ].join("\n");
   const lines = prev.split("\n");
   const i = lines.findIndex((l) => l.trim() === DED_START);

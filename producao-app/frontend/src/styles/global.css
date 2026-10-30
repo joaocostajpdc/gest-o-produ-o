@@ -3230,3 +3230,27 @@ tr.fin-row-empty td { color: #98a2b3; }
 .list-date-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; width: 100%; }
 .list-date-filters label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--color-text-muted, #6b7280); }
 .list-date-filters input, .list-date-filters select { font: inherit; font-size: 14px; color: var(--color-text, inherit); }
+/* Submeter guia da Lacagem (2026-10-30) */
+.guia-modal { max-width: 680px; }
+.guia-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.guia-head h3 { margin: 0; }
+.guia-pick { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.guia-pick label { cursor: pointer; }
+.guia-files { list-style: none; padding: 0; margin: 0 0 12px; font-size: 13px; }
+.guia-files li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+.guia-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.guia-direction { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.guia-direction label { flex: 1; min-width: 160px; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; cursor: pointer; font-weight: 500; }
+.guia-direction label.on { border-color: var(--color-primary, #1f5fbf); box-shadow: 0 0 0 1px var(--color-primary, #1f5fbf) inset; }
+.guia-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 12px; }
+.guia-table { overflow-x: auto; margin: 4px 0 8px; }
+.guia-table table { width: 100%; font-size: 13px; }
+.guia-table tr.guia-off td { opacity: .5; }
+.guia-warn { color: #b45309; font-weight: 600; }
+.guia-manual { display: flex; gap: 8px; margin-top: 8px; }
+.guia-manual input { flex: 1; }
+.guia-results { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+.guia-results li { padding: 6px 0; border-bottom: 1px solid var(--color-border); }
+.guia-results li.fail { color: #b91c1c; }
+.guia-busy { margin-top: 10px; }
+.muted.small, .small { font-size: 12px; }

@@ -5,6 +5,8 @@ import { useFeature } from "../contexts/FeaturesContext";
 import { MAX_SIDE_PANELS, QuickViewBody, SIDE_PANEL_MIN_WIDTH, useIsWide } from "./ServiceOrdersListPage";
 import { ServiceOrderListItem, Stage } from "../types";
 import { minutesToDays, PriorityBadge, StatusBadge } from "../components/Badges";
+import { GuiaLacagemModal } from "../components/GuiaLacagemModal";
+import { FeatureTestBanner } from "../components/FeatureTestBanner";
 
 // ============================================================================
 // Material em Lacagem — atalho direto às Ordens de Serviço cuja etapa atual
@@ -37,6 +39,9 @@ export function MaterialLacagemPage() {
   const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
   const [reload, setReload] = useState(0);
   const refresh = useCallback(() => setReload((n) => n + 1), []);
+  // Submeter guia da Lacagem (pedido de 2026-10-30) — em teste: "guiaLacagem".
+  const guiaFeature = useFeature("guiaLacagem");
+  const [guiaOpen, setGuiaOpen] = useState(false);
 
   function openPanel(order: ServiceOrderListItem) {
     setPanels((prev) => [order, ...prev.filter((p) => p.id !== order.id)].slice(0, MAX_SIDE_PANELS));
@@ -147,7 +152,14 @@ export function MaterialLacagemPage() {
       <div className="os-split-main">
       <div className="page-header">
         <h2>Material em Lacagem</h2>
+        {guiaFeature.available && (
+          <button type="button" className="btn" onClick={() => setGuiaOpen(true)}>
+            Submeter guia
+          </button>
+        )}
       </div>
+      {guiaFeature.available && <FeatureTestBanner featureKey="guiaLacagem" label="o botão Submeter guia" />}
+      {guiaOpen && <GuiaLacagemModal onClose={() => setGuiaOpen(false)} onDone={refresh} />}
       <p className="muted" style={{ marginBottom: 16 }}>
         Ordens de Serviço cuja etapa atual é a Lacagem — o material que está neste momento fora, no fornecedor.
       </p>

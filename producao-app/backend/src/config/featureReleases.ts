@@ -46,6 +46,7 @@ export const FEATURES = {
   listagemAcabamento: "Coluna Acabamento na Listagem de Ordens de Serviço",
   filtrosDatas: "Listagens: intervalo de datas (lançamento da OS e entrada numa etapa, ex.: Lacagem)",
   medidasOS: "Medidas nas OS (leitura do PDF, editar medidas, etiquetas e corte das mosquiteiras)",
+  guiaLacagem: "Material em Lacagem: submeter a guia (foto ou PDF) para enviar ou retirar as OS da Lacagem",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

@@ -11,6 +11,7 @@ import { suppliersRouter } from "./routes/suppliers";
 import { usersRouter } from "./routes/users";
 import { clientsRouter } from "./routes/clients";
 import { serviceOrdersRouter } from "./routes/serviceOrders";
+import { lacagemGuiasRouter } from "./routes/lacagemGuias";
 import { reportsRouter } from "./routes/reports";
 import { materialRequestsRouter } from "./routes/materialRequests";
 import { powdersRouter } from "./routes/powders";
@@ -35,6 +36,8 @@ export function createApp() {
   // Bloqueio por atualização (UPDATE_LOCK=1): todos, admin incluído, veem o aviso.
   app.use(updateLockGuard);
 
+  // Guias da Lacagem: as fotografias vêm em base64 dentro do JSON (maiores que o limite normal).
+  app.use("/api/lacagem-guias", express.json({ limit: "40mb" }));
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
@@ -77,6 +80,7 @@ export function createApp() {
   app.use("/api/financeiro", financeiroRouter);
   app.use("/api/relatorios", relatoriosRouter);
   app.use("/api/planeamento", planeamentoRouter);
+  app.use("/api/lacagem-guias", lacagemGuiasRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

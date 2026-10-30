@@ -58,6 +58,52 @@ const areas = [
   },
 ];
 
+// Relógio do ecrã de entrada (pedido do utilizador de 2026-10-30: "mete as
+// horas"), sempre na hora de Lisboa, com a data por extenso e o estado da
+// Central (aberta, ou em manutenção das 23:00 às 07:00).
+const LISBON = "Europe/Lisbon";
+
+function lisbonParts(d: Date) {
+  const time = d.toLocaleTimeString("pt-PT", { timeZone: LISBON, hour: "2-digit", minute: "2-digit", hour12: false });
+  const seconds = d.toLocaleTimeString("pt-PT", { timeZone: LISBON, second: "2-digit" }).padStart(2, "0");
+  const date = d.toLocaleDateString("pt-PT", { timeZone: LISBON, weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const hour = Number(d.toLocaleTimeString("pt-PT", { timeZone: LISBON, hour: "2-digit", hour12: false }));
+  return { time, seconds: seconds.slice(-2), date: date.charAt(0).toUpperCase() + date.slice(1), hour };
+}
+
+function greeting(hour: number) {
+  if (hour >= 6 && hour < 12) return "Bom dia";
+  if (hour >= 12 && hour < 20) return "Boa tarde";
+  return "Boa noite";
+}
+
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+function CentralClock() {
+  const { time, seconds, date, hour } = lisbonParts(useNow());
+  const open = hour >= 7 && hour < 23;
+  return (
+    <div className="cl-clock" aria-live="off">
+      <div className="cl-clock-time">
+        {time}
+        <span className="cl-clock-sec">{seconds}</span>
+      </div>
+      <div className="cl-clock-date">{date}</div>
+      <div className={`cl-status ${open ? "is-open" : "is-closed"}`}>
+        <span className="cl-status-dot" />
+        {open ? "Central disponível · 07:00 – 23:00" : "Manutenção · reabre às 07:00"}
+      </div>
+    </div>
+  );
+}
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const [email, setEmail] = useState("");
@@ -136,6 +182,7 @@ export function LoginPage() {
         </div>
 
         <div className="cl-pitch">
+          <CentralClock />
           <h1>Toda a operação da empresa num só lugar.</h1>
           <ul className="cl-areas">
             {areas.map((a) => (
@@ -154,11 +201,15 @@ export function LoginPage() {
           </ul>
         </div>
 
-        <p className="cl-legal">JPDC - Mynhoferragens, Lda. · Ponte da Barca</p>
+        <p className="cl-legal">© {new Date().getFullYear()} JPDC - Mynhoferragens, Lda. · Ponte da Barca</p>
       </aside>
 
       <main className="cl-main">
         <form className="cl-form" onSubmit={handleSubmit}>
+          <div className="cl-mobile-clock">
+            <CentralClock />
+          </div>
+          <p className="cl-greet">{greeting(lisbonParts(new Date()).hour)}</p>
           <h2>Iniciar sessão</h2>
           <p className="cl-form-sub">Entra com a tua conta da empresa.</p>
 
@@ -214,7 +265,14 @@ export function LoginPage() {
             {submitting ? "A entrar..." : "Entrar"}
           </button>
 
-          <p className="cl-help">Sem acesso ou esqueceste a palavra-passe? Fala com o administrador.</p>
+          <div className="cl-divider" />
+          <p className="cl-help">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="4" y="11" width="16" height="10" rx="2" />
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </svg>
+            Acesso reservado a colaboradores. Sem acesso ou esqueceste a palavra-passe? Fala com o administrador.
+          </p>
         </form>
       </main>
     </div>

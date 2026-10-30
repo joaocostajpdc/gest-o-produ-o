@@ -13,10 +13,8 @@ import type { TravelerData, TravelerObservation, TravelerStageRow } from "./serv
 // O que muda em relação à ficha antiga:
 //  - código de barras maior, com o número legível por baixo e sem ficar
 //    cortado (a imagem é encaixada na caixa com "fit");
-//  - faixa "Etapa atual → próxima" logo abaixo do cabeçalho, para quem pega
-//    na peça saber de imediato onde ela está;
 //  - os dados (estado, prioridade, data-limite, entrada) numa só linha;
-//  - características com a altura medida pelo texto (sem espaço vazio);
+//  - características do produto em grelha (rótulo + valor), por artigo;
 //  - etapas em ponto pequeno (uma fila de etiquetas);
 //  - quadro de notas manuscritas a ocupar o espaço livre no fim da página;
 //  - rodapé com a data de impressão (hora de Lisboa).
@@ -83,7 +81,6 @@ export async function streamServiceOrderTravelerPdfV2(res: Response, data: Trave
   doc.pipe(res);
 
   header(doc, data, barcode);
-  currentStageBanner(doc, data.stages);
   infoRow(doc, data);
   if (data.specifications?.trim()) specifications(doc, data.specifications);
   stagesTable(doc, data.stages);
@@ -136,8 +133,8 @@ function header(doc: Doc, data: TravelerData, barcode: Buffer) {
   doc.rect(0, 0, doc.page.width, 7).fill(C.primary);
 
   const top = M - 6;
-  const boxW = 210;
-  const boxH = 104;
+  const boxW = 236;
+  const boxH = 112;
   const boxX = doc.page.width - M - boxW;
   const textW = boxX - M - 16;
 
@@ -155,34 +152,6 @@ function header(doc: Doc, data: TravelerData, barcode: Buffer) {
     .text("Ler na Central para ver e passar de etapa", boxX, top + boxH - 16, { width: boxW, align: "center", lineBreak: false });
 
   doc.y = top + boxH + 14;
-}
-
-function currentStageBanner(doc: Doc, stages: TravelerStageRow[]) {
-  const idx = stages.findIndex((s) => s.status === "ATIVA");
-  const current = idx >= 0 ? stages[idx] : null;
-  const next = stages.slice(idx + 1).find((s) => s.status === "PENDENTE") ?? (idx < 0 ? stages.find((s) => s.status === "PENDENTE") : undefined);
-  const allDone = stages.length > 0 && stages.every((s) => s.status === "CONCLUIDA" || s.status === "OMITIDA");
-
-  const h = 50;
-  const y = doc.y;
-  const w = W(doc);
-  doc.roundedRect(M, y, w, h, 8).fill(C.primarySoft);
-  doc.roundedRect(M, y, 5, h, 2.5).fill(C.primary);
-
-  const half = w * 0.58;
-  doc.font("Helvetica-Bold").fontSize(7.5).fillColor(C.primaryDark).text("ETAPA ATUAL", M + 16, y + 9, { characterSpacing: 0.6, lineBreak: false });
-  const curLabel = current ? current.stageName : allDone ? "Todas as etapas concluídas" : "Produção ainda não iniciada";
-  doc.font("Helvetica-Bold").fontSize(17).fillColor(C.ink).text(curLabel, M + 16, y + 21, { width: half - 24, height: 22, ellipsis: true, lineBreak: false });
-  if (current?.supplierName) {
-    const lw = doc.widthOfString(curLabel);
-    doc.font("Helvetica").fontSize(10).fillColor(C.muted).text(`· ${current.supplierName}`, M + 22 + Math.min(lw, half - 120), y + 27, { lineBreak: false });
-  }
-
-  doc.font("Helvetica-Bold").fontSize(7.5).fillColor(C.muted).text("A SEGUIR", M + half, y + 9, { characterSpacing: 0.6, lineBreak: false });
-  doc.font("Helvetica-Bold").fontSize(13).fillColor(next ? C.ink : C.muted)
-    .text(next ? next.stageName : allDone ? "—" : "Concluir a OS", M + half, y + 23, { width: w - half - 14, height: 18, ellipsis: true, lineBreak: false });
-
-  doc.y = y + h + 12;
 }
 
 function infoRow(doc: Doc, data: TravelerData) {
@@ -221,44 +190,122 @@ function infoRow(doc: Doc, data: TravelerData) {
   doc.y = y + th + 14;
 }
 
+// Características do produto (2026-10-30, "melhorar a característica do
+// produto"): cada artigo num cartão, com os campos "Chave: valor" numa grelha
+// de 3 colunas (rótulo pequeno por cima, valor em destaque). Dimensões e
+// Quantidade saem maiores, por serem o que se confere na produção. Linhas sem
+// "Chave:" saem a toda a largura. "Referente a" fica discreto no fim.
+interface SpecArticle {
+  title: string | null;
+  fields: { label: string; value: string }[];
+  free: string[];
+}
+
+const FIELD_ORDER = ["dimensões", "dimensoes", "quant.", "quantidade", "acabamento", "modelo", "enchimento", "vidro", "v/ref."];
+const BIG_FIELDS = new Set(["dimensões", "dimensoes", "quant.", "quantidade"]);
+
+function parseSpecs(text: string): { articles: SpecArticle[]; referencia: string | null } {
+  let referencia: string | null = null;
+  const articles: SpecArticle[] = [];
+  let cur: SpecArticle = { title: null, fields: [], free: [] };
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const ref = line.match(/^Referente a:\s*(.+)$/i);
+    if (ref) {
+      referencia = ref[1].replace(/,\s*$/, "").trim();
+      continue;
+    }
+    const art = line.match(/^Artigo \d+\s*—\s*(.*)$/);
+    if (art) {
+      if (cur.title || cur.fields.length || cur.free.length) articles.push(cur);
+      cur = { title: line, fields: [], free: [] };
+      continue;
+    }
+    const kv = line.match(/^([^:]{1,24}):\s*(.+)$/);
+    if (kv) cur.fields.push({ label: kv[1].trim(), value: kv[2].trim() });
+    else cur.free.push(line);
+  }
+  if (cur.title || cur.fields.length || cur.free.length) articles.push(cur);
+  for (const a of articles) {
+    const rank = (l: string) => {
+      const i = FIELD_ORDER.indexOf(l.toLowerCase());
+      return i < 0 ? 99 : i;
+    };
+    a.fields.sort((x, y) => rank(x.label) - rank(y.label));
+  }
+  return { articles, referencia };
+}
+
 function specifications(doc: Doc, text: string) {
+  const { articles, referencia } = parseSpecs(text);
+  if (!articles.length && !referencia) return;
+  sectionTitle(doc, "Características do produto", articles.length > 1 ? `${articles.length} artigos` : undefined);
+
   const w = W(doc);
   const pad = 12;
-  const inner = w - pad * 2;
-  const lines = text.split("\n").map((l) => l.replace(/\s+$/g, "")).filter((l) => l.trim().length > 0);
+  const cols = 3;
+  const colGap = 12;
+  const colW = (w - pad * 2 - colGap * (cols - 1)) / cols;
 
-  const isArticle = (l: string) => /^Artigo \d+\s*—/.test(l);
-  const isRef = (l: string) => /^Referente a:/i.test(l);
-  const fontFor = (l: string): [string, number] => (isArticle(l) ? ["Helvetica-Bold", 8.5] : isRef(l) ? ["Helvetica", 9.5] : ["Helvetica-Bold", 11]);
+  const valueFont = (label: string): [string, number] => (BIG_FIELDS.has(label.toLowerCase()) ? ["Helvetica-Bold", 14] : ["Helvetica-Bold", 11]);
 
-  const heights = lines.map((l, i) => {
-    const [f, s] = fontFor(l);
-    doc.font(f).fontSize(s);
-    return doc.heightOfString(isArticle(l) ? l.toUpperCase() : l, { width: inner }) + (isArticle(l) ? 3 + (i > 0 ? 8 : 0) : 1.5);
-  });
-  const contentH = heights.reduce((a, b) => a + b, 0);
-  const h = pad + 16 + contentH + pad - 4;
-
-  ensure(doc, Math.min(h, 300) + 12);
-  const x = M;
-  const y = doc.y;
-  doc.roundedRect(x, y, w, h, 8).lineWidth(1).fillAndStroke(C.spec, C.border);
-  doc.font("Helvetica-Bold").fontSize(8).fillColor(C.primaryDark).text("CARACTERÍSTICAS DO PRODUTO", x + pad, y + pad, { characterSpacing: 0.5, lineBreak: false });
-
-  let ly = y + pad + 16;
-  lines.forEach((l, i) => {
-    const [f, s] = fontFor(l);
-    if (isArticle(l) && i > 0) {
-      doc.moveTo(x + pad, ly + 2).lineTo(x + w - pad, ly + 2).dash(2, { space: 2 }).strokeColor(C.line).lineWidth(0.8).stroke();
-      doc.undash();
+  // mede um artigo (para saber a altura do cartão antes de o desenhar)
+  const layout = (a: SpecArticle) => {
+    const rows: { cells: SpecArticle["fields"]; h: number }[] = [];
+    for (let i = 0; i < a.fields.length; i += cols) {
+      const cells = a.fields.slice(i, i + cols);
+      const h = Math.max(
+        ...cells.map((c) => {
+          const [f, sz] = valueFont(c.label);
+          doc.font(f).fontSize(sz);
+          return 11 + doc.heightOfString(c.value, { width: colW });
+        })
+      );
+      rows.push({ cells, h: h + 8 });
     }
-    const ty = isArticle(l) && i > 0 ? ly + 8 : ly;
-    doc.font(f).fontSize(s).fillColor(isArticle(l) ? C.primaryDark : isRef(l) ? C.muted : C.ink)
-      .text(isArticle(l) ? l.toUpperCase() : l, x + pad, ty, { width: inner });
-    ly += heights[i];
+    doc.font("Helvetica-Bold").fontSize(11);
+    const freeH = a.free.reduce((acc, l) => acc + doc.heightOfString(l, { width: w - pad * 2 }) + 3, 0);
+    doc.font("Helvetica-Bold").fontSize(10);
+    const titleH = a.title ? doc.heightOfString(a.title, { width: w - pad * 2 }) + 8 : 0;
+    const h = pad + titleH + rows.reduce((acc, r) => acc + r.h, 0) + freeH + pad - 6;
+    return { rows, h, titleH };
+  };
+
+  articles.forEach((a) => {
+    const { rows, h, titleH } = layout(a);
+    ensure(doc, h + 8);
+    const x = M;
+    const y = doc.y;
+    doc.roundedRect(x, y, w, h, 8).lineWidth(1).fillAndStroke(C.spec, C.border);
+    let ly = y + pad;
+    if (a.title) {
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(C.primaryDark).text(a.title, x + pad, ly, { width: w - pad * 2 });
+      ly += titleH;
+    }
+    rows.forEach((r, ri) => {
+      if (ri > 0) {
+        doc.moveTo(x + pad, ly - 4).lineTo(x + w - pad, ly - 4).strokeColor("#d9def5").lineWidth(0.7).stroke();
+      }
+      r.cells.forEach((c, ci) => {
+        const cx = x + pad + ci * (colW + colGap);
+        doc.font("Helvetica-Bold").fontSize(6.8).fillColor(C.muted).text(c.label.replace(/\.$/, "").toUpperCase(), cx, ly, { width: colW, characterSpacing: 0.5, lineBreak: false });
+        const [f, sz] = valueFont(c.label);
+        doc.font(f).fontSize(sz).fillColor(C.ink).text(c.value, cx, ly + 10, { width: colW });
+      });
+      ly += r.h;
+    });
+    a.free.forEach((l) => {
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(C.ink).text(l, x + pad, ly, { width: w - pad * 2 });
+      ly += doc.heightOfString(l, { width: w - pad * 2 }) + 3;
+    });
+    doc.y = y + h + 8;
   });
 
-  doc.y = y + h + 14;
+  if (referencia) {
+    doc.font("Helvetica").fontSize(8.5).fillColor(C.muted).text(`Referente a: ${referencia}`, M + 2, doc.y, { width: w });
+  }
+  doc.y += 12;
 }
 
 function stageIcon(doc: Doc, status: TravelerStageRow["status"], x: number, y: number) {

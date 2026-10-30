@@ -1,4 +1,5 @@
-import { MouseEvent as ReactMouseEvent, ReactNode, useEffect } from "react";
+import { useFeature } from "../contexts/FeaturesContext";
+import { MouseEvent as ReactMouseEvent, ReactNode, useEffect, useState } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { AppTab, TabIdProvider, useTabs } from "../contexts/TabsContext";
@@ -106,6 +107,12 @@ function initials(name?: string) {
 }
 
 export function TabStrip() {
+  // Arrastar as abas para mudar a ordem (pedido do utilizador de 2026-10-30).
+  // Em teste: "moverAbas".
+  const moveFeature = useFeature("moverAbas");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
+
   const tabs = useTabs();
   const { user, logout } = useAuth();
   if (!tabs) return null;
@@ -131,16 +138,40 @@ export function TabStrip() {
         </span>
       </button>
       <div className="tabbar-tabs" role="tablist" aria-label="Abas abertas">
-        {tabs.tabs.map((t) => {
+        {tabs.tabs.map((t, idx) => {
           const { icon, title } = tabLabel(t);
           const active = t.id === tabs.activeId;
+          const dropCls = dropAt === idx ? " drop-before" : dropAt === idx + 1 && idx === tabs.tabs.length - 1 ? " drop-after" : "";
           return (
             <div
               key={t.id}
               role="tab"
               aria-selected={active}
               tabIndex={0}
-              className={`tabbar-tab${active ? " active" : ""}`}
+              className={`tabbar-tab${active ? " active" : ""}${dragId === t.id ? " dragging" : ""}${dropCls}`}
+              draggable={moveFeature.available}
+              onDragStart={(e) => {
+                setDragId(t.id);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/x-central-tab", t.id);
+              }}
+              onDragOver={(e) => {
+                if (!dragId) return;
+                e.preventDefault();
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setDropAt(e.clientX < r.left + r.width / 2 ? idx : idx + 1);
+              }}
+              onDrop={(e) => {
+                if (!dragId || dropAt == null) return;
+                e.preventDefault();
+                tabs.moveTab(dragId, dropAt);
+                setDragId(null);
+                setDropAt(null);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setDropAt(null);
+              }}
               title={title}
               onClick={() => tabs.activate(t.id)}
               onMouseDown={(e) => e.button === 1 && e.preventDefault()}

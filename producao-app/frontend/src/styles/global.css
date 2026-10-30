@@ -3220,3 +3220,8 @@ tr.fin-row-empty td { color: #98a2b3; }
   .plan-day { min-height: 0; break-inside: avoid; }
   .plan-card, .plan-markers { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Arrastar abas (2026-10-30) */
+.tabbar-tab.dragging { opacity: .45; }
+.tabbar-tab.drop-before { box-shadow: inset 3px 0 0 #6b8cff; }
+.tabbar-tab.drop-after { box-shadow: inset -3px 0 0 #6b8cff; }

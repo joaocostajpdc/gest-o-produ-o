@@ -29,6 +29,8 @@ interface TabsContextValue {
   closeTab: (id: string) => void;
   activate: (id: string) => void;
   setTabTitle: (id: string, title: string | undefined) => void;
+  /** Põe a aba "id" na posição "toIndex" (arrastar as abas — 2026-10-30). */
+  moveTab: (id: string, toIndex: number) => void;
 }
 
 const MAX_TABS = 15;
@@ -206,9 +208,22 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const moveTab = useCallback((id: string, toIndex: number) => {
+    setState((s) => {
+      const from = s.tabs.findIndex((t) => t.id === id);
+      if (from < 0) return s;
+      const tabs = [...s.tabs];
+      const [t] = tabs.splice(from, 1);
+      const to = Math.max(0, Math.min(toIndex > from ? toIndex - 1 : toIndex, tabs.length));
+      if (to === from) return s;
+      tabs.splice(to, 0, t);
+      return { ...s, tabs };
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ tabs: state.tabs, activeId: state.activeId, openTab, closeTab, activate, setTabTitle }),
-    [state, openTab, closeTab, activate, setTabTitle]
+    () => ({ tabs: state.tabs, activeId: state.activeId, openTab, closeTab, activate, setTabTitle, moveTab }),
+    [state, openTab, closeTab, activate, setTabTitle, moveTab]
   );
 
   return <TabsContext.Provider value={value}>{children}</TabsContext.Provider>;

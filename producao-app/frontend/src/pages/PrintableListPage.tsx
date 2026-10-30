@@ -17,6 +17,8 @@ interface ReportRow {
   prioridade: string;
   prioridadeNivel: PriorityLevel | null;
   prioridadeCor: string | null;
+  lancada?: string;
+  entradaEtapa?: string;
 }
 
 const STATUS_OPTIONS = [
@@ -39,6 +41,8 @@ export function PrintableListPage() {
   const showAcab = useFeature("listagemAcabamento").available;
   // Várias escolhas no mesmo filtro (2026-10-29) — em teste.
   const multi = useFeature("filtrosMultiplos").available;
+  // Intervalos de datas (2026-10-30): lançamento da OS e entrada numa etapa — em teste.
+  const datas = useFeature("filtrosDatas").available;
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState<"csv" | "pdf" | null>(null);
@@ -56,7 +60,17 @@ export function PrintableListPage() {
     priority: "",
     category: "",
     search: "",
+    lancDe: "",
+    lancAte: "",
+    etapaDataId: "",
+    etapaDe: "",
+    etapaAte: "",
   });
+  // Filtros de datas só seguem para o servidor quando a funcionalidade está disponível.
+  const sentFilters = datas
+    ? filters
+    : { ...filters, lancDe: "", lancAte: "", etapaDataId: "", etapaDe: "", etapaAte: "" };
+  const showEntrada = datas && !!(filters.etapaDataId || filters.etapaDe || filters.etapaAte);
 
   useEffect(() => {
     Promise.all([
@@ -90,7 +104,7 @@ export function PrintableListPage() {
     setLoading(true);
     setError(null);
     try {
-      const query = buildQuery(filters);
+      const query = buildQuery(sentFilters);
       const data = await api.get<ReportRow[]>(`/reports/service-orders${query}`);
       setRows(data);
       setGeneratedAt(new Date());
@@ -105,7 +119,7 @@ export function PrintableListPage() {
     setDownloading(format);
     setError(null);
     try {
-      const query = buildQuery({ ...filters, format });
+      const query = buildQuery({ ...sentFilters, format });
       const blob = await api.getBlob(`/reports/service-orders${query}`);
       downloadBlob(blob, `listagem-ordens-servico.${format}`);
     } catch (err) {
@@ -115,7 +129,14 @@ export function PrintableListPage() {
     }
   }
 
-  const filtersSummary = describeFilters(filters);
+  const nameOf = (list: { id: string; name: string }[], ids: string) =>
+    ids.split(",").filter(Boolean).map((id) => list.find((x) => x.id === id)?.name ?? "?").join(", ");
+  const filtersSummary = describeFilters(sentFilters, {
+    etapa: nameOf(stages, filters.stageId),
+    fornecedor: nameOf(suppliers, filters.supplierId),
+    cliente: nameOf(clients, filters.clientId),
+    etapaData: nameOf(stages, sentFilters.etapaDataId),
+  });
 
   return (
     <div>
@@ -208,6 +229,46 @@ export function PrintableListPage() {
           </select>
             </>
           )}
+          {datas && (
+            <div className="list-date-filters">
+              <label>
+                Lançada de
+                <input type="date" value={filters.lancDe} onChange={(e) => setFilters((f) => ({ ...f, lancDe: e.target.value }))} />
+              </label>
+              <label>
+                até
+                <input type="date" value={filters.lancAte} onChange={(e) => setFilters((f) => ({ ...f, lancAte: e.target.value }))} />
+              </label>
+              <label>
+                Foi para
+                <select value={filters.etapaDataId} onChange={(e) => setFilters((f) => ({ ...f, etapaDataId: e.target.value }))}>
+                  <option value="">(qualquer etapa)</option>
+                  {stages.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                de
+                <input type="date" value={filters.etapaDe} onChange={(e) => setFilters((f) => ({ ...f, etapaDe: e.target.value }))} />
+              </label>
+              <label>
+                até
+                <input type="date" value={filters.etapaAte} onChange={(e) => setFilters((f) => ({ ...f, etapaAte: e.target.value }))} />
+              </label>
+              {(filters.lancDe || filters.lancAte || filters.etapaDataId || filters.etapaDe || filters.etapaAte) && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setFilters((f) => ({ ...f, lancDe: "", lancAte: "", etapaDataId: "", etapaDe: "", etapaAte: "" }))}
+                >
+                  Limpar datas
+                </button>
+              )}
+            </div>
+          )}
           <button className="btn" onClick={loadReport} disabled={loading}>
             {loading ? "A gerar..." : "Gerar listagem"}
           </button>
@@ -232,6 +293,7 @@ export function PrintableListPage() {
         {error && <p className="error-text">{error}</p>}
         <FeatureTestBanner featureKey="listagemAcabamento" label="a coluna Acabamento na listagem" />
         <FeatureTestBanner featureKey="filtrosMultiplos" label="os filtros com várias escolhas" />
+        <FeatureTestBanner featureKey="filtrosDatas" label="os filtros de datas" />
       </div>
 
       <div className="card report-sheet">
@@ -257,8 +319,10 @@ export function PrintableListPage() {
               <th>Cliente</th>
               <th>Produto</th>
               {showAcab && <th>Acabamento</th>}
+              {datas && <th>Lançada</th>}
               <th>Estado</th>
               <th>Etapa atual</th>
+              {showEntrada && <th>Entrou em</th>}
               <th>Prazo</th>
               <th>Prioridade</th>
             </tr>
@@ -270,10 +334,12 @@ export function PrintableListPage() {
                 <td>{r.cliente}</td>
                 <td>{r.produto}</td>
                 {showAcab && <td>{r.acabamento ?? "-"}</td>}
+                {datas && <td>{r.lancada ?? "-"}</td>}
                 <td>
                   <StatusBadge status={r.estado} />
                 </td>
                 <td>{r.etapaAtual}</td>
+                {showEntrada && <td>{r.entradaEtapa ?? "-"}</td>}
                 <td>{r.prazo !== "-" ? new Date(r.prazo).toLocaleString("pt-PT") : "-"}</td>
                 <td>
                   <PriorityBadge priority={r.prioridadeNivel} label={r.prioridade} color={r.prioridadeCor} />
@@ -282,7 +348,7 @@ export function PrintableListPage() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={showAcab ? 8 : 7} className="muted">
+                <td colSpan={7 + (showAcab ? 1 : 0) + (datas ? 1 : 0) + (showEntrada ? 1 : 0)} className="muted">
                   Sem dados. Escolhe os filtros e clica em "Gerar listagem".
                 </td>
               </tr>
@@ -294,12 +360,24 @@ export function PrintableListPage() {
   );
 }
 
-function describeFilters(filters: {
-  status: string;
-  priority: string;
-  category: string;
-  search: string;
-}): string {
+const ptDay = (v: string) => (v ? v.split("-").reverse().join("/") : "");
+const ptRange = (a: string, b: string) =>
+  a && b ? `${ptDay(a)} a ${ptDay(b)}` : a ? `desde ${ptDay(a)}` : b ? `até ${ptDay(b)}` : "";
+
+function describeFilters(
+  filters: {
+    status: string;
+    priority: string;
+    category: string;
+    search: string;
+    lancDe: string;
+    lancAte: string;
+    etapaDataId: string;
+    etapaDe: string;
+    etapaAte: string;
+  },
+  names: { etapa: string; fornecedor: string; cliente: string; etapaData: string }
+): string {
   const parts: string[] = [];
   const labels = (v: string, opts: { value: string; label: string }[]) =>
     v.split(",").filter(Boolean).map((x) => opts.find((o) => o.value === x)?.label ?? x).join(", ");
@@ -309,5 +387,12 @@ function describeFilters(filters: {
   if (priorityLabel) parts.push(`Prioridade: ${priorityLabel}`);
   if (filters.category) parts.push(`Categoria: ${filters.category.split(",").join(", ")}`);
   if (filters.search) parts.push(`Pesquisa: "${filters.search}"`);
+  if (names.etapa) parts.push(`Etapa: ${names.etapa}`);
+  if (names.fornecedor) parts.push(`Fornecedor: ${names.fornecedor}`);
+  if (names.cliente) parts.push(`Cliente: ${names.cliente}`);
+  const lanc = ptRange(filters.lancDe, filters.lancAte);
+  if (lanc) parts.push(`Lançada: ${lanc}`);
+  const ent = ptRange(filters.etapaDe, filters.etapaAte);
+  if (ent || names.etapaData) parts.push(`Foi para ${names.etapaData || "uma etapa"}${ent ? `: ${ent}` : ""}`);
   return parts.length ? parts.join(" · ") : "Sem filtros aplicados";
 }

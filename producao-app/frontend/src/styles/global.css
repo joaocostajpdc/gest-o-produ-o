@@ -3225,3 +3225,8 @@ tr.fin-row-empty td { color: #98a2b3; }
 .tabbar-tab.dragging { opacity: .45; }
 .tabbar-tab.drop-before { box-shadow: inset 3px 0 0 #6b8cff; }
 .tabbar-tab.drop-after { box-shadow: inset -3px 0 0 #6b8cff; }
+
+/* Listagens: filtros de datas (2026-10-30) */
+.list-date-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; width: 100%; }
+.list-date-filters label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--color-text-muted, #6b7280); }
+.list-date-filters input, .list-date-filters select { font: inherit; font-size: 14px; color: var(--color-text, inherit); }

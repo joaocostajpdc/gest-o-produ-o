@@ -44,6 +44,7 @@ export const FEATURES = {
   retomarSuspensa: "Botão Retomar produção nas OS suspensas",
   osNovaAba: "Botão Abrir em nova aba no painel lateral das OS",
   listagemAcabamento: "Coluna Acabamento na Listagem de Ordens de Serviço",
+  filtrosDatas: "Listagens: intervalo de datas (lançamento da OS e entrada numa etapa, ex.: Lacagem)",
   medidasOS: "Medidas nas OS (leitura do PDF, editar medidas, etiquetas e corte das mosquiteiras)",
 } as const;
 

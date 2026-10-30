@@ -24,6 +24,49 @@ function acabamentoOf(spec: string | null | undefined): string {
 // / partilha fora da aplicação).
 // ============================================================================
 
+const ptDay = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.split("-").reverse().join("/") : null);
+
+// Resumo dos filtros de etapa, fornecedor, cliente e datas para o cabeçalho
+// do PDF (antes só apareciam estado, prioridade, categoria e pesquisa).
+async function describeExtraFilters(f: {
+  stageIds: string[];
+  supplierIds: string[];
+  clientIds: string[];
+  etapaDataIds: string[];
+  lancDe: unknown;
+  lancAte: unknown;
+  etapaDe: unknown;
+  etapaAte: unknown;
+  withDates: boolean;
+}): Promise<string[]> {
+  const parts: string[] = [];
+  const stageNames = async (ids: string[]) =>
+    ids.length ? (await prisma.stage.findMany({ where: { id: { in: ids } } })).map((s) => s.name).join(", ") : "";
+  const st = await stageNames(f.stageIds);
+  if (st) parts.push(`Etapa: ${st}`);
+  if (f.supplierIds.length) {
+    const sup = await prisma.supplier.findMany({ where: { id: { in: f.supplierIds } } });
+    parts.push(`Fornecedor: ${sup.map((s) => s.name).join(", ")}`);
+  }
+  if (f.clientIds.length) {
+    const cl = await prisma.client.findMany({ where: { id: { in: f.clientIds } } });
+    parts.push(`Cliente: ${cl.map((c) => c.name).join(", ")}`);
+  }
+  if (f.withDates) {
+    const range = (a: unknown, b: unknown) => {
+      const x = ptDay(a);
+      const y = ptDay(b);
+      return x && y ? `${x} a ${y}` : x ? `desde ${x}` : y ? `até ${y}` : "";
+    };
+    const lanc = range(f.lancDe, f.lancAte);
+    if (lanc) parts.push(`Lançada: ${lanc}`);
+    const ent = range(f.etapaDe, f.etapaAte);
+    const est = await stageNames(f.etapaDataIds);
+    if (ent || est) parts.push(`Foi para ${est || "uma etapa"}${ent ? `: ${ent}` : ""}`);
+  }
+  return parts;
+}
+
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
 
@@ -32,6 +75,19 @@ reportsRouter.get(
   requirePermission("reports:printable"),
   asyncHandler(async (req, res) => {
     const { status, stageId, supplierId, clientId, priority, category, search, format } = req.query;
+    // Intervalos de datas (pedido do utilizador de 2026-10-30): data de
+    // lançamento da OS e data em que a OS entrou numa etapa (ex.: Lacagem).
+    // Em teste: "filtrosDatas".
+    const { lancDe, lancAte, etapaDataId, etapaDe, etapaAte } = req.query;
+    const withDates = await canUseFeature("filtrosDatas", req.user);
+    const dayStart = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00.000Z`) : null);
+    const dayEnd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T23:59:59.999Z`) : null);
+    const lancFrom = withDates ? dayStart(lancDe) : null;
+    const lancTo = withDates ? dayEnd(lancAte) : null;
+    const etapaFrom = withDates ? dayStart(etapaDe) : null;
+    const etapaTo = withDates ? dayEnd(etapaAte) : null;
+    const etapaDataIds = withDates ? (etapaDataId == null || etapaDataId === "" ? [] : String(etapaDataId).split(",").filter(Boolean)) : [];
+    const etapaFilter = etapaFrom || etapaTo || etapaDataIds.length > 0;
 
     // Vários valores no mesmo filtro, separados por vírgula (pedido do
     // utilizador de 2026-10-29: "selecionar dentro do mesmo filtro várias
@@ -68,14 +124,29 @@ reportsRouter.get(
       };
     }
 
+    if (lancFrom || lancTo) {
+      where.createdAt = { ...(lancFrom ? { gte: lancFrom } : {}), ...(lancTo ? { lte: lancTo } : {}) };
+    }
+    const enteredWhere: any = {
+      enteredAt: { not: null, ...(etapaFrom ? { gte: etapaFrom } : {}), ...(etapaTo ? { lte: etapaTo } : {}) },
+      ...(etapaDataIds.length ? { stageId: { in: etapaDataIds } } : {}),
+    };
+    if (etapaFilter) {
+      where.stageInstances = { some: enteredWhere };
+    }
+
     const orders = await prisma.serviceOrder.findMany({
       where,
       include: {
         client: true,
         product: true,
         currentStageInstance: { include: { stage: true } },
+        ...(etapaFilter
+          ? { stageInstances: { where: enteredWhere, include: { stage: true }, orderBy: { enteredAt: "desc" as const } } }
+          : {}),
       },
     });
+    const fmtDay = (d: Date | null | undefined) => (d ? d.toLocaleDateString("pt-PT", { timeZone: "Europe/Lisbon" }) : "-");
 
     // Coluna Acabamento (pedido do utilizador de 2026-10-29) — em teste,
     // "listagemAcabamento" (só o administrador até ele aprovar).
@@ -92,6 +163,14 @@ reportsRouter.get(
         etapaAtual: o.currentStageInstance?.stage.name ?? "-",
         prazo: o.deadlineAt ? o.deadlineAt.toISOString() : "-",
         prioridade: p ? PRIORITY_LABELS[p] : "-",
+        ...(withDates ? { lancada: fmtDay(o.createdAt) } : {}),
+        ...(etapaFilter
+          ? {
+              entradaEtapa: (((o as any).stageInstances ?? []) as any[])
+                .map((si) => `${si.stage.name} ${fmtDay(si.enteredAt)}`)
+                .join(", ") || "-",
+            }
+          : {}),
         _priority: p,
         _deadline: o.deadlineAt,
       };
@@ -126,6 +205,7 @@ reportsRouter.get(
         filterParts.push(`Prioridade: ${priorities.map((x) => PRIORITY_LABELS[x as keyof typeof PRIORITY_LABELS] ?? x).join(", ")}`);
       if (categories.length) filterParts.push(`Categoria: ${categories.join(", ")}`);
       if (search) filterParts.push(`Pesquisa: "${String(search)}"`);
+      filterParts.push(...(await describeExtraFilters({ stageIds, supplierIds, clientIds, etapaDataIds, lancDe, lancAte, etapaDe, etapaAte, withDates })));
       const filtersSummary = filterParts.length ? filterParts.join(" · ") : "Sem filtros aplicados";
 
       const pdfRows = rows.map((r) => ({

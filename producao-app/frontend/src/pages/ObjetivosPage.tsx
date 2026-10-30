@@ -201,6 +201,7 @@ export function ObjetivosPage() {
 
       {data && fat && wd && (
         <>
+          <LastUpdate data={data} />
           <StatusBanner data={data} isCurrent={isCurrent} />
 
           <div className="obj-grid2">
@@ -261,6 +262,45 @@ export function ObjetivosPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Aviso de quando os valores foram atualizados pela última vez (pedido do
+ * utilizador de 2026-10-30). Fica a laranja se os dados mais recentes tiverem
+ * mais de 3 dias, para ninguém olhar para números velhos sem saber.
+ */
+function LastUpdate({ data }: { data: Summary }) {
+  const imports = [data.faturacao.lastImport, data.encomendas.lastImport].filter(Boolean) as NonNullable<KindSummary["lastImport"]>[];
+  if (!imports.length) {
+    return (
+      <div className="obj-updated stale">
+        <span className="obj-updated-dot" /> Ainda não foram importados valores.
+      </div>
+    );
+  }
+  const latest = imports.reduce((a, b) => (a.at > b.at ? a : b));
+  const at = new Date(latest.at);
+  const fmtDay = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
+  const oldestTo = imports.map((i) => i.to).sort()[0];
+  const ageDays = Math.floor((Date.parse(data.today) - Date.parse(oldestTo)) / 86_400_000);
+  const stale = ageDays > 3;
+  return (
+    <div className={`obj-updated${stale ? " stale" : ""}`}>
+      <span className="obj-updated-dot" />
+      <span>
+        <b>
+          Valores atualizados a {at.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit", year: "numeric" })} às{" "}
+          {at.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+        </b>
+        {latest.by ? ` por ${latest.by}` : ""}
+      </span>
+      <span className="obj-updated-detail">
+        Faturas até {data.faturacao.lastImport ? fmtDay(data.faturacao.lastImport.to) : "—"} · Encomendas até{" "}
+        {data.encomendas.lastImport ? fmtDay(data.encomendas.lastImport.to) : "—"}
+        {stale && ` · há ${ageDays} dias sem atualizar`}
+      </span>
     </div>
   );
 }

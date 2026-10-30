@@ -174,6 +174,7 @@ export function MosquitoPanel({
 }) {
   // 2026-10-29 (em teste, "medidasOS"): alturas e larguras sempre separadas.
   const separate = useFeature("medidasOS").available;
+  const barrasPerfil = useFeature("barrasPerfil").available;
   const [busy, setBusy] = useState<"import" | "rules" | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -334,6 +335,27 @@ export function MosquitoPanel({
           <input type="number" step="0.1" value={rules.widthDeductLarge ?? ""} onChange={(e) => setRule({ widthDeductLarge: numOrNull(e.target.value) })} />
         </label>
       </div>
+      {barrasPerfil && (
+        <>
+          <div style={{ fontWeight: 600, margin: "4px 0 6px" }}>
+            Barras <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>— comprimento da barra de cada perfil (mm)</span>
+          </div>
+          <div className="cut-rules">
+            <label className="field">
+              Guias (alturas)
+              <input type="number" value={rules.heightBar ?? ""} onChange={(e) => setRule({ heightBar: numOrNull(e.target.value) })} placeholder="ex.: 6000" />
+            </label>
+            <label className="field">
+              Larguras até {rules.widthLimit}
+              <input type="number" value={rules.widthSmallBar ?? ""} onChange={(e) => setRule({ widthSmallBar: numOrNull(e.target.value) })} placeholder="ex.: 3000" />
+            </label>
+            <label className="field">
+              Larguras acima de {rules.widthLimit}
+              <input type="number" value={rules.widthLargeBar ?? ""} onChange={(e) => setRule({ widthLargeBar: numOrNull(e.target.value) })} placeholder="ex.: 6000" />
+            </label>
+          </div>
+        </>
+      )}
       <details className="cut-rules-more">
         <summary>Mais regras (limite, quantidades, nomes dos perfis)</summary>
         <div className="cut-rules">

@@ -40,6 +40,7 @@ interface StockRow {
   length: string;
   width: string;
   qty: string;
+  profile?: string; // barras: só para este perfil (vazio = todos)
 }
 
 function refFor(i: number) {
@@ -96,6 +97,7 @@ function rowsFromInput(input?: CutPlanInput) {
     length: String(s.length),
     width: "width" in s ? String(s.width) : "",
     qty: s.qty ? String(s.qty) : "",
+    profile: "profile" in s ? (s as { profile?: string | null }).profile ?? "" : "",
   }));
   return { pieces, stock, settings: input.settings };
 }
@@ -157,6 +159,8 @@ export function CutPlanEditor({
   // logo nos planos novos em barras, e os descontos usados ficam escritos nas
   // Notas do plano. Em teste: "corteMosquiteiras".
   const mosqV2 = useFeature("corteMosquiteiras").available;
+  // Barras disponíveis por perfil (2026-10-30) — em teste: "barrasPerfil".
+  const barrasPerfil = useFeature("barrasPerfil").available;
   const isNewPlan = !initial?.input;
   const [showMosq, setShowMosq] = useState(!!initialBars?.mosquitos?.length || !!initial?.startMosquito);
   useEffect(() => {
@@ -179,7 +183,25 @@ export function CutPlanEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Barras por perfil (2026-10-30): ao gerar as peças das mosquiteiras, as
+  // barras disponíveis passam a ser as de cada perfil, se estiverem indicadas
+  // nas regras (guias, larguras até 1400, larguras acima de 1400).
+  function applyProfileBars(list: GeneratedPiece[]) {
+    if (!barrasPerfil) return;
+    const used = new Set(list.map((g) => g.profile));
+    const want: StockRow[] = [];
+    const add = (profile: string, len?: number | null) => {
+      if (len && used.has(profile)) want.push({ length: String(len), width: "", qty: "", profile });
+    };
+    add(rules.heightProfile, rules.heightBar);
+    add(rules.widthSmallProfile, rules.widthSmallBar);
+    add(rules.widthLargeProfile, rules.widthLargeBar);
+    if (!want.length) return;
+    setBarStock((prev) => [...want, ...prev.filter((r) => r.profile?.trim() && !want.some((w) => w.profile === r.profile))]);
+  }
+
   function applyGenerated(list: GeneratedPiece[]) {
+    applyProfileBars(list);
     setPieces(
       list.map((g) => ({
         ...emptyPiece(0),
@@ -200,6 +222,13 @@ export function CutPlanEditor({
   }
 
   const isSheet = mode === "CHAPAS";
+  const profileOptions = [
+    ...new Set(
+      [rules.heightProfile, rules.widthSmallProfile, rules.widthLargeProfile, ...pieces.map((p) => p.profile.trim()), ...barStock.map((b) => b.profile?.trim() ?? "")].filter(
+        (x): x is string => !!x
+      )
+    ),
+  ];
   const stock = isSheet ? sheetStock : barStock;
   const setStock = isSheet ? setSheetStock : setBarStock;
 
@@ -254,7 +283,11 @@ export function CutPlanEditor({
         profile: p.profile.trim() || null,
         os: p.os.trim() || null,
       })),
-      stock: stockRows.map((s) => ({ length: num(s.length), qty: s.qty.trim() ? Math.round(num(s.qty)) : null })),
+      stock: stockRows.map((s) => ({
+        length: num(s.length),
+        qty: s.qty.trim() ? Math.round(num(s.qty)) : null,
+        ...(s.profile?.trim() ? { profile: s.profile.trim() } : {}),
+      })),
       settings: { kerf: num(barKerf) || 0, trim: num(barTrim) || 0, minRemnant: num(minRemnant) || 0 },
       ...(showMosq && rowsToItems(mosqRows).length ? { mosquitos: rowsToItems(mosqRows), mosquitoRules: rules } : {}),
     };
@@ -534,7 +567,7 @@ export function CutPlanEditor({
       <div className="card">
         <div className="cut-section-head">
           <h3>{isSheet ? "Formatos de chapa disponíveis" : "Barras disponíveis"}</h3>
-          <span className="muted">Quant. vazia = sem limite</span>
+          <span className="muted">Quant. vazia = sem limite{!isSheet && barrasPerfil ? " · escolhe o perfil de cada barra (sem perfil = serve para todos)" : ""}</span>
         </div>
         <div className="cut-stock-list">
           {stock.map((s, i) => (
@@ -548,6 +581,16 @@ export function CutPlanEditor({
               )}
               <span className="muted">mm · quant.</span>
               <input type="number" min={1} value={s.qty} onChange={(e) => updateStock(i, { qty: e.target.value })} placeholder="∞" style={{ width: 70 }} />
+              {!isSheet && barrasPerfil && (
+                <select value={s.profile ?? ""} onChange={(e) => updateStock(i, { profile: e.target.value })} title="Perfil a que estas barras se destinam">
+                  <option value="">Todos os perfis</option>
+                  {profileOptions.map((pr) => (
+                    <option key={pr} value={pr}>
+                      {pr}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 className="link-button"

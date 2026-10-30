@@ -358,6 +358,9 @@ export interface MosquitoRules {
   heightProfile: string;
   widthSmallProfile: string;
   widthLargeProfile: string;
+  heightBar?: number | null;
+  widthSmallBar?: number | null;
+  widthLargeBar?: number | null;
 }
 
 export type CutPlanInput =
@@ -370,7 +373,7 @@ export type CutPlanInput =
   | {
       mode: "BARRAS";
       pieces: BarPieceInput[];
-      stock: { length: number; qty?: number | null }[];
+      stock: { length: number; qty?: number | null; profile?: string | null }[];
       settings: { kerf: number; trim: number; minRemnant: number };
       mosquitos?: MosquitoItem[];
       mosquitoRules?: MosquitoRules;

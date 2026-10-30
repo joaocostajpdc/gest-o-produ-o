@@ -34,6 +34,7 @@ export const FEATURES = {
   etiquetaPainel: "Nova etiqueta dos painéis",
   menuHover: "Menu lateral que abre ao passar o rato",
   abas: "Abas (várias páginas abertas) e Início só com ícones",
+  barrasPerfil: "Plano de corte: barras disponíveis por perfil (guias, larguras até 1400 e acima)",
   moverAbas: "Arrastar as abas de cima para mudar a ordem",
   folhaCorte: "Plano de corte: folha para a produção (lista de corte, barras e mosquiteiras)",
   planeamento: "Planeamento semanal (OS por dia, colaboradores, entregas, lacagens e carrinhas)",

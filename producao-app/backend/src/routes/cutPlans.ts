@@ -59,6 +59,10 @@ const mosquitoRulesSchema = z.object({
   heightProfile: z.string().trim().min(1).max(60).default("Guias (alturas)"),
   widthSmallProfile: z.string().trim().min(1).max(60).default("Largura até 1400"),
   widthLargeProfile: z.string().trim().min(1).max(60).default("Largura acima de 1400"),
+  // Comprimento das barras de cada perfil (2026-10-30)
+  heightBar: z.coerce.number().positive().max(20000).nullable().optional(),
+  widthSmallBar: z.coerce.number().positive().max(20000).nullable().optional(),
+  widthLargeBar: z.coerce.number().positive().max(20000).nullable().optional(),
 });
 
 const sheetInput = z.object({
@@ -104,7 +108,7 @@ const barInput = z.object({
     .min(1, "Indica pelo menos uma peça.")
     .max(200),
   stock: z
-    .array(z.object({ length: mm, qty: stockQty }))
+    .array(z.object({ length: mm, qty: stockQty, profile: z.string().trim().max(60).nullable().optional() }))
     .min(1, "Indica pelo menos um comprimento de barra.")
     .max(20),
   settings: z.object({

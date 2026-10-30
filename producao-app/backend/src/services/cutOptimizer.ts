@@ -114,6 +114,9 @@ export interface BarPieceInput {
 export interface BarStockInput {
   length: number;
   qty?: number | null;
+  /** Só para este perfil (2026-10-30: barras de guias, larguras até 1400 e
+   * acima de 1400). Vazio = serve para todos os perfis. */
+  profile?: string | null;
 }
 
 export interface BarSettings {
@@ -684,10 +687,15 @@ export function optimizeBars(pieces: BarPieceInput[], stock: BarStockInput[], se
   const byProfile: NonNullable<BarResult["totals"]["byProfile"]> = [];
   for (const profile of profiles) {
     const idx = groups.get(profile)!;
-    const r = optimizeBarsSingle(idx.map((i) => pieces[i]), stock, settings);
+    // Barras deste perfil; sem barras próprias, usa as que servem para todos.
+    const own = stock.map((st, i) => ({ st, i })).filter(({ st }) => (st.profile ?? "").trim() && (st.profile ?? "").trim() === profile);
+    const generic = stock.map((st, i) => ({ st, i })).filter(({ st }) => !(st.profile ?? "").trim());
+    const pick = own.length ? own : generic.length ? generic : stock.map((st, i) => ({ st, i }));
+    const r = optimizeBarsSingle(idx.map((i) => pieces[i]), pick.map((x) => x.st), settings);
     r.bars.forEach((b) => {
       bars.push({
         ...b,
+        stockIndex: pick[b.stockIndex]?.i ?? b.stockIndex,
         index: bars.length,
         profile: profile || null,
         pieces: b.pieces.map((p) => ({ ...p, typeIndex: idx[p.typeIndex] })),

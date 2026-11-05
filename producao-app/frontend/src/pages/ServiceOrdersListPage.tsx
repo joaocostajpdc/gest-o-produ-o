@@ -49,6 +49,7 @@ const STATUS_OPTIONS = [
 export function ServiceOrdersListPage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<ServiceOrderListItem[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [stages, setStages] = useState<Stage[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -353,7 +354,7 @@ export function ServiceOrdersListPage() {
       </div>
 
       <div className="card">
-        <div className="filters-bar">
+        <div className={`filters-bar${filtersOpen ? " open" : ""}`}>
           <input
             type="text"
             className="os-search"
@@ -361,6 +362,14 @@ export function ServiceOrdersListPage() {
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
+          <button
+            type="button"
+            className="btn secondary filters-toggle"
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen((open) => !open)}
+          >
+            {filtersOpen ? "Esconder filtros" : "Filtros"}
+          </button>
           <select
             value={filters.priority}
             onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}
@@ -443,10 +452,10 @@ export function ServiceOrdersListPage() {
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id} className={panels.some((p) => p.id === o.id) ? "os-row-open" : undefined}>
-                  <td>
+                  <td data-label="Prioridade" className="os-cell-priority">
                     <PriorityBadge priority={o.priority} label={o.priorityLabel} color={o.priorityColor} />
                   </td>
-                  <td>
+                  <td data-label="OS" className="os-cell-number">
                     <button
                       type="button"
                       className="link-button"
@@ -457,12 +466,12 @@ export function ServiceOrdersListPage() {
                       {o.externalId}
                     </button>
                   </td>
-                  <td>{o.client.name}</td>
-                  <td>{o.product.name}</td>
-                  <td>
+                  <td data-label="Cliente">{o.client.name}</td>
+                  <td data-label="Produto">{o.product.name}</td>
+                  <td data-label="Estado">
                     <StatusBadge status={o.status} />
                   </td>
-                  <td>
+                  <td data-label="Etapa atual">
                     {o.currentStage ? (
                       <div className="current-stage">
                         <div className="current-stage-name">{o.currentStage.name}</div>
@@ -481,9 +490,9 @@ export function ServiceOrdersListPage() {
                       "—"
                     )}
                   </td>
-                  <td>{new Date(o.createdAt).toLocaleDateString("pt-PT")}</td>
-                  <td>{o.deadlineAt ? new Date(o.deadlineAt).toLocaleString("pt-PT") : "—"}</td>
-                  <td>{minutesToDays(o.productionMinutes)}</td>
+                  <td data-label="Data de início">{new Date(o.createdAt).toLocaleDateString("pt-PT")}</td>
+                  <td data-label="Data-limite">{o.deadlineAt ? new Date(o.deadlineAt).toLocaleDateString("pt-PT") : "—"}</td>
+                  <td data-label="Tempo de produção">{minutesToDays(o.productionMinutes)}</td>
                 </tr>
               ))}
               {orders.length === 0 && (
@@ -646,7 +655,7 @@ export function QuickViewBody({
         <div className="info-tile">
           <div className="info-tile-label">Data-limite</div>
           <div className="info-tile-value">
-            {order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}
+            {order.deadlineAt ? new Date(order.deadlineAt).toLocaleDateString("pt-PT") : "—"}
           </div>
         </div>
         <div className="info-tile">

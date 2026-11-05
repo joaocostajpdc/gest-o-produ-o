@@ -422,7 +422,7 @@ export function ServiceOrderDetailPage() {
       <div className="info-tiles">
         <div className="info-tile">
           <div className="info-tile-label">Data de início</div>
-          <div className="info-tile-value">{new Date(order.createdAt).toLocaleString("pt-PT")}</div>
+          <div className="info-tile-value">{new Date(order.createdAt).toLocaleDateString("pt-PT")}</div>
         </div>
         <div className="info-tile">
           <div className="info-tile-label">Início da produção</div>
@@ -469,7 +469,7 @@ export function ServiceOrderDetailPage() {
               </div>
             ) : (
               <div>
-                {order.deadlineAt ? new Date(order.deadlineAt).toLocaleString("pt-PT") : "—"}
+                {order.deadlineAt ? new Date(order.deadlineAt).toLocaleDateString("pt-PT") : "—"}
                 {canFlow && (
                   <button
                     className="btn secondary"

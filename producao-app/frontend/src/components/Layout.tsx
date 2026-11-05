@@ -1,4 +1,4 @@
-import { SVGProps, useEffect, useState } from "react";
+import { ReactNode, SVGProps, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
@@ -256,6 +256,59 @@ function initials(name?: string) {
   return (first + last).toUpperCase();
 }
 
+// Grupo do menu que abre e fecha. Fica sempre aberto quando a página atual lhe
+// pertence; a escolha de cada pessoa fica guardada neste navegador.
+const NAV_GROUPS_KEY = "central_menu_grupos";
+
+function readNavGroups(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(NAV_GROUPS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function NavGroup({
+  id,
+  label,
+  paths,
+  defaultClosed = false,
+  children,
+}: {
+  id: string;
+  label: string;
+  paths: string[];
+  defaultClosed?: boolean;
+  children: ReactNode;
+}) {
+  const location = useLocation();
+  const [closed, setClosed] = useState(() => readNavGroups()[id] ?? defaultClosed);
+  const hasCurrentPage = paths.some((p) => location.pathname === p || location.pathname.startsWith(`${p}/`));
+  const isClosed = closed && !hasCurrentPage;
+
+  function toggle() {
+    const next = !isClosed;
+    setClosed(next);
+    try {
+      localStorage.setItem(NAV_GROUPS_KEY, JSON.stringify({ ...readNavGroups(), [id]: next }));
+    } catch {
+      // Sem acesso ao armazenamento, o menu funciona na mesma; só não memoriza.
+    }
+  }
+
+  return (
+    <div className={`nav-group${isClosed ? " closed" : ""}`}>
+      <button type="button" className="nav-group-toggle" aria-expanded={!isClosed} onClick={toggle}>
+        {label}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      <div className="nav-group-items">{children}</div>
+    </div>
+  );
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
   // Pó em Stock: enquanto não for aprovado pelo administrador, só aparece
@@ -385,58 +438,67 @@ export function Layout() {
               {!chat.released && <TestBadge />}
             </NavLink>
           )}
-          <div className="section-label" style={{ marginTop: 4 }}>Produção</div>
-          <NavLink to={inicio.available ? "/ordens-servico" : "/"} end>
-            <IconClipboard /> Ordens de Serviço
-          </NavLink>
-          <NavLink to="/scan">
-            <IconScan /> Ler Código
-          </NavLink>
-          {planeamento.available && (
-            <NavLink to="/planeamento">
-              <IconCalendar /> Planeamento Semanal
-              {!planeamento.released && <TestBadge />}
+          <NavGroup id="producao" label="Produção" paths={["/ordens-servico", "/service-orders", "/scan", "/planeamento", "/material-lacagem", "/otimizacao-corte", "/reports"]}>
+            <NavLink to={inicio.available ? "/ordens-servico" : "/"} end>
+              <IconClipboard /> Ordens de Serviço
             </NavLink>
-          )}
-          <NavLink to="/material-lacagem">
-            <IconDroplet /> Material em Lacagem
-          </NavLink>
-          {cutPlans.available && (
-            <NavLink to="/otimizacao-corte">
-              <IconCut /> Otimização de Corte
-              {!cutPlans.released && <TestBadge />}
+            <NavLink to="/scan">
+              <IconScan /> Ler Código
             </NavLink>
-          )}
-          <NavLink to="/reports">
-            <IconPrinter /> Listagens Imprimíveis
-          </NavLink>
+            {planeamento.available && (
+              <NavLink to="/planeamento">
+                <IconCalendar /> Planeamento Semanal
+                {!planeamento.released && <TestBadge />}
+              </NavLink>
+            )}
+            <NavLink to="/material-lacagem">
+              <IconDroplet /> Material em Lacagem
+            </NavLink>
+            {cutPlans.available && (
+              <NavLink to="/otimizacao-corte">
+                <IconCut /> Otimização de Corte
+                {!cutPlans.released && <TestBadge />}
+              </NavLink>
+            )}
+            <NavLink to="/reports">
+              <IconPrinter /> Listagens Imprimíveis
+            </NavLink>
+          </NavGroup>
 
-          <div className="section-label">Compras</div>
-          {compras.available && (
-            <NavLink to="/compras" end>
-              <IconCart /> Resumo de Compras
-              {!compras.released && <TestBadge />}
+          <NavGroup id="compras" label="Compras" paths={["/compras", "/material-a-pedir", "/pedidos-vidros", "/po-em-stock"]}>
+            {compras.available && (
+              <NavLink to="/compras" end>
+                <IconCart /> Resumo de Compras
+                {!compras.released && <TestBadge />}
+              </NavLink>
+            )}
+            <NavLink to="/material-a-pedir">
+              <IconShoppingCart /> Material a Pedir
             </NavLink>
-          )}
-          <NavLink to="/material-a-pedir">
-            <IconShoppingCart /> Material a Pedir
-          </NavLink>
-          {glassOrders.available && (
-            <NavLink to="/pedidos-vidros">
-              <IconGlass /> Pedidos de Vidros
-              {!glassOrders.released && <TestBadge />}
-            </NavLink>
-          )}
-          {powderStock.available && (
-            <NavLink to="/po-em-stock">
-              <IconPaintBucket /> Pó em Stock
-              {!powderStock.released && <TestBadge />}
-            </NavLink>
+            {glassOrders.available && (
+              <NavLink to="/pedidos-vidros">
+                <IconGlass /> Pedidos de Vidros
+                {!glassOrders.released && <TestBadge />}
+              </NavLink>
+            )}
+            {powderStock.available && (
+              <NavLink to="/po-em-stock">
+                <IconPaintBucket /> Pó em Stock
+                {!powderStock.released && <TestBadge />}
+              </NavLink>
+            )}
+          </NavGroup>
+
+          {orcamentos.available && (
+            <NavGroup id="orcamentacao" label="Orçamentação" paths={["/orcamentos"]}>
+              <NavLink to="/orcamentos">
+                <IconFileText /> Orçamentos
+              </NavLink>
+            </NavGroup>
           )}
 
           {(horas.available || kmViaturas.available) && (
-            <>
-              <div className="section-label">Equipa e Frota</div>
+            <NavGroup id="equipa" label="Equipa e Frota" paths={["/controlo-horas", "/km-carrinhas"]}>
               {horas.available && (
                 <NavLink to="/controlo-horas">
                   <IconClock /> Controlo de Horas
@@ -449,39 +511,26 @@ export function Layout() {
                   {!kmViaturas.released && <TestBadge />}
                 </NavLink>
               )}
-            </>
+            </NavGroup>
           )}
 
-          {orcamentos.available && (
-            <>
-              <div className="section-label">Orçamentação</div>
-              <NavLink to="/orcamentos">
-                <IconFileText /> Orçamentos
-              </NavLink>
-            </>
-          )}
-
-          {relatorios.available && (
-            <>
-              <div className="section-label">Gestão</div>
-              <NavLink to="/relatorios">
-                <IconChart /> Relatório de Produção
-              </NavLink>
-            </>
-          )}
-
-          {financeiro.available && (
-            <>
-              <div className="section-label">Financeiro</div>
-              <NavLink to="/financeiro">
-                <IconWallet /> Cheques passados
-              </NavLink>
-            </>
+          {(relatorios.available || financeiro.available) && (
+            <NavGroup id="gestao" label="Gestão e Financeiro" paths={["/relatorios", "/financeiro"]}>
+              {relatorios.available && (
+                <NavLink to="/relatorios">
+                  <IconChart /> Relatório de Produção
+                </NavLink>
+              )}
+              {financeiro.available && (
+                <NavLink to="/financeiro">
+                  <IconWallet /> Financeiro
+                </NavLink>
+              )}
+            </NavGroup>
           )}
 
           {canManageConfig(user?.role) && (
-            <>
-              <div className="section-label">Configuração</div>
+            <NavGroup id="configuracao" label="Configuração" defaultClosed paths={["/products", "/stages", "/production-lines", "/suppliers"]}>
               <NavLink to="/products">
                 <IconBox /> Produtos
               </NavLink>
@@ -494,12 +543,11 @@ export function Layout() {
               <NavLink to="/suppliers">
                 <IconTruck /> Fornecedores
               </NavLink>
-            </>
+            </NavGroup>
           )}
 
           {canManageUsers(user?.role) && (
-            <>
-              <div className="section-label">Administração</div>
+            <NavGroup id="administracao" label="Administração" defaultClosed paths={["/users", "/acessos", "/avisos-telegram", "/emails-automaticos"]}>
               <NavLink to="/users">
                 <IconUsers /> Utilizadores e Permissões
               </NavLink>
@@ -512,7 +560,7 @@ export function Layout() {
               <NavLink to="/emails-automaticos">
                 <IconSend /> Avisos Semanais
               </NavLink>
-            </>
+            </NavGroup>
           )}
         </nav>
 

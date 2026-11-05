@@ -84,7 +84,7 @@
   }
 
   /* ---- Formulários ---- */
-  select,
+  select, input:not([type]),
   input[type="text"], input[type="email"], input[type="password"], input[type="number"],
   input[type="date"], input[type="time"], input[type="month"], input[type="week"],
   input[type="search"], input[type="tel"], input[type="url"], textarea {
@@ -97,7 +97,7 @@
     color: var(--color-text);
     background-color: #fff;
   }
-  select, input[type="text"], input[type="email"], input[type="password"], input[type="number"],
+  select, input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="number"],
   input[type="date"], input[type="time"], input[type="month"], input[type="week"],
   input[type="search"], input[type="tel"], input[type="url"] {
     min-height: 38px;

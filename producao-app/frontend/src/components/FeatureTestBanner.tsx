@@ -11,7 +11,7 @@ import { AuthUser } from "../types";
 //    (pedido do utilizador de 2026-10-14: "lançar o teste do vidro para o
 //    utilizador Marco Costa");
 //  - aprovar e lançar para todos;
-//  - depois de aprovada, voltar a restringir.
+//  - depois de aprovada, deixa de aparecer (recolher em Acessos).
 // ============================================================================
 
 export function FeatureTestBanner({ featureKey, label }: { featureKey: string; label: string }) {
@@ -46,25 +46,9 @@ export function FeatureTestBanner({ featureKey, label }: { featureKey: string; l
     }
   }
 
-  if (feature.released) {
-    return (
-      <p className="muted" style={{ fontSize: 13 }}>
-        {label} está disponível para todos.{" "}
-        <button
-          className="btn secondary"
-          style={{ padding: "2px 8px", fontSize: 12 }}
-          disabled={busy}
-          onClick={() => {
-            if (window.confirm(`Voltar a esconder ${label} dos outros utilizadores?`)) {
-              run(() => setReleased(featureKey, false));
-            }
-          }}
-        >
-          Voltar a restringir
-        </button>
-      </p>
-    );
-  }
+  // Já lançada para todos: não mostra nada (pedido de 2026-11-06).
+  // Para voltar a esconder, usar Administração → Acessos → Recolher.
+  if (feature.released) return null;
 
   const testers = feature.testerUserIds;
   const testerUsers = users.filter((u) => testers.includes(u.id));

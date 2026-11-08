@@ -185,41 +185,54 @@ function dayDiff(a: Date, b: Date) {
   return day(b) - day(a);
 }
 
-/** Devolve true se a linha é uma linha de dimensões/medidas. */
+/** Devolve true se a linha faz parte de um bloco de dimensões/medidas. */
 function isDimensionLine(line: string): boolean {
-  return /Dimens[oõ]es?:/i.test(line) || /Larg\./i.test(line) || /Alt\./i.test(line) || /^\s*\d+\s*[xX×]\s*\d+/i.test(line);
+  return (
+    /Dimens[oõ]es?:/i.test(line) ||         // "Dimensões: 567x458"
+    /Larg\./i.test(line) ||                  // "Larg. 567"
+    /Alt\./i.test(line) ||                   // "Alt. 458"
+    /^\s*\d+\s*[xX×]\s*\d+/i.test(line) ||  // "567x458"
+    /^Quant\.:/i.test(line) ||               // "Quant.: 1,00 uni"
+    /^Largura(\s+x\s+Altura)?$/i.test(line)  // "Largura x Altura" ou "Largura"
+  );
 }
 
 /**
  * Primeiras linhas úteis das características da OS (modelo, medidas, acabamento).
  * Devolve `{ nonDim: string[], dimCount: number, totalQty: number }`:
- *   - nonDim: linhas que NÃO são dimensões (Acabamento, Modelo, etc.)
- *   - dimCount: quantas linhas de dimensão distintas existem
- *   - totalQty: soma das quantidades (número antes do "un" em cada linha de dimensão), 0 se não for possível calcular
+ *   - nonDim: linhas que NÃO são dimensões (Acabamento, Modelo, Tecido, etc.)
+ *   - dimCount: quantas blocos de dimensão distintos existem (contados pelas
+ *               linhas "Dimensões:" ou "NxM", uma por artigo)
+ *   - totalQty: soma das quantidades (ex.: "Quant.: 2,00 uni" → 2)
  */
 function parseSpecs(specs: string | null): { nonDim: string[]; dimCount: number; totalQty: number } {
   if (!specs) return { nonDim: [], dimCount: 0, totalQty: 0 };
   const lines = specs
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !/^Referente a/i.test(l) && !/Valor Total/i.test(l) && !/^Artigo\s+\d+/i.test(l))
-    .filter((l, i, all) => all.indexOf(l) === i);
+    .filter((l) => l && !/^Referente a/i.test(l) && !/Valor Total/i.test(l) && !/^Artigo[\s—]/i.test(l));
 
   const nonDim: string[] = [];
-  const dimLines: string[] = [];
-  for (const l of lines) {
-    if (isDimensionLine(l)) dimLines.push(l);
-    else nonDim.push(l);
-  }
-
-  // Soma as quantidades (ex.: "2 un (685×675)" → 2)
+  let dimCount = 0;
   let totalQty = 0;
-  for (const l of dimLines) {
-    const m = l.match(/^(\d+)\s*un/i);
-    if (m) totalQty += parseInt(m[1], 10);
+  const seenNonDim = new Set<string>();
+
+  for (const l of lines) {
+    if (isDimensionLine(l)) {
+      // Conta um bloco de dimensão por cada linha "Dimensões:" ou "NxM"
+      if (/Dimens[oõ]es?:/i.test(l) || /^\s*\d+\s*[xX×]\s*\d+/i.test(l)) {
+        dimCount++;
+      }
+      // Extrai quantidade das linhas "Quant.: 1,00 uni"
+      const m = l.match(/Quant\.:\s*([\d,]+)/i);
+      if (m) totalQty += parseFloat(m[1].replace(",", "."));
+    } else if (!seenNonDim.has(l)) {
+      seenNonDim.add(l);
+      nonDim.push(l);
+    }
   }
 
-  return { nonDim: nonDim.slice(0, 5), dimCount: dimLines.length, totalQty };
+  return { nonDim: nonDim.slice(0, 5), dimCount, totalQty };
 }
 
 export async function buildOrderMessage(serviceOrderId: string, event: OrderEvent, userId?: string | null) {
@@ -246,7 +259,8 @@ export async function buildOrderMessage(serviceOrderId: string, event: OrderEven
     const { nonDim, dimCount, totalQty } = parseSpecs(so.specifications);
     nonDim.forEach((l) => lines.push(`   <i>${esc(l)}</i>`));
     if (dimCount > 1) {
-      const qtyLabel = totalQty > 0 ? `${totalQty} un` : "Quant.";
+      const qtyInt = Math.round(totalQty);
+      const qtyLabel = qtyInt > 0 ? `${qtyInt} un` : "Quant.";
       lines.push(`   <i>${qtyLabel} × várias medidas</i>`);
     } else if (dimCount === 1) {
       // Uma única linha de dimensão — mostrar normalmente

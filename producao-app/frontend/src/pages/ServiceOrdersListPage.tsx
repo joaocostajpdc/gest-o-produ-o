@@ -60,6 +60,20 @@ export function ServiceOrdersListPage() {
   const [importingPdf, setImportingPdf] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
+  // Popup de validação de prazo após importação de PDF
+  const [deadlinePopup, setDeadlinePopup] = useState<{
+    serviceOrderId: string;
+    externalId: string;
+    productId: string;
+    productionDays: number;
+    avgDays: number | null;
+    sampleSize: number;
+    estimatedDeadline: string | null;
+    confirmedDeadline: string;
+    saving: boolean;
+    error: string | null;
+  } | null>(null);
+
   // Cartão de consulta rápida da OS: abre ao CENTRO do ecrã, só ao clicar no
   // nº da OS na tabela (já não abre ao passar o rato — pedido do utilizador
   // de 2026-10-12: "tira este pop-up assim, quero que abra a meio"). Mostra
@@ -232,21 +246,67 @@ export function ServiceOrdersListPage() {
     setImportingPdf(true);
     setImportMsg(null);
     try {
-      const result = await api.postFile<{ status: "created" | "skipped"; externalId: string; reason?: string }>(
-        "/service-orders/import-pdf",
-        file,
-        "application/pdf"
-      );
-      setImportMsg(
-        result.status === "created"
-          ? `Ordem de Serviço "${result.externalId}" importada do PDF com sucesso.`
-          : `Ordem de Serviço "${result.externalId}" ignorada: ${result.reason}`
-      );
+      const result = await api.postFile<{
+        status: "created" | "skipped";
+        externalId: string;
+        reason?: string;
+        id?: string;
+        productId?: string;
+      }>("/service-orders/import-pdf", file, "application/pdf");
+
+      if (result.status === "created" && result.id && result.productId) {
+        // Vai buscar o prazo estimado para o produto e abre o popup
+        try {
+          const est = await api.get<{
+            productionDays: number;
+            avgDays: number | null;
+            sampleSize: number;
+            estimatedDeadline: string | null;
+          }>(`/service-orders/estimated-deadline?productId=${result.productId}`);
+          setDeadlinePopup({
+            serviceOrderId: result.id,
+            externalId: result.externalId,
+            productId: result.productId,
+            productionDays: est.productionDays,
+            avgDays: est.avgDays,
+            sampleSize: est.sampleSize,
+            estimatedDeadline: est.estimatedDeadline,
+            confirmedDeadline: est.estimatedDeadline ?? "",
+            saving: false,
+            error: null,
+          });
+          setImportMsg(`Ordem de Serviço "${result.externalId}" importada do PDF com sucesso.`);
+        } catch {
+          // Se falhar a busca do prazo, mostra a mensagem sem popup
+          setImportMsg(`Ordem de Serviço "${result.externalId}" importada do PDF com sucesso.`);
+        }
+      } else {
+        setImportMsg(
+          result.status === "created"
+            ? `Ordem de Serviço "${result.externalId}" importada do PDF com sucesso.`
+            : `Ordem de Serviço "${result.externalId}" ignorada: ${result.reason}`
+        );
+      }
       loadOrders();
     } catch (err) {
       setImportMsg(err instanceof Error ? err.message : "Erro ao importar o PDF.");
     } finally {
       setImportingPdf(false);
+    }
+  }
+
+  async function confirmDeadline() {
+    if (!deadlinePopup) return;
+    setDeadlinePopup((prev) => prev && { ...prev, saving: true, error: null });
+    try {
+      await api.put(`/service-orders/${deadlinePopup.serviceOrderId}/deadline`, {
+        deadlineAt: deadlinePopup.confirmedDeadline || null,
+        reason: "Prazo confirmado/ajustado pelo utilizador no momento do lançamento da OS.",
+      });
+      setDeadlinePopup(null);
+      loadOrders();
+    } catch (err) {
+      setDeadlinePopup((prev) => prev && { ...prev, saving: false, error: err instanceof Error ? err.message : "Erro ao guardar o prazo." });
     }
   }
 
@@ -518,6 +578,71 @@ export function ServiceOrdersListPage() {
             )
           }
         />
+      )}
+
+      {/* Popup de validação de prazo após importação de PDF */}
+      {deadlinePopup && (
+        <div className="qv-overlay" onMouseDown={(e) => e.target === e.currentTarget && setDeadlinePopup(null)}>
+          <div className="qv-popover" style={{ maxWidth: 420 }} role="dialog" aria-modal="true" aria-label="Validar prazo de entrega">
+            <div className="qv-popover-header">
+              <div>
+                <div className="qv-popover-id">OS {deadlinePopup.externalId}</div>
+                <div className="qv-popover-product" style={{ fontWeight: 600, fontSize: "1rem" }}>Validar prazo de entrega</div>
+              </div>
+              <button type="button" className="qv-close" aria-label="Fechar" onClick={() => setDeadlinePopup(null)}>✕</button>
+            </div>
+
+            <div style={{ padding: "0 1rem 0.5rem" }}>
+              {deadlinePopup.avgDays !== null ? (
+                <p style={{ margin: "0.5rem 0" }}>
+                  ⏱️ Média histórica deste produto:{" "}
+                  <strong>{deadlinePopup.avgDays} dia{deadlinePopup.avgDays !== 1 ? "s" : ""}</strong>
+                  {deadlinePopup.sampleSize > 0 && (
+                    <span className="muted"> ({deadlinePopup.sampleSize} OS concluídas)</span>
+                  )}
+                </p>
+              ) : (
+                <p style={{ margin: "0.5rem 0" }} className="muted">
+                  Sem histórico para este produto — prazo padrão:{" "}
+                  <strong>{deadlinePopup.productionDays} dia{deadlinePopup.productionDays !== 1 ? "s" : ""}</strong>
+                </p>
+              )}
+
+              <div style={{ marginTop: "1rem" }}>
+                <label htmlFor="deadline-input" style={{ display: "block", fontWeight: 500, marginBottom: "0.35rem" }}>
+                  Prazo acordado com o cliente
+                </label>
+                <input
+                  id="deadline-input"
+                  type="date"
+                  className="filter-input"
+                  style={{ width: "100%" }}
+                  value={deadlinePopup.confirmedDeadline}
+                  onChange={(e) => setDeadlinePopup((prev) => prev && { ...prev, confirmedDeadline: e.target.value })}
+                />
+              </div>
+
+              {deadlinePopup.error && <p className="error-text" style={{ marginTop: "0.5rem" }}>{deadlinePopup.error}</p>}
+            </div>
+
+            <div className="qv-popover-actions">
+              <button
+                className="btn"
+                disabled={deadlinePopup.saving || !deadlinePopup.confirmedDeadline}
+                onClick={confirmDeadline}
+              >
+                {deadlinePopup.saving ? "A guardar..." : "Confirmar prazo"}
+              </button>
+              <button
+                className="btn secondary"
+                disabled={deadlinePopup.saving}
+                onClick={() => setDeadlinePopup(null)}
+              >
+                Fechar sem definir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       </div>
     </div>

@@ -185,16 +185,41 @@ function dayDiff(a: Date, b: Date) {
   return day(b) - day(a);
 }
 
-/** Primeiras linhas úteis das características da OS (modelo, medidas, acabamento). */
-function shortSpecs(specs: string | null) {
-  if (!specs) return [];
-  return specs
+/** Devolve true se a linha é uma linha de dimensões/medidas. */
+function isDimensionLine(line: string): boolean {
+  return /Dimens[oõ]es?:/i.test(line) || /Larg\./i.test(line) || /Alt\./i.test(line) || /^\s*\d+\s*[xX×]\s*\d+/i.test(line);
+}
+
+/**
+ * Primeiras linhas úteis das características da OS (modelo, medidas, acabamento).
+ * Devolve `{ nonDim: string[], dimCount: number, totalQty: number }`:
+ *   - nonDim: linhas que NÃO são dimensões (Acabamento, Modelo, etc.)
+ *   - dimCount: quantas linhas de dimensão distintas existem
+ *   - totalQty: soma das quantidades (número antes do "un" em cada linha de dimensão), 0 se não for possível calcular
+ */
+function parseSpecs(specs: string | null): { nonDim: string[]; dimCount: number; totalQty: number } {
+  if (!specs) return { nonDim: [], dimCount: 0, totalQty: 0 };
+  const lines = specs
     .split("\n")
     .map((l) => l.trim())
-    // as linhas "Artigo N — código + nome" repetem o produto; ficam as características
     .filter((l) => l && !/^Referente a/i.test(l) && !/Valor Total/i.test(l) && !/^Artigo\s+\d+/i.test(l))
-    .filter((l, i, all) => all.indexOf(l) === i)
-    .slice(0, 6);
+    .filter((l, i, all) => all.indexOf(l) === i);
+
+  const nonDim: string[] = [];
+  const dimLines: string[] = [];
+  for (const l of lines) {
+    if (isDimensionLine(l)) dimLines.push(l);
+    else nonDim.push(l);
+  }
+
+  // Soma as quantidades (ex.: "2 un (685×675)" → 2)
+  let totalQty = 0;
+  for (const l of dimLines) {
+    const m = l.match(/^(\d+)\s*un/i);
+    if (m) totalQty += parseInt(m[1], 10);
+  }
+
+  return { nonDim: nonDim.slice(0, 5), dimCount: dimLines.length, totalQty };
 }
 
 export async function buildOrderMessage(serviceOrderId: string, event: OrderEvent, userId?: string | null) {
@@ -218,7 +243,16 @@ export async function buildOrderMessage(serviceOrderId: string, event: OrderEven
   lines.push(`📦 ${esc(so.product.name)}`);
 
   if (event === "created") {
-    shortSpecs(so.specifications).forEach((l) => lines.push(`   <i>${esc(l)}</i>`));
+    const { nonDim, dimCount, totalQty } = parseSpecs(so.specifications);
+    nonDim.forEach((l) => lines.push(`   <i>${esc(l)}</i>`));
+    if (dimCount > 1) {
+      const qtyLabel = totalQty > 0 ? `${totalQty} un` : "Quant.";
+      lines.push(`   <i>${qtyLabel} × várias medidas</i>`);
+    } else if (dimCount === 1) {
+      // Uma única linha de dimensão — mostrar normalmente
+      const specs = so.specifications?.split("\n").map((l) => l.trim()).find((l) => isDimensionLine(l));
+      if (specs) lines.push(`   <i>${esc(specs)}</i>`);
+    }
     if (so.deadlineAt) lines.push(`📅 Prazo: ${fmtDate(so.deadlineAt)}`);
     if (user) lines.push(`✍️ Lançada por ${esc(user.name)}`);
   } else if (event === "started") {

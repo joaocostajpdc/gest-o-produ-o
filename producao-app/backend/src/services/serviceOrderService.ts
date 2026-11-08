@@ -21,7 +21,7 @@ import { notifyOrderEventLater } from "./telegramService";
 // ============================================================================
 
 export type ImportResult =
-  | { status: "created"; externalId: string }
+  | { status: "created"; externalId: string; id: string; productId: string }
   | { status: "skipped"; externalId: string; reason: string };
 
 export async function importSingleGoldylocksOrder(
@@ -121,7 +121,7 @@ export async function importSingleGoldylocksOrder(
   // Aviso por Telegram (OS lançada) — depois de gravada; nunca faz falhar a importação.
   notifyOrderEventLater(createdId, "created", actingUserId);
 
-  return { status: "created", externalId: goldOrder.externalId };
+  return { status: "created", externalId: goldOrder.externalId, id: createdId, productId: product.id };
 }
 
 /**

@@ -183,6 +183,51 @@ serviceOrdersRouter.get(
   })
 );
 
+// Prazo estimado para um produto — média de dias entre lançamento e conclusão
+// das últimas OS concluídas do mesmo produto (pedido do utilizador de
+// 2026-11-08: popup de validação do prazo ao importar uma nova OS).
+// IMPORTANTE: esta rota tem de ficar ANTES de "/:id" para o Express não a
+// capturar como se "estimated-deadline" fosse um id de OS.
+// Devolve: { productionDays, avgDays, sampleSize, estimatedDeadline }
+serviceOrdersRouter.get(
+  "/estimated-deadline",
+  requirePermission("serviceOrders:read"),
+  asyncHandler(async (req, res) => {
+    const productId = typeof req.query.productId === "string" ? req.query.productId : null;
+    if (!productId) return res.status(400).json({ error: "Falta productId." });
+
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) return res.status(404).json({ error: "Produto não encontrado." });
+
+    // Últimas 30 OS concluídas do mesmo produto com datas de criação e conclusão
+    const completed = await prisma.serviceOrder.findMany({
+      where: { productId, status: "CONCLUIDA", completedAt: { not: null } },
+      select: { createdAt: true, completedAt: true },
+      orderBy: { completedAt: "desc" },
+      take: 30,
+    });
+
+    let avgDays: number | null = null;
+    if (completed.length > 0) {
+      const totalDays = completed.reduce((sum, o) => {
+        const diffMs = (o.completedAt as Date).getTime() - o.createdAt.getTime();
+        return sum + diffMs / 86_400_000;
+      }, 0);
+      avgDays = Math.round(totalDays / completed.length);
+    }
+
+    const daysToUse = avgDays ?? product.productionDays;
+    let estimatedDeadline: string | null = null;
+    if (daysToUse > 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + daysToUse);
+      estimatedDeadline = d.toISOString().slice(0, 10);
+    }
+
+    res.json({ productionDays: product.productionDays, avgDays, sampleSize: completed.length, estimatedDeadline });
+  })
+);
+
 serviceOrdersRouter.get(
   "/:id",
   requirePermission("serviceOrders:read"),

@@ -276,8 +276,9 @@ export function ServiceOrdersListPage() {
             error: null,
           });
           setImportMsg(`Ordem de Serviço "${result.externalId}" importada do PDF com sucesso.`);
-        } catch {
+        } catch (estErr) {
           // Se falhar a busca do prazo, mostra a mensagem sem popup
+          console.error("[popup] falhou a busca do prazo estimado:", estErr);
           setImportMsg(`Ordem de Serviço "${result.externalId}" importada do PDF com sucesso.`);
         }
       } else {

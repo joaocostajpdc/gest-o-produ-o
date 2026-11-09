@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { pedirFiltroOS } from "../components/osFilter";
 import { useTabs } from "../contexts/TabsContext";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
@@ -132,6 +133,30 @@ export function HomePage() {
   }, [chat.available]);
   const tabs = useTabs();
   const [params, setParams] = useSearchParams();
+  // Início novo (proposta de 2026-11-09, versão 3) — em teste: "inicioNovo".
+  const inicioNovo = useFeature("inicioNovo").available;
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<HomeOs[]>([]);
+  const [vidros, setVidros] = useState(0);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    if (!inicioNovo) return;
+    let alive = true;
+    const load = () => {
+      api.get<HomeOs[]>("/service-orders").then((r) => alive && setOrders(r)).catch(() => undefined);
+      if (glassOrders.available)
+        api
+          .get<{ status: string }[]>("/glass-orders")
+          .then((r) => alive && setVidros(r.filter((g) => g.status === "POR_ENCOMENDAR").length))
+          .catch(() => undefined);
+    };
+    load();
+    const t = setInterval(load, 120000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [inicioNovo, glassOrders.available]);
 
   const areas: Area[] = [
     {
@@ -310,7 +335,7 @@ export function HomePage() {
     return (
       <div className="home home-tabs">
         <div className="home-band">
-          <section className="home-hero home-hero-compact">
+          <section className={`home-hero home-hero-compact${inicioNovo && !open ? " hn-hero" : ""}`}>
             {open ? (
               <>
                 <button type="button" className="home-back" onClick={() => setParams({})}>
@@ -326,20 +351,36 @@ export function HomePage() {
                   {greeting()}
                   {firstName ? `, ${firstName}` : ""}
                 </h1>
-                <p className="home-company">Escolhe a área em que vais trabalhar.</p>
+                <p className="home-company">{inicioNovo ? "Escolhe a área ou procura o que precisas." : "Escolhe a área em que vais trabalhar."}</p>
               </>
+            )}
+            {!open && inicioNovo && (
+              <HomeSearch areas={allAreas} orders={orders} q={q} setQ={setQ} navigate={navigate} />
             )}
           </section>
         </div>
 
-        <div className="home-body">
+        <div className={`home-body${inicioNovo && !open ? " hn-body" : ""}`}>
           {!abas.released && !open && (
             <div style={{ marginBottom: 24 }}>
               <FeatureTestBanner featureKey="abas" label="o Início só com ícones e as abas" />
             </div>
           )}
 
-          {!open && (
+          {!open && inicioNovo && (
+            <HomeNovo
+              areas={allAreas}
+              orders={orders}
+              vidros={vidros}
+              chatUnread={chatUnread}
+              onArea={(k) => setParams({ area: k })}
+              q={q}
+              setQ={setQ}
+              navigate={navigate}
+            />
+          )}
+
+          {!open && !inicioNovo && (
             <div className="home-icons">
               {allAreas.map((area) =>
                 area.link ? (
@@ -404,10 +445,10 @@ export function HomePage() {
             </div>
           )}
 
-          <p className="home-tip">
+          {!(inicioNovo && !open) && <p className="home-tip">
             Dica: <kbd>Ctrl</kbd> + clique (ou o botão do meio do rato) abre numa aba nova, sem sair desta. O <strong>+</strong> lá
             em cima abre uma aba nova no Início.
-          </p>
+          </p>}
 
           <footer className="home-foot">Central Minho Ferragens · JPDC - Mynhoferragens, Lda.</footer>
         </div>
@@ -505,6 +546,282 @@ export function HomePage() {
         )}
 
         <footer className="home-foot">Central Minho Ferragens · JPDC - Mynhoferragens, Lda.</footer>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================================
+// Início novo (proposta aprovada a 2026-11-09, versão 3) — em teste:
+// "inicioNovo". Pesquisa grande, três números do dia (OS em curso, prazo
+// ultrapassado, urgentes), áreas com atalhos e contadores, "Precisa de
+// atenção" e "Abertas recentemente".
+// ============================================================================
+
+interface HomeOs {
+  id: string;
+  externalId: string;
+  status: string;
+  priority: string | null;
+  deadlineAt?: string | null;
+  client?: { name: string };
+  product?: { name: string };
+  currentStage?: { name: string } | null;
+}
+
+const RECENT_KEY = "inicio.recentes";
+/** Guarda as últimas OS abertas (chamado pelo menu sempre que se abre uma OS). */
+export function lembrarOsAberta(id: string) {
+  try {
+    const cur = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    const list = (Array.isArray(cur) ? cur : []).filter((x: unknown) => x !== id);
+    list.unshift(id);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 10)));
+  } catch {
+    /* sem armazenamento */
+  }
+}
+function lerRecentes(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+const hnNorm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const ATIVA = (o: HomeOs) => o.status === "NAO_INICIADA" || o.status === "EM_PRODUCAO" || o.status === "SUSPENSA";
+
+function diasAte(iso?: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const a = new Date();
+  a.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - a.getTime()) / 86400000);
+}
+function diasTxt(n: number) {
+  if (n < 0) return `−${-n} dia${n === -1 ? "" : "s"}`;
+  if (n === 0) return "hoje";
+  if (n === 1) return "amanhã";
+  return `${n} dias`;
+}
+
+function HomeSearch({
+  areas,
+  orders,
+  q,
+  setQ,
+  navigate,
+}: {
+  areas: Area[];
+  orders: HomeOs[];
+  q: string;
+  setQ: (v: string) => void;
+  navigate: (to: string) => void;
+}) {
+  const [focus, setFocus] = useState(false);
+  const nq = hnNorm(q.trim());
+  const pages = areas.flatMap((a) => (a.link ? [{ to: a.link, label: a.title, sub: "Área" }] : a.tiles.map((t) => ({ to: t.to, label: t.title, sub: a.title }))));
+  const pageHits = nq ? pages.filter((p) => hnNorm(p.label).includes(nq) || hnNorm(p.sub).includes(nq)).slice(0, 6) : [];
+  const osHits =
+    nq.length >= 2
+      ? orders.filter((o) => hnNorm(o.externalId).includes(nq) || hnNorm(o.client?.name ?? "").includes(nq)).slice(0, 6)
+      : [];
+  const hits = [
+    ...osHits.map((o) => ({ key: "o" + o.id, to: `/service-orders/${o.id}`, label: `OS ${o.externalId}`, sub: [o.client?.name, o.product?.name].filter(Boolean).join(" · ") })),
+    ...pageHits.map((p) => ({ key: "p" + p.to, to: p.to, label: p.label, sub: p.sub })),
+  ];
+  const go = (to: string) => {
+    setQ("");
+    navigate(to);
+  };
+  return (
+    <div className="hn-search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => setFocus(true)}
+        onBlur={() => setTimeout(() => setFocus(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && hits[0]) go(hits[0].to);
+          if (e.key === "Escape") setQ("");
+        }}
+        placeholder="Procurar OS, cliente ou página…"
+        aria-label="Procurar OS, cliente ou página"
+      />
+      {focus && nq && (
+        <div className="hn-results">
+          {hits.length === 0 && <div className="hn-empty">Nada encontrado.</div>}
+          {hits.map((h) => (
+            <button key={h.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => go(h.to)}>
+              <strong>{h.label}</strong>
+              <span>{h.sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HomeNovo({
+  areas,
+  orders,
+  vidros,
+  chatUnread,
+  onArea,
+  navigate,
+}: {
+  areas: Area[];
+  orders: HomeOs[];
+  vidros: number;
+  chatUnread: number;
+  onArea: (key: string) => void;
+  q: string;
+  setQ: (v: string) => void;
+  navigate: (to: string) => void;
+}) {
+  const ativas = orders.filter(ATIVA);
+  const nPrazo = ativas.filter((o) => o.priority === "PRAZO_ULTRAPASSADO").length;
+  const nUrg = ativas.filter((o) => o.priority === "URGENTE").length;
+  const total = Math.max(1, ativas.length);
+  const kpis = [
+    { n: ativas.length, label: "OS em curso", cls: "", pct: 100, go: () => navigate("/ordens-servico") },
+    {
+      n: nPrazo,
+      label: "Prazo ultrapassado",
+      cls: " red",
+      pct: (nPrazo / total) * 100,
+      go: () => {
+        pedirFiltroOS("PRAZO_ULTRAPASSADO");
+        navigate("/ordens-servico");
+      },
+    },
+    {
+      n: nUrg,
+      label: "Urgentes",
+      cls: " orange",
+      pct: (nUrg / total) * 100,
+      go: () => {
+        pedirFiltroOS("URGENTE");
+        navigate("/ordens-servico");
+      },
+    },
+  ];
+  const atencao = ativas
+    .map((o) => ({ o, d: diasAte(o.deadlineAt) }))
+    .filter((x): x is { o: HomeOs; d: number } => x.d != null && x.d <= 3)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 6);
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  const recentes = lerRecentes()
+    .map((id) => byId.get(id))
+    .filter((o): o is HomeOs => !!o)
+    .slice(0, 5);
+
+  const extra: Record<string, { label: string; warn?: boolean }[]> = {
+    producao: nPrazo ? [{ label: `${nPrazo} atrasada${nPrazo > 1 ? "s" : ""}`, warn: true }] : [],
+    compras: vidros ? [{ label: `${vidros} vidro${vidros > 1 ? "s" : ""} por encomendar`, warn: true }] : [],
+    chat: chatUnread ? [{ label: `${chatUnread} por ler`, warn: true }] : [],
+  };
+  const shortTitle = (t: string) =>
+    ({ "Ordens de Serviço": "OS", "Material em Lacagem": "Lacagem", "Planos de Corte": "Corte", "Planeamento Semanal": "Planeamento", "Controlo de Horas": "Horas", "Km das Carrinhas": "Km", "Relatório de Produção": "Relatório", "Material a Pedir": "Material a pedir", "Pedidos de Vidros": "Vidros", "Resumo de Compras": "Resumo", "Cheques passados": "Cheques" } as Record<string, string>)[t] ?? t;
+
+  return (
+    <div className="hn">
+      <div className="hn-kpis">
+        {kpis.map((k) => (
+          <button key={k.label} type="button" className={`hn-kpi${k.cls}`} onClick={k.go}>
+            <b>{k.n}</b>
+            <span>{k.label}</span>
+            <i className="hn-bar">
+              <i style={{ width: `${Math.min(100, Math.max(k.n ? 4 : 0, k.pct))}%` }} />
+            </i>
+            <em aria-hidden="true">→</em>
+          </button>
+        ))}
+      </div>
+
+      <div className="hn-grid">
+        <div>
+          <h2 className="hn-h">Áreas</h2>
+          <div className="hn-areas">
+            {areas.map((a) => (
+              <div key={a.key} className="hn-area" style={{ ["--accent" as string]: a.color, ["--accent-soft" as string]: a.soft }}>
+                {a.link ? (
+                  <Link to={a.link} className="hn-area-main">
+                    <span className="hn-ic">{a.icon}</span>
+                    <b>{a.title}</b>
+                    <span className="hn-d">{a.desc}</span>
+                  </Link>
+                ) : (
+                  <button type="button" className="hn-area-main" onClick={() => onArea(a.key)}>
+                    <span className="hn-ic">{a.icon}</span>
+                    <b>{a.title}</b>
+                    <span className="hn-d">{a.desc}</span>
+                  </button>
+                )}
+                <div className="hn-links">
+                  {(extra[a.key] ?? []).map((x) => (
+                    <span key={x.label} className={`hn-chip${x.warn ? " warn" : ""}`}>
+                      {x.label}
+                    </span>
+                  ))}
+                  {a.tiles.slice(0, 4).map((t) => (
+                    <Link key={t.to} to={t.to} className="hn-chip">
+                      {shortTitle(t.title)}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <aside>
+          <h2 className="hn-h">Precisa de atenção</h2>
+          <div className="hn-card">
+            {atencao.length === 0 && <div className="hn-empty">Nada atrasado nem para os próximos 3 dias.</div>}
+            {atencao.map(({ o, d }) => (
+              <Link key={o.id} to={`/service-orders/${o.id}`} className="hn-row">
+                <span className="hn-os">{o.externalId}</span>
+                <span className="hn-cl">{o.client?.name ?? ""}</span>
+                <span className={`hn-pill ${d < 0 ? "red" : "orange"}`}>{diasTxt(d)}</span>
+              </Link>
+            ))}
+            {atencao.length > 0 && (
+              <button
+                type="button"
+                className="hn-more"
+                onClick={() => {
+                  pedirFiltroOS("PRAZO_ULTRAPASSADO");
+                  navigate("/ordens-servico");
+                }}
+              >
+                Ver todas →
+              </button>
+            )}
+          </div>
+
+          <h2 className="hn-h">Abertas recentemente</h2>
+          <div className="hn-card">
+            {recentes.length === 0 && <div className="hn-empty">As OS que abrires aparecem aqui.</div>}
+            {recentes.map((o) => (
+              <Link key={o.id} to={`/service-orders/${o.id}`} className="hn-row">
+                <span className="hn-os">{o.externalId}</span>
+                <span className="hn-cl">{[o.client?.name, o.product?.name].filter(Boolean).join(" · ")}</span>
+                {o.currentStage?.name && <span className="hn-pill blue">{o.currentStage.name}</span>}
+              </Link>
+            ))}
+          </div>
+        </aside>
       </div>
     </div>
   );

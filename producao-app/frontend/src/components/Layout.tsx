@@ -6,6 +6,7 @@ import { ScanOrderHost } from "./ScanOrderPopup";
 import { api } from "../api/client";
 import { FeatureTestBanner } from "./FeatureTestBanner";
 import { pedirFiltroOS } from "./osFilter";
+import { lembrarOsAberta } from "../pages/HomePage";
 import { TabsProvider } from "../contexts/TabsContext";
 import { TabPanes, TabStrip } from "./TabStrip";
 import logoMark from "../assets/logo-mark.png";
@@ -375,6 +376,11 @@ export function Layout() {
   // Fecha a gaveta sempre que se navega para outra página.
   useEffect(() => {
     setMenuOpen(false);
+  }, [location.pathname]);
+  // Início novo: "Abertas recentemente" (2026-11-09).
+  useEffect(() => {
+    const m = location.pathname.match(/^\/service-orders\/([^/]+)$/);
+    if (m) lembrarOsAberta(m[1]);
   }, [location.pathname]);
 
   // Dentro de um separador da área de trabalho (iframe do próprio programa):

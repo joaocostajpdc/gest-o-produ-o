@@ -49,6 +49,7 @@ export const FEATURES = {
   guiaLacagem: "Material em Lacagem: submeter a guia (foto ou PDF) para enviar ou retirar as OS da Lacagem",
   fichaNova: "Ficha de Produção com layout novo (etapa atual, tabela de etapas com data e rubrica, notas)",
   objetivos: "Objetivos: faturação e negócio fechado contra os objetivos do mês, trimestre e ano, para toda a equipa",
+  orcamentoTextos: "Orçamentos de painéis: acabamento face 1 e 2, vidro e observações escritos à mão, no PDF no formato das OS",
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
 } as const;
 

@@ -142,6 +142,8 @@ table.t tbody tr.click:hover td{background:var(--surface-2)}
 .fadd:hover,.fadd:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
 .fadd b{font-size:13px;color:var(--fg)}
 .pocli span{color:var(--accent);font-weight:600}
+.line .fields .pdftxt-h{grid-column:1/-1;margin-top:6px;padding-top:10px;border-top:1px dashed var(--line);font-size:12px;font-weight:600;color:var(--accent)}
+.line .fields textarea.i{min-height:52px}
 .aut{margin-top:10px;padding:10px 12px;border-radius:8px;font-size:13px;display:flex;flex-direction:column;gap:8px}
 .aut.pend{background:#fff7e6;border:1px solid #f1c27d}
 .aut.ok{background:#e9f7ef;border:1px solid #a8dcbc;color:#14663a}
@@ -518,6 +520,8 @@ async function initServer(){
     const b=await api("GET","/bootstrap");
     // Preços bloqueados para quem não é administrador (2026-10-24).
     try{ const t=token(); const r=await fetch("/api/auth/me",{headers:t?{Authorization:"Bearer "+t}:{}}); const j=r.ok? await r.json():null; S.admin=!!(j&&j.user&&j.user.role==="ADMINISTRADOR"); S.userName=j&&j.user?j.user.name:""; }catch(_){ S.admin=false; }
+    // Textos do orçamento por painel (pedido de 2026-11-09) — em teste: "orcamentoTextos".
+    try{ const t=token(); const r=await fetch("/api/features",{headers:t?{Authorization:"Bearer "+t}:{}}); const fs=r.ok? await r.json():[]; S.textosPdf=!!(Array.isArray(fs)&&fs.find(f=>f.key==="orcamentoTextos"&&f.available)); }catch(_){ S.textosPdf=false; }
     S.db=SERVER_DB; S.assets=SERVER_FILES; S.downloads=SERVER_DL;
     if(b.precos&&b.precos.P) S.P=Object.assign(clone(DEFAULT_P),clone(b.precos.P));
     if(b.empresa) S.E=Object.assign(clone(DEFAULT_E),clone(b.empresa));
@@ -813,6 +817,11 @@ function linePainelHTML(L,i,P){
     <label class="f"><span>LED (m)</span><input class="i num" inputmode="decimal" data-l="led" value="${esc(L.led)}" ${off("led")}></label>
     <label class="f"><span>Fechadura (un.)</span><input class="i num" inputmode="numeric" data-l="fechadura" value="${esc(L.fechadura)}" ${off("fechadura")}></label>
     <label class="f"><span>Margem % (opc.)${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" data-l="margem" value="${esc(L.margem)}" placeholder="geral" ${S.admin?"":"disabled"}></label>
+    ${S.textosPdf?`<div class="pdftxt-h w6">No orçamento (PDF) aparece</div>
+    <label class="f w3 pdftxt"><span>Acabamento face 1</span><input class="i" data-l="acab1Txt" value="${esc(L.acab1Txt??"")}" placeholder="Ex.: RAL 7016 Mate"></label>
+    <label class="f w3 pdftxt"><span>Acabamento face 2</span><input class="i" data-l="acab2Txt" value="${esc(L.acab2Txt??"")}" placeholder="Ex.: RAL 9016 Brilho"></label>
+    <label class="f w6 pdftxt"><span>Vidro</span><input class="i" data-l="vidroTxt" value="${esc(L.vidroTxt??"")}" placeholder="Ex.: Duplo fosco 4+14+4"></label>
+    <label class="f w6 pdftxt"><span>Observações</span><textarea class="i" data-l="obs" rows="2" placeholder="Ex.: puxador do lado esquerdo">${esc(L.obs??"")}</textarea></label>`:""}
    </div><div class="out"><span>m² <b data-o="m2"></b></span><span>Peso chapas <b data-o="kg"></b></span><span>Custo un. <b data-o="custo"></b></span><span>Preço un. <b data-o="unit"></b></span><span class="tot">Total <b data-o="tot"></b></span></div></div></div>`;
 }
 
@@ -1026,17 +1035,37 @@ async function buildPDF(q){
       T(eur(x.venda),xx+cols[7].w-2,y+5.5,{s:8.5,b:1,a:"right"});
     } else {
       const F=fotos[i]; const fw=F? 22 : 0;
-      const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.modelo||L.tipo),cols[1].w-4-fw);
+      // Com os textos novos (2026-11-09) sai no formato das OS do Goldylocks:
+      // título = tipo de painel; por baixo, em itálico, Modelo, Dimensões,
+      // Acabamento, Vidro e Obs.
+      const desc=doc.setFontSize(8.5).splitTextToSize(PTL(S.textosPdf? (/^(Liso|Greado|Fresado|Almofada)/i.test(L.tipo)?"Painel "+L.tipo:L.tipo) : (L.modelo||L.tipo)),cols[1].w-4-fw);
+      let spec;
+      if(S.textosPdf){
+        // Pedido de 2026-11-09: tipo de painel e depois os textos escritos à mão
+        // (acabamento face 1, face 2, vidro, observações). Os nomes internos de
+        // acabamento/vidro da tabela de preços já não vão para o cliente.
+        const tx=v=>String(v??"").trim(); const a1=tx(L.acab1Txt), a2=tx(L.acab2Txt), vd=tx(L.vidroTxt), ob=tx(L.obs);
+        const mz=P.matriz[L.tipo]||{}; const espOn=(mz.enchimento===undefined?1:mz.enchimento)&&num(L.espEnch)>0;
+        const ls=[]; if(tx(L.modelo)) ls.push("Modelo: "+tx(L.modelo));
+        const mm=v=>String(Math.round(num(v)*10)/10).replace(".",",");
+        ls.push(`Dimensões: ${mm(L.larg)}X${mm(L.alt)}${espOn?"X"+mm(L.espEnch):""}`);
+        if(a1&&a2&&a1.toLowerCase()===a2.toLowerCase()) ls.push("Acabamento: "+a1);
+        else { if(a1) ls.push("Acabamento face 1: "+a1); if(a2) ls.push("Acabamento face 2: "+a2); }
+        if(vd) ls.push("Vidro: "+vd); if(ob) ls.push("", "Obs.: "+ob);
+        doc.setFont("helvetica","italic"); doc.setFontSize(8); spec=ls.flatMap(l=>l? doc.splitTextToSize(PTL(l),cols[1].w-6-fw) : [""]);
+      } else {
       const specArr=[L.tipo]; const m=P.matriz[L.tipo]||{}; const on=k=>(m[k]===undefined?1:m[k]);
       if(on("enchimento")) specArr.push(`enchimento ${L.espEnch} mm`); if(on("acab1")) specArr.push(L.acab1===L.acab2||!on("acab2")?L.acab1:`${L.acab1} / ${L.acab2}`); if(on("vidro")&&L.vidro&&L.vidro!=="Sem vidro") specArr.push("vidro "+L.vidro);
-      const spec=doc.setFontSize(7.5).splitTextToSize(PTL(specArr.join(" · ")),cols[1].w-4-fw);
-      rh=Math.max(F?24:11,5+desc.length*3.8+spec.length*3.4);
+      spec=doc.setFontSize(7.5).splitTextToSize(PTL(specArr.join(" · ")),cols[1].w-4-fw);
+      }
+      rh=Math.max(F?24:11,5+desc.length*3.8+spec.length*(S.textosPdf?3.9:3.4)+(S.textosPdf?2:0));
       if(need(rh)) thead();
       if(i%2===1){ doc.setFillColor(247,248,250); doc.rect(M,y,tw,rh,"F"); }
       let xx=M; T(String(i+1),xx+2,y+5.5,{s:8.5,b:1,c:A}); xx+=cols[0].w;
       if(F){ const bw=20, bh=rh-4; const r=Math.min(bw/F.dim[0],bh/F.dim[1]); const iw=F.dim[0]*r, ih=F.dim[1]*r;
         doc.addImage(F.u,F.u.startsWith("data:image/png")?"PNG":"JPEG",xx+2+(bw-iw)/2,y+2+(bh-ih)/2,iw,ih); doc.setDrawColor(...LN); doc.setLineWidth(.2); doc.rect(xx+2,y+2,bw,bh); }
-      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(desc,xx+2+fw,y+5.5); doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.text(spec,xx+2+fw,y+5.5+desc.length*3.8); xx+=cols[1].w;
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(desc,xx+2+fw,y+5.5); if(S.textosPdf){ doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(...INK); doc.text(spec,xx+5+fw,y+5.5+desc.length*3.8+.6,{lineHeightFactor:1.35}); }
+      else { doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.text(spec,xx+2+fw,y+5.5+desc.length*3.8); } xx+=cols[1].w;
       T(`${fmt(num(L.larg),0)} × ${fmt(num(L.alt),0)}`,xx+cols[2].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[2].w;
       T(fmt(x.m2,2),xx+cols[3].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[3].w;
       T(String(x.qt),xx+cols[4].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[4].w;

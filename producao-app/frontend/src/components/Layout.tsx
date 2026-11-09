@@ -363,6 +363,25 @@ export function Layout() {
   // o rato"). Em teste só para o administrador; só em ecrã de computador.
   const menuHover = useFeature("menuHover");
   const menuNovo = useFeature("menuNovo").available;
+  // Menu D2: a parte branca recolhe (pedido de 2026-11-09). Fica lembrado
+  // neste computador; recolhido, a lista abre por cima ao carregar numa área.
+  const [sd2Recolhido, setSd2Recolhido] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("menu.recolhido") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [sd2Flyout, setSd2Flyout] = useState(false);
+  const toggleRecolhido = (v: boolean) => {
+    setSd2Recolhido(v);
+    setSd2Flyout(false);
+    try {
+      localStorage.setItem("menu.recolhido", v ? "1" : "0");
+    } catch {
+      /* sem armazenamento */
+    }
+  };
   // Abas como no browser + Início só com os ícones das áreas (2026-10-25).
   // Em teste só para o administrador até ser aprovado.
   const abas = useFeature("abas");
@@ -376,6 +395,7 @@ export function Layout() {
   // Fecha a gaveta sempre que se navega para outra página.
   useEffect(() => {
     setMenuOpen(false);
+    setSd2Flyout(false);
   }, [location.pathname]);
   // Início novo: "Abertas recentemente" (2026-11-09).
   useEffect(() => {
@@ -423,7 +443,10 @@ export function Layout() {
       {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
 
       {menuNovo ? (
-        <aside className={`sidebar sd2${menuOpen ? " open" : ""}`}>
+        <aside
+          className={`sidebar sd2${menuOpen ? " open" : ""}${sd2Recolhido ? " recolhido" : ""}${sd2Flyout ? " flyout" : ""}`}
+          onMouseLeave={() => setSd2Flyout(false)}
+        >
           <SidebarD2
             f={{ inicio, objetivos, chat, planeamento, cutPlans, compras, glassOrders, powderStock, horas, kmViaturas, orcamentos, relatorios, financeiro }}
             chatUnread={chatUnread}
@@ -431,7 +454,13 @@ export function Layout() {
             onLogout={logout}
             canConfig={canManageConfig(user?.role)}
             canUsers={canManageUsers(user?.role)}
-            onClose={() => setMenuOpen(false)}
+            onClose={() => {
+              setMenuOpen(false);
+              setSd2Flyout(false);
+            }}
+            recolhido={sd2Recolhido}
+            onRecolher={toggleRecolhido}
+            onAbrirArea={() => sd2Recolhido && setSd2Flyout(true)}
           />
         </aside>
       ) : (
@@ -743,7 +772,13 @@ function SidebarD2({
   canConfig,
   canUsers,
   onClose,
+  recolhido,
+  onRecolher,
+  onAbrirArea,
 }: {
+  recolhido: boolean;
+  onRecolher: (v: boolean) => void;
+  onAbrirArea: () => void;
   f: Record<string, { available: boolean }>;
   chatUnread: number;
   userName?: string;
@@ -760,6 +795,8 @@ function SidebarD2({
   const [q, setQ] = useState("");
   const [focus, setFocus] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const onAbrirAreaRef = useRef(onAbrirArea);
+  onAbrirAreaRef.current = onAbrirArea;
 
   // Contadores: lidos ao abrir e de 2 em 2 minutos.
   useEffect(() => {
@@ -788,8 +825,11 @@ function SidebarD2({
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
+        onAbrirAreaRef.current();
+        setTimeout(() => {
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        }, 30);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -961,7 +1001,10 @@ function SidebarD2({
           </NavLink>
         )}
         {areas.map((a) => (
-          <button key={a.id} type="button" className={`sd2-ri${a.id === area.id ? " on" : ""}`} onClick={() => setAreaId(a.id)} title={a.label} aria-pressed={a.id === area.id}>
+          <button key={a.id} type="button" className={`sd2-ri${a.id === area.id ? " on" : ""}`} onClick={() => {
+              setAreaId(a.id);
+              onAbrirArea();
+            }} title={a.label} aria-pressed={a.id === area.id}>
             <a.icon />
             <span>{a.short}</span>
             {a.dot && <i className="sd2-dot" />}
@@ -976,7 +1019,10 @@ function SidebarD2({
         )}
         <div style={{ flex: 1 }} />
         {configArea && (
-          <button type="button" className={`sd2-ri${area.id === "config" ? " on" : ""}`} onClick={() => setAreaId("config")} title="Configuração">
+          <button type="button" className={`sd2-ri${area.id === "config" ? " on" : ""}`} onClick={() => {
+            setAreaId("config");
+            onAbrirArea();
+          }} title="Configuração">
             <IconGear />
             <span>Config.</span>
           </button>
@@ -990,6 +1036,15 @@ function SidebarD2({
       </div>
 
       <div className="sd2-pane">
+        <button
+          type="button"
+          className="sd2-pin"
+          onClick={() => onRecolher(!recolhido)}
+          title={recolhido ? "Fixar o menu aberto" : "Recolher o menu"}
+          aria-label={recolhido ? "Fixar o menu aberto" : "Recolher o menu"}
+        >
+          {recolhido ? "Fixar »" : "« Recolher"}
+        </button>
         <div className="sd2-search">
           <IconSearch />
           <input

@@ -1,10 +1,11 @@
-import { ReactNode, SVGProps, useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Fragment, ReactNode, SVGProps, useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
 import { ScanOrderHost } from "./ScanOrderPopup";
 import { api } from "../api/client";
 import { FeatureTestBanner } from "./FeatureTestBanner";
+import { pedirFiltroOS } from "./osFilter";
 import { TabsProvider } from "../contexts/TabsContext";
 import { TabPanes, TabStrip } from "./TabStrip";
 import logoMark from "../assets/logo-mark.png";
@@ -415,6 +416,19 @@ export function Layout() {
 
       {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
 
+      {menuNovo ? (
+        <aside className={`sidebar sd2${menuOpen ? " open" : ""}`}>
+          <SidebarD2
+            f={{ inicio, objetivos, chat, planeamento, cutPlans, compras, glassOrders, powderStock, horas, kmViaturas, orcamentos, relatorios, financeiro }}
+            chatUnread={chatUnread}
+            userName={user?.name}
+            onLogout={logout}
+            canConfig={canManageConfig(user?.role)}
+            canUsers={canManageUsers(user?.role)}
+            onClose={() => setMenuOpen(false)}
+          />
+        </aside>
+      ) : (
       <aside className={`sidebar${menuOpen ? " open" : ""}`}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">
@@ -456,7 +470,7 @@ export function Layout() {
               {!chat.released && <TestBadge />}
             </NavLink>
           )}
-          <NavSection id="producao" title="Produção" novo={menuNovo} first>
+          <NavSection id="producao" title="Produção" novo={false} first>
           <NavLink to={inicio.available ? "/ordens-servico" : "/"} end>
             <IconClipboard /> Ordens de Serviço
           </NavLink>
@@ -483,7 +497,7 @@ export function Layout() {
           </NavLink>
           </NavSection>
 
-          <NavSection id="compras" title="Compras" novo={menuNovo}>
+          <NavSection id="compras" title="Compras" novo={false}>
           {compras.available && (
             <NavLink to="/compras" end>
               <IconCart /> Resumo de Compras
@@ -508,7 +522,7 @@ export function Layout() {
           </NavSection>
 
           {(horas.available || kmViaturas.available) && (
-            <NavSection id="equipa" title="Equipa e Frota" novo={menuNovo}>
+            <NavSection id="equipa" title="Equipa e Frota" novo={false}>
               {horas.available && (
                 <NavLink to="/controlo-horas">
                   <IconClock /> Controlo de Horas
@@ -525,7 +539,7 @@ export function Layout() {
           )}
 
           {orcamentos.available && (
-            <NavSection id="orcamentacao" title="Orçamentação" novo={menuNovo}>
+            <NavSection id="orcamentacao" title="Orçamentação" novo={false}>
               <NavLink to="/orcamentos">
                 <IconFileText /> Orçamentos
               </NavLink>
@@ -533,7 +547,7 @@ export function Layout() {
           )}
 
           {relatorios.available && (
-            <NavSection id="gestao" title="Gestão" novo={menuNovo}>
+            <NavSection id="gestao" title="Gestão" novo={false}>
               <NavLink to="/relatorios">
                 <IconChart /> Relatório de Produção
               </NavLink>
@@ -541,7 +555,7 @@ export function Layout() {
           )}
 
           {financeiro.available && (
-            <NavSection id="financeiro" title="Financeiro" novo={menuNovo}>
+            <NavSection id="financeiro" title="Financeiro" novo={false}>
               <NavLink to="/financeiro">
                 <IconWallet /> Cheques passados
               </NavLink>
@@ -549,7 +563,7 @@ export function Layout() {
           )}
 
           {canManageConfig(user?.role) && (
-            <NavSection id="configuracao" title="Configuração" novo={menuNovo}>
+            <NavSection id="configuracao" title="Configuração" novo={false}>
               <NavLink to="/products">
                 <IconBox /> Produtos
               </NavLink>
@@ -566,7 +580,7 @@ export function Layout() {
           )}
 
           {canManageUsers(user?.role) && (
-            <NavSection id="administracao" title="Administração" novo={menuNovo}>
+            <NavSection id="administracao" title="Administração" novo={false}>
               <NavLink to="/users">
                 <IconUsers /> Utilizadores e Permissões
               </NavLink>
@@ -594,6 +608,7 @@ export function Layout() {
           </button>
         </div>
       </aside>
+      )}
     </>
   );
 
@@ -608,7 +623,7 @@ export function Layout() {
       <TabsProvider>
         <div className="tabs-mode">
           <TabStrip />
-          <div className={`app-shell${menuHover.available ? " sb-hover" : ""}${isHome ? " tabs-home" : ""}`}>
+          <div className={`app-shell${menuHover.available && !menuNovo ? " sb-hover" : ""}${isHome ? " tabs-home" : ""}`}>
             {!isHome && sidebarParts}
             <main className={isHome ? "tabs-home-main" : "main-content"}>
               {!isHome && menuHoverBanner}
@@ -621,13 +636,441 @@ export function Layout() {
   }
 
   return (
-    <div className={`app-shell${menuHover.available ? " sb-hover" : ""}`}>
+    <div className={`app-shell${menuHover.available && !menuNovo ? " sb-hover" : ""}`}>
       {sidebarParts}
       <main className="main-content">
         {menuHoverBanner}
         <Outlet />
       </main>
       <ScanOrderHost />
+    </div>
+  );
+}
+
+// ============================================================================
+// Menu novo "D2" (pedido do utilizador de 2026-11-09: proposta mistura da B e
+// da C, versão com a barra de áreas escura) — em teste: "menuNovo".
+// À esquerda, uma barra escura só com as grandes áreas; ao lado, as páginas
+// da área escolhida, em claro, com pesquisa (Ctrl K), atalhos ★ guardados
+// neste computador, contadores e uma parte "Atenção" (prazo ultrapassado e
+// urgentes). Sem a funcionalidade, o menu fica como antes.
+// ============================================================================
+
+interface D2Page {
+  to: string;
+  label: string;
+  icon: (p: SVGProps<SVGSVGElement>) => JSX.Element;
+  group?: string;
+  count?: number;
+  warn?: boolean;
+  end?: boolean;
+  onClick?: () => void;
+  key?: string;
+}
+interface D2Area {
+  id: string;
+  label: string;
+  short: string;
+  sub: string;
+  icon: (p: SVGProps<SVGSVGElement>) => JSX.Element;
+  pages: D2Page[];
+  dot?: boolean;
+}
+
+function IconFactory(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 21V10l5 3V10l5 3V10l5 3V4h3v17z" />
+    </svg>
+  );
+}
+function IconGear(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+    </svg>
+  );
+}
+function IconSearch(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+function IconTeam(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6" />
+    </svg>
+  );
+}
+
+const FAV_KEY = "menu.favoritos";
+function readFavs(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FAV_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+interface OsLite {
+  id: string;
+  externalId: string;
+  status: string;
+  priority: string | null;
+  client?: { name: string };
+  currentStage?: { name: string } | null;
+}
+
+function SidebarD2({
+  f,
+  chatUnread,
+  userName,
+  onLogout,
+  canConfig,
+  canUsers,
+  onClose,
+}: {
+  f: Record<string, { available: boolean }>;
+  chatUnread: number;
+  userName?: string;
+  onLogout: () => void;
+  canConfig: boolean;
+  canUsers: boolean;
+  onClose: () => void;
+}) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [orders, setOrders] = useState<OsLite[]>([]);
+  const [vidrosPorEncomendar, setVidros] = useState(0);
+  const [favs, setFavs] = useState<string[]>(readFavs);
+  const [q, setQ] = useState("");
+  const [focus, setFocus] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Contadores: lidos ao abrir e de 2 em 2 minutos.
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      api
+        .get<OsLite[]>("/service-orders")
+        .then((r) => alive && setOrders(r))
+        .catch(() => undefined);
+      if (f.glassOrders?.available)
+        api
+          .get<{ status: string }[]>("/glass-orders")
+          .then((r) => alive && setVidros(r.filter((g) => g.status === "POR_ENCOMENDAR").length))
+          .catch(() => undefined);
+    };
+    load();
+    const t = setInterval(load, 120000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [f.glassOrders?.available]);
+
+  // Ctrl K / ⌘ K abre a pesquisa.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const ativas = orders.filter((o) => o.status === "NAO_INICIADA" || o.status === "EM_PRODUCAO" || o.status === "SUSPENSA");
+  const nLacagem = ativas.filter((o) => o.currentStage?.name === "Lacagem").length;
+  const nPrazo = ativas.filter((o) => o.priority === "PRAZO_ULTRAPASSADO").length;
+  const nUrg = ativas.filter((o) => o.priority === "URGENTE").length;
+  const osPath = f.inicio?.available ? "/ordens-servico" : "/";
+
+  const areas: D2Area[] = [
+    {
+      id: "producao",
+      label: "Produção",
+      short: "Produção",
+      sub: "Ordens, planeamento, lacagem e corte",
+      icon: IconFactory,
+      dot: nPrazo > 0,
+      pages: [
+        { to: osPath, label: "Ordens de Serviço", icon: IconClipboard, count: ativas.length || undefined, end: true },
+        { to: "/scan", label: "Ler Código", icon: IconScan },
+        ...(f.planeamento?.available ? [{ to: "/planeamento", label: "Planeamento Semanal", icon: IconCalendar }] : []),
+        { to: "/material-lacagem", label: "Material em Lacagem", icon: IconDroplet, count: nLacagem || undefined },
+        ...(f.cutPlans?.available ? [{ to: "/otimizacao-corte", label: "Otimização de Corte", icon: IconCut }] : []),
+        { to: "/reports", label: "Listagens Imprimíveis", icon: IconPrinter, group: "Listagens" },
+        ...(nPrazo || nUrg
+          ? [
+              ...(nPrazo
+                ? [{ key: "att-prazo", to: osPath, label: "Prazo ultrapassado", icon: IconClock, group: "Atenção", count: nPrazo, warn: true, onClick: () => pedirFiltroOS("PRAZO_ULTRAPASSADO") }]
+                : []),
+              ...(nUrg
+                ? [{ key: "att-urg", to: osPath, label: "Urgentes", icon: IconTarget, group: "Atenção", count: nUrg, warn: true, onClick: () => pedirFiltroOS("URGENTE") }]
+                : []),
+            ]
+          : []),
+      ],
+    },
+    {
+      id: "compras",
+      label: "Compras",
+      short: "Compras",
+      sub: "Material, vidros e pó",
+      icon: IconCart,
+      pages: [
+        ...(f.compras?.available ? [{ to: "/compras", label: "Resumo de Compras", icon: IconCart, end: true }] : []),
+        { to: "/material-a-pedir", label: "Material a Pedir", icon: IconShoppingCart },
+        ...(f.glassOrders?.available ? [{ to: "/pedidos-vidros", label: "Pedidos de Vidros", icon: IconGlass, count: vidrosPorEncomendar || undefined }] : []),
+        ...(f.powderStock?.available ? [{ to: "/po-em-stock", label: "Pó em Stock", icon: IconPaintBucket }] : []),
+      ],
+    },
+    ...(f.horas?.available || f.kmViaturas?.available
+      ? [
+          {
+            id: "equipa",
+            label: "Equipa e Frota",
+            short: "Equipa",
+            sub: "Horas dos colaboradores e carrinhas",
+            icon: IconTeam,
+            pages: [
+              ...(f.horas?.available ? [{ to: "/controlo-horas", label: "Controlo de Horas", icon: IconClock }] : []),
+              ...(f.kmViaturas?.available ? [{ to: "/km-carrinhas", label: "Km das Carrinhas", icon: IconVan }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(f.orcamentos?.available
+      ? [{ id: "orcam", label: "Orçamentação", short: "Orçam.", sub: "Orçamentos a clientes", icon: IconFileText, pages: [{ to: "/orcamentos", label: "Orçamentos", icon: IconFileText }] }]
+      : []),
+    ...(f.objetivos?.available || f.relatorios?.available
+      ? [
+          {
+            id: "gestao",
+            label: "Gestão",
+            short: "Gestão",
+            sub: "Objetivos e relatórios",
+            icon: IconChart,
+            pages: [
+              ...(f.objetivos?.available ? [{ to: "/objetivos", label: "Objetivos", icon: IconTarget }] : []),
+              ...(f.relatorios?.available ? [{ to: "/relatorios", label: "Relatório de Produção", icon: IconChart }] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(f.financeiro?.available
+      ? [{ id: "finan", label: "Financeiro", short: "Finan.", sub: "Cheques, pagamentos e calendário", icon: IconWallet, pages: [{ to: "/financeiro", label: "Cheques passados", icon: IconWallet }] }]
+      : []),
+  ];
+  const configArea: D2Area | null =
+    canConfig || canUsers
+      ? {
+          id: "config",
+          label: "Configuração",
+          short: "Config.",
+          sub: "Produtos, etapas, utilizadores e avisos",
+          icon: IconGear,
+          pages: [
+            ...(canConfig
+              ? [
+                  { to: "/products", label: "Produtos", icon: IconBox },
+                  { to: "/stages", label: "Etapas", icon: IconLayers },
+                  { to: "/production-lines", label: "Linhas de Produção", icon: IconRoute },
+                  { to: "/suppliers", label: "Fornecedores", icon: IconTruck },
+                ]
+              : []),
+            ...(canUsers
+              ? [
+                  { to: "/users", label: "Utilizadores e Permissões", icon: IconUsers, group: "Administração" },
+                  { to: "/acessos", label: "Acessos", icon: IconKey, group: "Administração" },
+                  { to: "/avisos-telegram", label: "Avisos Telegram", icon: IconSend, group: "Administração" },
+                  { to: "/emails-automaticos", label: "Avisos Semanais", icon: IconSend, group: "Administração" },
+                ]
+              : []),
+          ],
+        }
+      : null;
+  const all = configArea ? [...areas, configArea] : areas;
+
+  const path = location.pathname;
+  const matches = (p: D2Page) => (p.end || p.to === "/" ? path === p.to : path === p.to || path.startsWith(p.to + "/"));
+  const areaOfPath = all.find((a) => a.pages.some((p) => !p.onClick && matches(p)))?.id ?? (path.startsWith("/service-orders") ? "producao" : null);
+  const [areaId, setAreaId] = useState<string>(areaOfPath ?? "producao");
+  useEffect(() => {
+    if (areaOfPath) setAreaId(areaOfPath);
+  }, [areaOfPath]);
+  const area = all.find((a) => a.id === areaId) ?? all[0];
+
+  function toggleFav(to: string) {
+    setFavs((prev) => {
+      const next = prev.includes(to) ? prev.filter((x) => x !== to) : [...prev, to];
+      try {
+        localStorage.setItem(FAV_KEY, JSON.stringify(next));
+      } catch {
+        /* sem armazenamento */
+      }
+      return next;
+    });
+  }
+  const pageList = all.flatMap((a) => a.pages.filter((p) => !p.onClick).map((p) => ({ ...p, area: a.label })));
+  const favPages = favs.map((to) => pageList.find((p) => p.to === to)).filter((p): p is (typeof pageList)[number] => !!p);
+
+  // Pesquisa: páginas e Ordens de Serviço (nº, cliente).
+  const nq = norm(q.trim());
+  const pageHits = nq ? pageList.filter((p) => norm(p.label).includes(nq) || norm(p.area).includes(nq)).slice(0, 6) : [];
+  const osHits = nq.length >= 2 ? orders.filter((o) => norm(o.externalId).includes(nq) || norm(o.client?.name ?? "").includes(nq)).slice(0, 6) : [];
+  const hits = [
+    ...pageHits.map((p) => ({ key: "p" + p.to, to: p.to, label: p.label, sub: p.area })),
+    ...osHits.map((o) => ({ key: "o" + o.id, to: `/service-orders/${o.id}`, label: `OS ${o.externalId}`, sub: o.client?.name ?? "" })),
+  ];
+  function go(to: string) {
+    setQ("");
+    searchRef.current?.blur();
+    navigate(to);
+    onClose();
+  }
+
+  let lastGroup: string | undefined;
+  return (
+    <div className="sd2-wrap">
+      <div className="sd2-rail">
+        <div className="sd2-logo">
+          <img src={logoMark} alt="Minho Ferragens" />
+        </div>
+        {f.inicio?.available && (
+          <NavLink to="/" end className="sd2-ri" title="Início">
+            <IconHome />
+            <span>Início</span>
+          </NavLink>
+        )}
+        {areas.map((a) => (
+          <button key={a.id} type="button" className={`sd2-ri${a.id === area.id ? " on" : ""}`} onClick={() => setAreaId(a.id)} title={a.label} aria-pressed={a.id === area.id}>
+            <a.icon />
+            <span>{a.short}</span>
+            {a.dot && <i className="sd2-dot" />}
+          </button>
+        ))}
+        {f.chat?.available && (
+          <NavLink to="/chat" className="sd2-ri" title="Chat">
+            <IconChat />
+            <span>Chat</span>
+            {chatUnread > 0 && <i className="sd2-dot" />}
+          </NavLink>
+        )}
+        <div style={{ flex: 1 }} />
+        {configArea && (
+          <button type="button" className={`sd2-ri${area.id === "config" ? " on" : ""}`} onClick={() => setAreaId("config")} title="Configuração">
+            <IconGear />
+            <span>Config.</span>
+          </button>
+        )}
+        <div className="sd2-avatar" title={userName}>
+          {initials(userName)}
+        </div>
+        <button type="button" className="sd2-logout" onClick={onLogout} title="Terminar sessão" aria-label="Terminar sessão">
+          <IconLogout />
+        </button>
+      </div>
+
+      <div className="sd2-pane">
+        <div className="sd2-search">
+          <IconSearch />
+          <input
+            ref={searchRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onFocus={() => setFocus(true)}
+            onBlur={() => setTimeout(() => setFocus(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && hits[0]) go(hits[0].to);
+              if (e.key === "Escape") {
+                setQ("");
+                searchRef.current?.blur();
+              }
+            }}
+            placeholder="Procurar página ou OS…"
+            aria-label="Procurar página ou Ordem de Serviço"
+          />
+          <kbd>Ctrl K</kbd>
+          {focus && nq && (
+            <div className="sd2-results">
+              {hits.length === 0 && <div className="sd2-empty">Nada encontrado.</div>}
+              {hits.map((h) => (
+                <button key={h.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => go(h.to)}>
+                  <strong>{h.label}</strong>
+                  <span>{h.sub}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {favPages.length > 0 ? (
+          <div className="sd2-favs">
+            {favPages.map((p) => (
+              <NavLink key={p.to} to={p.to} end={p.end}>
+                ★ {p.label}
+              </NavLink>
+            ))}
+          </div>
+        ) : null}
+        <div className="sd2-title">{area.label}</div>
+        <div className="sd2-sub">{area.sub}</div>
+
+
+        <nav className="sd2-list">
+          {area.pages.map((p) => {
+            const head = p.group && p.group !== lastGroup ? p.group : null;
+            lastGroup = p.group;
+            const isFav = favs.includes(p.to);
+            return (
+              <Fragment key={p.key ?? p.to}>
+                {head && <div className="sd2-group">{head}</div>}
+                <div className="sd2-item">
+                  <NavLink
+                    to={p.to}
+                    end={p.end}
+                    onClick={p.onClick}
+                    className={({ isActive }) => (isActive && !p.onClick ? "active" : "")}
+                  >
+                    <p.icon />
+                    <span className="sd2-label">{p.label}</span>
+                    {p.count != null && <span className={`sd2-count${p.warn ? " warn" : ""}`}>{p.count}</span>}
+                  </NavLink>
+                  {!p.onClick && (
+                    <button
+                      type="button"
+                      className={`sd2-star${isFav ? " on" : ""}`}
+                      onClick={() => toggleFav(p.to)}
+                      title={isFav ? "Tirar dos atalhos" : "Pôr nos atalhos"}
+                      aria-label={isFav ? `Tirar ${p.label} dos atalhos` : `Pôr ${p.label} nos atalhos`}
+                    >
+                      ★
+                    </button>
+                  )}
+                </div>
+              </Fragment>
+            );
+          })}
+        </nav>
+
+        {favPages.length === 0 && (
+          <div className="sd2-tip">
+            <b>Dica:</b> carrega em ★ ao lado de uma página para a pôr nos atalhos.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

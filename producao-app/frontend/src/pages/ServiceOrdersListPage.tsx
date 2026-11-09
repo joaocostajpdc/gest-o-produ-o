@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, buildQuery } from "../api/client";
 import { MultiSelect } from "../components/MultiSelect";
+import { OS_FILTER_EVENT, OS_FILTER_KEY } from "../components/osFilter";
 import {
   Client,
   Product,
@@ -160,6 +161,32 @@ export function ServiceOrdersListPage() {
     category: "",
     search: "",
   });
+
+  // Menu novo (2026-11-09): "Atenção → Prazo ultrapassado / Urgentes" abre
+  // esta página já filtrada por essa prioridade.
+  useEffect(() => {
+    const apply = (priority: string) => setFilters((f) => ({ ...f, priority, status: "", stageId: "", supplierId: "", clientId: "", category: "", search: "" }));
+    try {
+      const pend = sessionStorage.getItem(OS_FILTER_KEY);
+      if (pend) {
+        sessionStorage.removeItem(OS_FILTER_KEY);
+        apply(pend);
+      }
+    } catch {
+      /* sem armazenamento */
+    }
+    const onEv = (e: Event) => {
+      const pr = (e as CustomEvent<string>).detail;
+      try {
+        sessionStorage.removeItem(OS_FILTER_KEY);
+      } catch {
+        /* sem armazenamento */
+      }
+      if (pr) apply(pr);
+    };
+    window.addEventListener(OS_FILTER_EVENT, onEv);
+    return () => window.removeEventListener(OS_FILTER_EVENT, onEv);
+  }, []);
 
   useEffect(() => {
     Promise.all([

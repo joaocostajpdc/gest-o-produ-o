@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MultiSelect } from "../components/MultiSelect";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
@@ -27,6 +28,8 @@ export function MaterialLacagemPage() {
   const [stageMissing, setStageMissing] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState("");
   const [finishFilter, setFinishFilter] = useState("");
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
 
   // Painel lateral, como nas Ordens de Serviço (pedido do utilizador de
   // 2026-10-28: "aqui também vá abrindo ao lado"). No computador, clicar no
@@ -112,8 +115,8 @@ export function MaterialLacagemPage() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      if (supplierFilter && o.currentStage?.supplier !== supplierFilter) return false;
-      if (finishFilter && o.finish !== finishFilter) return false;
+      if (supplierFilter && !supplierFilter.split(",").includes(o.currentStage?.supplier ?? "")) return false;
+      if (finishFilter && !finishFilter.split(",").includes(o.finish ?? "")) return false;
       return true;
     });
   }, [orders, supplierFilter, finishFilter]);
@@ -174,6 +177,18 @@ export function MaterialLacagemPage() {
       <div className="card">
         {!stageMissing && (
           <div className="filters-bar">
+            {novosFiltros ? (
+              <>
+                <MultiSelect placeholder="Fornecedor (todos)" options={supplierOptions.map((x) => ({ value: x, label: x }))} value={supplierFilter} onChange={setSupplierFilter} />
+                <MultiSelect placeholder="Acabamento (todos)" options={finishOptions.map((x) => ({ value: x, label: x }))} value={finishFilter} onChange={setFinishFilter} />
+                {(supplierFilter || finishFilter) && (
+                  <button type="button" className="link-button" onClick={() => { setSupplierFilter(""); setFinishFilter(""); }}>
+                    Limpar filtros
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
             <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
               <option value="">Fornecedor (todos)</option>
               {supplierOptions.map((s) => (
@@ -190,6 +205,8 @@ export function MaterialLacagemPage() {
                 </option>
               ))}
             </select>
+              </>
+            )}
           </div>
         )}
 

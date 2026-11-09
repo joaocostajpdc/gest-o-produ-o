@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { MultiSelect } from "../components/MultiSelect";
 import { Navigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
@@ -73,6 +74,8 @@ export function KmPage() {
   const [vEditingId, setVEditingId] = useState<string | null>(null);
   const [filterVehicle, setFilterVehicle] = useState("");
   const [filterDriver, setFilterDriver] = useState("");
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
   const [error, setError] = useState<string | null>(null);
   const [vError, setVError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -247,7 +250,11 @@ export function KmPage() {
     await loadVehicles();
   }
 
-  const shown = trips.filter((t) => (!filterVehicle || t.vehicleId === filterVehicle) && (!filterDriver || (t.driverId ?? "—") === filterDriver));
+  const shown = trips.filter(
+    (t) =>
+      (!filterVehicle || filterVehicle.split(",").includes(t.vehicleId)) &&
+      (!filterDriver || filterDriver.split(",").includes(t.driverId ?? "—"))
+  );
   const formKm = Number(form.kmEnd) - Number(form.kmStart);
   const selectedVehicle = vehicles.find((v) => v.id === form.vehicleId);
   const notOwn = !!form.driverId && !!selectedVehicle?.defaultDriverId && selectedVehicle.defaultDriverId !== form.driverId;
@@ -377,6 +384,13 @@ export function KmPage() {
             <div className="ef-table-head">
               <h3>Registos · {range.label}</h3>
               <div className="ef-filters">
+                {novosFiltros ? (
+                  <>
+                    <MultiSelect placeholder="Todas as carrinhas" options={vehicles.map((v) => ({ value: v.id, label: v.plate }))} value={filterVehicle} onChange={setFilterVehicle} />
+                    <MultiSelect placeholder="Todos os condutores" options={colabs.list.map((c) => ({ value: c.id, label: c.name }))} value={filterDriver} onChange={setFilterDriver} />
+                  </>
+                ) : (
+                  <>
                 <select aria-label="Filtrar por carrinha" value={filterVehicle} onChange={(e) => setFilterVehicle(e.target.value)}>
                   <option value="">Todas as carrinhas</option>
                   {vehicles.map((v) => (
@@ -393,6 +407,8 @@ export function KmPage() {
                     </option>
                   ))}
                 </select>
+                  </>
+                )}
               </div>
             </div>
             <div className="ef-scroll">

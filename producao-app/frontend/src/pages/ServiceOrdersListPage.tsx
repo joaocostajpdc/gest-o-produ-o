@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, buildQuery } from "../api/client";
+import { MultiSelect } from "../components/MultiSelect";
 import {
   Client,
   Product,
@@ -89,6 +90,8 @@ export function ServiceOrdersListPage() {
   // designação"). Em teste: só para administradores até ser aprovado — os
   // restantes continuam com o cartão ao centro.
   const sidePanelFeature = useFeature("osSidePanel");
+  // Filtros com várias escolhas, como nas Listagens (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
   const isWide = useIsWide(SIDE_PANEL_MIN_WIDTH);
   const panelMode = sidePanelFeature.available && isWide;
   const [panels, setPanels] = useState<ServiceOrderListItem[]>([]);
@@ -422,6 +425,32 @@ export function ServiceOrdersListPage() {
             value={filters.search}
             onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
+{novosFiltros ? (
+            <>
+              <MultiSelect placeholder="Prioridade (todas)" options={PRIORITY_OPTIONS} value={filters.priority} onChange={(v) => setFilters((f) => ({ ...f, priority: v }))} />
+              <MultiSelect placeholder="Estado (todos)" options={STATUS_OPTIONS} value={filters.status} onChange={(v) => setFilters((f) => ({ ...f, status: v }))} />
+              <MultiSelect placeholder="Etapa (todas)" options={stages.map((x) => ({ value: x.id, label: x.name }))} value={filters.stageId} onChange={(v) => setFilters((f) => ({ ...f, stageId: v }))} />
+              <MultiSelect placeholder="Fornecedor (todos)" options={suppliers.map((x) => ({ value: x.id, label: x.name }))} value={filters.supplierId} onChange={(v) => setFilters((f) => ({ ...f, supplierId: v }))} />
+              <MultiSelect
+                placeholder="Cliente (todos)"
+                wide
+                options={clients.map((c) => ({ value: c.id, label: c.externalId ? `${c.externalId} — ${c.name}` : c.name }))}
+                value={filters.clientId}
+                onChange={(v) => setFilters((f) => ({ ...f, clientId: v }))}
+              />
+              <MultiSelect placeholder="Categoria (todas)" options={categories.map((c) => ({ value: c, label: c }))} value={filters.category} onChange={(v) => setFilters((f) => ({ ...f, category: v }))} />
+              {Object.entries(filters).some(([k, v]) => k !== "search" && v) && (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setFilters((f) => ({ ...f, status: "", stageId: "", supplierId: "", clientId: "", priority: "", category: "" }))}
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </>
+          ) : (
+            <>
           <select
             value={filters.priority}
             onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}
@@ -479,6 +508,8 @@ export function ServiceOrdersListPage() {
               </option>
             ))}
           </select>
+            </>
+          )}
         </div>
 
         {error && <p className="error-text">{error}</p>}

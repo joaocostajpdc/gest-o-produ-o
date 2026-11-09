@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { MultiSelect } from "../components/MultiSelect";
 import { Navigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
@@ -92,6 +93,8 @@ export function FinanceiroPage() {
   const [tab, setTab] = useState<Tab>("cheques");
   const [filtro, setFiltro] = useState<Filtro>("abertos");
   const [banco, setBanco] = useState("");
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
   const [q, setQ] = useState("");
 
   // Restrito: administrador e quem ele escolher (a Alice, desde 2026-10-25).
@@ -270,7 +273,7 @@ export function FinanceiroPage() {
       if (filtro === "abertos" && c.estado !== "POR_DESCONTAR") return false;
       if (filtro === "atraso" && !(c.estado === "POR_DESCONTAR" && d10(c.dataCheque) < hoje)) return false;
       if ((filtro === "DESCONTADO" || filtro === "ANULADO") && c.estado !== filtro) return false;
-      if (banco && c.banco !== banco) return false;
+      if (banco && !banco.split(",").includes(c.banco)) return false;
       if (qq && ![c.numero, c.beneficiario, c.banco, c.referencia ?? "", c.notas ?? ""].some((s) => s.toLowerCase().includes(qq))) return false;
       return true;
     })
@@ -432,14 +435,18 @@ export function FinanceiroPage() {
               </h3>
               <div className="ef-filters">
                 <input className="fin-search" type="search" placeholder="Pesquisar nº, a quem, fatura…" value={q} onChange={(e) => setQ(e.target.value)} />
-                <select aria-label="Filtrar por banco" value={banco} onChange={(e) => setBanco(e.target.value)}>
-                  <option value="">Todos os bancos</option>
-                  {bancos.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
+                {novosFiltros ? (
+                  <MultiSelect placeholder="Todos os bancos" options={bancos.map((b) => ({ value: b, label: b }))} value={banco} onChange={setBanco} />
+                ) : (
+                  <select aria-label="Filtrar por banco" value={banco} onChange={(e) => setBanco(e.target.value)}>
+                    <option value="">Todos os bancos</option>
+                    {bancos.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
             <div className="ef-scroll">

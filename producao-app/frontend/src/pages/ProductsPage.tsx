@@ -1,4 +1,6 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { useFeature } from "../contexts/FeaturesContext";
+import { MultiSelect } from "../components/MultiSelect";
 import { api } from "../api/client";
 import { Product, ProductionLineStep, Stage, Supplier } from "../types";
 
@@ -13,6 +15,8 @@ export function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
 
   // Etapas do produto atualmente expandido (ver/editar etapas diretamente
   // aqui, sem ter de ir à página separada de Linhas de Produção).
@@ -76,7 +80,7 @@ export function ProductsPage() {
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
     return products.filter((p) => {
-      if (categoryFilter && p.category !== categoryFilter) return false;
+      if (categoryFilter && !categoryFilter.split(",").includes(p.category ?? "")) return false;
       if (!term) return true;
       return (
         p.name.toLowerCase().includes(term) ||
@@ -233,14 +237,18 @@ export function ProductsPage() {
             onChange={(e) => setSearch(e.target.value)}
             style={{ minWidth: 260 }}
           />
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-            <option value="">Categoria (todas)</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          {novosFiltros ? (
+            <MultiSelect placeholder="Categoria (todas)" options={categories.map((c) => ({ value: c, label: c }))} value={categoryFilter} onChange={setCategoryFilter} />
+          ) : (
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+              <option value="">Categoria (todas)</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <table>
           <thead>

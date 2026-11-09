@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { MultiSelect } from "../components/MultiSelect";
 import { Navigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useFeature } from "../contexts/FeaturesContext";
@@ -86,6 +87,8 @@ export function HorasPage() {
   const [tab, setTab] = useState<Tab>("registos");
   const [period, setPeriod] = useState(initialPeriod);
   const [filterColab, setFilterColab] = useState("");
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm());
@@ -112,7 +115,7 @@ export function HorasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range.from, range.to, feature.available]);
 
-  const shown = filterColab ? entries.filter((e) => e.colaboradorId === filterColab) : entries;
+  const shown = filterColab ? entries.filter((e) => filterColab.split(",").includes(e.colaboradorId)) : entries;
 
   const summary = useMemo(() => {
     const map = new Map<string, { id: string; name: string; dias: number; horas: number; extra: number; falta: number; ferias: number; baixa: number; feriado: number }>();
@@ -318,14 +321,18 @@ export function HorasPage() {
           <div className="card ef-table-card">
             <div className="ef-table-head">
               <h3>Registos · {range.label}</h3>
-              <select aria-label="Filtrar por colaborador" value={filterColab} onChange={(e) => setFilterColab(e.target.value)}>
-                <option value="">Todos os colaboradores</option>
-                {colabs.list.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              {novosFiltros ? (
+                <MultiSelect placeholder="Todos os colaboradores" options={colabs.list.map((c) => ({ value: c.id, label: c.name }))} value={filterColab} onChange={setFilterColab} />
+              ) : (
+                <select aria-label="Filtrar por colaborador" value={filterColab} onChange={(e) => setFilterColab(e.target.value)}>
+                  <option value="">Todos os colaboradores</option>
+                  {colabs.list.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="ef-scroll">
               <table>

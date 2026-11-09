@@ -6,6 +6,7 @@ import { GLASS_ORDER_STATUS_LABELS, GlassOrder, GlassOrderStatus, Supplier } fro
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "./FeatureTestBanner";
 import { exportGlassCsv, printGlassListing } from "./glassListing";
+import { MultiSelect } from "./MultiSelect";
 
 // ============================================================================
 // Pedidos de Vidros — tabela + formulário, partilhados pela página "Pedidos
@@ -61,6 +62,12 @@ export function GlassOrdersPanel({
   const inOrder = !!serviceOrder;
   // Listagem dos pedidos (2026-10-29) — em teste: "listagemVidros".
   const listagem = useFeature("listagemVidros").available && !inOrder;
+  // Encomendar vários de uma vez com o mesmo nº (2026-11-09) — em teste: "vidrosLote".
+  const lote = useFeature("vidrosLote").available;
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const multi = useFeature("filtrosNovos").available;
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [loteForm, setLoteForm] = useState<{ orderNumber: string; expectedDelivery: string } | null>(null);
 
   const [items, setItems] = useState<GlassOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -72,7 +79,7 @@ export function GlassOrdersPanel({
   const [showFinished, setShowFinished] = useState(inOrder);
   const [search, setSearch] = useState("");
   // Filtros (pedido do utilizador de 2026-10-28: "põe filtros aqui").
-  const [fStatus, setFStatus] = useState<"" | GlassOrderStatus>("");
+  const [fStatus, setFStatus] = useState<string>("");
   const [fSupplier, setFSupplier] = useState("");
   const [fOrder, setFOrder] = useState("");
   const [fPeriod, setFPeriod] = useState("");
@@ -202,11 +209,12 @@ export function GlassOrdersPanel({
     const q = search.trim().toLowerCase();
     const since = fPeriod ? Date.now() - Number(fPeriod) * 86400000 : 0;
     return items.filter((o) => {
+      const has = (f: string, v: string) => f.split(",").includes(v);
       if (fStatus) {
-        if (o.status !== fStatus) return false;
+        if (!has(fStatus, o.status)) return false;
       } else if (!showFinished && o.status === "FINALIZADO") return false;
-      if (fSupplier && (o.supplier?.id ?? "__sem") !== fSupplier) return false;
-      if (fOrder && (o.orderNumber ?? "__sem") !== fOrder) return false;
+      if (fSupplier && !has(fSupplier, o.supplier?.id ?? "__sem")) return false;
+      if (fOrder && !has(fOrder, o.orderNumber ?? "__sem")) return false;
       if (since && new Date(o.date).getTime() < since) return false;
       if (!q) return true;
       return [o.nRef ?? "", o.medida, o.caixa, o.orderNumber ?? "", o.supplier?.name ?? "", o.notes ?? ""].some((v) =>
@@ -224,7 +232,7 @@ export function GlassOrdersPanel({
   const orderOpts = useMemo(() => {
     const set = new Set<string>();
     items.forEach((o) => {
-      if (fStatus ? o.status === fStatus : showFinished || o.status !== "FINALIZADO") set.add(o.orderNumber ?? "__sem");
+      if (fStatus ? fStatus.split(",").includes(o.status) : showFinished || o.status !== "FINALIZADO") set.add(o.orderNumber ?? "__sem");
     });
     return [...set].sort((a, b) => (a === "__sem" ? 1 : b === "__sem" ? -1 : b.localeCompare(a, "pt-PT", { numeric: true })));
   }, [items, fStatus, showFinished]);
@@ -239,18 +247,53 @@ export function GlassOrdersPanel({
 
   function filtersSummary() {
     const parts: string[] = [];
-    if (fStatus) parts.push(`Estado: ${GLASS_ORDER_STATUS_LABELS[fStatus]}`);
+    const many = (f: string, label: (v: string) => string) => f.split(",").filter(Boolean).map(label).join(", ");
+    if (fStatus) parts.push(`Estado: ${many(fStatus, (v) => GLASS_ORDER_STATUS_LABELS[v as GlassOrderStatus] ?? v)}`);
     else if (!showFinished) parts.push("Sem os finalizados");
-    if (fSupplier) parts.push(`Fornecedor: ${supplierOpts.find(([id]) => id === fSupplier)?.[1] ?? fSupplier}`);
-    if (fOrder) parts.push(`Nº encomenda: ${fOrder === "__sem" ? "sem nº" : fOrder}`);
+    if (fSupplier) parts.push(`Fornecedor: ${many(fSupplier, (v) => supplierOpts.find(([id]) => id === v)?.[1] ?? v)}`);
+    if (fOrder) parts.push(`Nº encomenda: ${many(fOrder, (v) => (v === "__sem" ? "sem nº" : v))}`);
     if (fPeriod) parts.push(`Últimos ${fPeriod} dias`);
     if (search.trim()) parts.push(`Pesquisa: "${search.trim()}"`);
     return parts.length ? parts.join(" · ") : "Todos os pedidos";
   }
 
+  // Só os pedidos ainda por encomendar podem ser escolhidos para a encomenda em lote.
+  const selectable = canWrite && lote ? filtered.filter((o) => o.status === "POR_ENCOMENDAR") : [];
+  const selCount = selectable.filter((o) => sel.has(o.id)).length;
+  function toggleSel(id: string) {
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  async function encomendarLote(e: FormEvent) {
+    e.preventDefault();
+    if (!loteForm || !loteForm.orderNumber.trim()) return;
+    const ids = selectable.filter((o) => sel.has(o.id)).map((o) => o.id);
+    if (!ids.length) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post("/glass-orders/encomendar-lote", {
+        ids,
+        orderNumber: loteForm.orderNumber.trim(),
+        ...(loteForm.expectedDelivery.trim() ? { expectedDelivery: loteForm.expectedDelivery.trim() } : {}),
+      });
+      setSel(new Set());
+      setLoteForm(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao passar os pedidos para Encomendado.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const finishedCount = items.filter((o) => o.status === "FINALIZADO").length;
   const pendingCount = items.length - finishedCount;
-  const colCount = (inOrder ? 9 : 10) + (canWrite ? 1 : 0);
+  const colCount = (inOrder ? 9 : 10) + (canWrite ? 1 : 0) + (canWrite && lote ? 1 : 0);
 
   // Composições de caixa já usadas, como sugestões (ex.: "Fosco 4 + Cx. 18 + Fosco 4").
   const caixaOptions = useMemo(() => [...new Set(items.map((i) => i.caixa))].slice(0, 50), [items]);
@@ -396,7 +439,15 @@ export function GlassOrdersPanel({
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Procurar N/Ref., medida, caixa, nº encomenda..."
             />
-            <select value={fStatus} onChange={(e) => setFStatus(e.target.value as "" | GlassOrderStatus)} aria-label="Estado">
+            {multi ? (
+              <>
+                <MultiSelect placeholder="Estado (todos)" options={STATUS_ORDER.map((x) => ({ value: x, label: GLASS_ORDER_STATUS_LABELS[x] }))} value={fStatus} onChange={setFStatus} />
+                <MultiSelect placeholder="Fornecedor (todos)" options={supplierOpts.map(([id, name]) => ({ value: id, label: name }))} value={fSupplier} onChange={setFSupplier} />
+                <MultiSelect placeholder="Nº encomenda (todas)" options={orderOpts.map((n) => ({ value: n, label: n === "__sem" ? "Sem nº (ainda por encomendar)" : n }))} value={fOrder} onChange={setFOrder} />
+              </>
+            ) : (
+              <>
+            <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Estado">
               <option value="">Estado (todos)</option>
               {STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>
@@ -420,6 +471,8 @@ export function GlassOrdersPanel({
                 </option>
               ))}
             </select>
+              </>
+            )}
             <select value={fPeriod} onChange={(e) => setFPeriod(e.target.value)} aria-label="Data do pedido">
               <option value="">Data (todas)</option>
               <option value="7">Últimos 7 dias</option>
@@ -454,6 +507,49 @@ export function GlassOrdersPanel({
           </div>
         )}
         {listagem && <FeatureTestBanner featureKey="listagemVidros" label="a listagem dos Pedidos de Vidros" />}
+        {canWrite && lote && selCount > 0 && (
+          <form className="glass-bulk" onSubmit={encomendarLote}>
+            <strong>{selCount} pedido{selCount > 1 ? "s" : ""} escolhido{selCount > 1 ? "s" : ""}</strong>
+            {loteForm ? (
+              <>
+                <label>
+                  Nº encomenda
+                  <input
+                    autoFocus
+                    required
+                    value={loteForm.orderNumber}
+                    onChange={(e) => setLoteForm((f) => f && { ...f, orderNumber: e.target.value })}
+                    placeholder="ex.: 2026/245"
+                  />
+                </label>
+                <label>
+                  Previsão de entrega (opc.)
+                  <input
+                    value={loteForm.expectedDelivery}
+                    onChange={(e) => setLoteForm((f) => f && { ...f, expectedDelivery: e.target.value })}
+                    placeholder="ex.: 20/nov"
+                  />
+                </label>
+                <button type="submit" className="btn" disabled={busy || !loteForm.orderNumber.trim()}>
+                  {busy ? "A gravar…" : `Confirmar: passar ${selCount} para Encomendado`}
+                </button>
+                <button type="button" className="btn secondary" onClick={() => setLoteForm(null)} disabled={busy}>
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn" onClick={() => setLoteForm({ orderNumber: "", expectedDelivery: "" })}>
+                  Passar para Encomendado…
+                </button>
+                <button type="button" className="link-button" onClick={() => setSel(new Set())}>
+                  Limpar escolha
+                </button>
+              </>
+            )}
+          </form>
+        )}
+        {canWrite && lote && <FeatureTestBanner featureKey="vidrosLote" label="a encomenda de vários pedidos de vidros de uma vez" />}
         {loading ? (
           <p className="muted">A carregar...</p>
         ) : (
@@ -461,6 +557,18 @@ export function GlassOrdersPanel({
             <table>
               <thead>
                 <tr>
+                  {canWrite && lote && (
+                    <th style={{ width: 28 }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Escolher todos os por encomendar"
+                        title="Escolher todos os por encomendar"
+                        disabled={selectable.length === 0}
+                        checked={selectable.length > 0 && selCount === selectable.length}
+                        onChange={(e) => setSel(e.target.checked ? new Set(selectable.map((o) => o.id)) : new Set())}
+                      />
+                    </th>
+                  )}
                   <th>Data</th>
                   {!inOrder && <th>N/Ref.</th>}
                   <th>Fornecedor</th>
@@ -479,6 +587,18 @@ export function GlassOrdersPanel({
                   const next = STATUS_ORDER[STATUS_ORDER.indexOf(o.status) + 1];
                   return (
                     <tr key={o.id} style={{ background: STATUS_STYLE[o.status].row }}>
+                      {canWrite && lote && (
+                        <td>
+                          {o.status === "POR_ENCOMENDAR" && (
+                            <input
+                              type="checkbox"
+                              aria-label={`Escolher o vidro ${o.medida}`}
+                              checked={sel.has(o.id)}
+                              onChange={() => toggleSel(o.id)}
+                            />
+                          )}
+                        </td>
+                      )}
                       <td style={{ whiteSpace: "nowrap" }}>{formatDay(o.date)}</td>
                       {!inOrder && (
                         <td style={{ whiteSpace: "nowrap" }}>

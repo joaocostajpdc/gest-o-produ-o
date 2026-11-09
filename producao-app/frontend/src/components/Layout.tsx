@@ -1,4 +1,4 @@
-import { SVGProps, useEffect, useState } from "react";
+import { ReactNode, SVGProps, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContext";
 import { useFeature } from "../contexts/FeaturesContext";
@@ -256,6 +256,76 @@ function initials(name?: string) {
   return (first + last).toUpperCase();
 }
 
+// ============================================================================
+// Menu lateral arrumado (pedido do utilizador de 2026-11-09: "melhora este
+// layout") — em teste: "menuNovo". Cada secção abre e fecha ao clicar no
+// título; a escolha fica guardada neste computador. A secção da página
+// aberta fica sempre aberta. Sem a funcionalidade, o menu fica como antes.
+// ============================================================================
+const MENU_KEY = "menu.secoesFechadas";
+function readClosed(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(MENU_KEY) ?? "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+function NavSection({
+  id,
+  title,
+  novo,
+  first,
+  children,
+}: {
+  id: string;
+  title: string;
+  novo: boolean;
+  first?: boolean;
+  children: ReactNode;
+}) {
+  const [closed, setClosed] = useState(() => readClosed().includes(id));
+  const ref = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const [hasActive, setHasActive] = useState(false);
+  useEffect(() => {
+    setHasActive(!!ref.current?.querySelector("a.active"));
+  }, [location.pathname]);
+  if (!novo) {
+    return (
+      <>
+        <div className="section-label" style={first ? { marginTop: 4 } : undefined}>
+          {title}
+        </div>
+        {children}
+      </>
+    );
+  }
+  const open = !closed || hasActive;
+  function toggle() {
+    const next = !closed;
+    setClosed(next);
+    try {
+      const list = readClosed().filter((x) => x !== id);
+      if (next) list.push(id);
+      localStorage.setItem(MENU_KEY, JSON.stringify(list));
+    } catch {
+      /* sem armazenamento: só não fica lembrado */
+    }
+  }
+  return (
+    <div className={`nav-sec${open ? "" : " closed"}`} ref={ref}>
+      <button type="button" className="nav-sec-head section-label" onClick={toggle} aria-expanded={open}>
+        <span>{title}</span>
+        <svg className="nav-sec-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      <div className="nav-sec-items">{children}</div>
+    </div>
+  );
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
   // Pó em Stock: enquanto não for aprovado pelo administrador, só aparece
@@ -290,6 +360,7 @@ export function Layout() {
   // utilizador de 2026-10-20 ("esta barra só quero que apareça quando passo
   // o rato"). Em teste só para o administrador; só em ecrã de computador.
   const menuHover = useFeature("menuHover");
+  const menuNovo = useFeature("menuNovo").available;
   // Abas como no browser + Início só com os ícones das áreas (2026-10-25).
   // Em teste só para o administrador até ser aprovado.
   const abas = useFeature("abas");
@@ -385,7 +456,7 @@ export function Layout() {
               {!chat.released && <TestBadge />}
             </NavLink>
           )}
-          <div className="section-label" style={{ marginTop: 4 }}>Produção</div>
+          <NavSection id="producao" title="Produção" novo={menuNovo} first>
           <NavLink to={inicio.available ? "/ordens-servico" : "/"} end>
             <IconClipboard /> Ordens de Serviço
           </NavLink>
@@ -410,8 +481,9 @@ export function Layout() {
           <NavLink to="/reports">
             <IconPrinter /> Listagens Imprimíveis
           </NavLink>
+          </NavSection>
 
-          <div className="section-label">Compras</div>
+          <NavSection id="compras" title="Compras" novo={menuNovo}>
           {compras.available && (
             <NavLink to="/compras" end>
               <IconCart /> Resumo de Compras
@@ -433,10 +505,10 @@ export function Layout() {
               {!powderStock.released && <TestBadge />}
             </NavLink>
           )}
+          </NavSection>
 
           {(horas.available || kmViaturas.available) && (
-            <>
-              <div className="section-label">Equipa e Frota</div>
+            <NavSection id="equipa" title="Equipa e Frota" novo={menuNovo}>
               {horas.available && (
                 <NavLink to="/controlo-horas">
                   <IconClock /> Controlo de Horas
@@ -449,39 +521,35 @@ export function Layout() {
                   {!kmViaturas.released && <TestBadge />}
                 </NavLink>
               )}
-            </>
+            </NavSection>
           )}
 
           {orcamentos.available && (
-            <>
-              <div className="section-label">Orçamentação</div>
+            <NavSection id="orcamentacao" title="Orçamentação" novo={menuNovo}>
               <NavLink to="/orcamentos">
                 <IconFileText /> Orçamentos
               </NavLink>
-            </>
+            </NavSection>
           )}
 
           {relatorios.available && (
-            <>
-              <div className="section-label">Gestão</div>
+            <NavSection id="gestao" title="Gestão" novo={menuNovo}>
               <NavLink to="/relatorios">
                 <IconChart /> Relatório de Produção
               </NavLink>
-            </>
+            </NavSection>
           )}
 
           {financeiro.available && (
-            <>
-              <div className="section-label">Financeiro</div>
+            <NavSection id="financeiro" title="Financeiro" novo={menuNovo}>
               <NavLink to="/financeiro">
                 <IconWallet /> Cheques passados
               </NavLink>
-            </>
+            </NavSection>
           )}
 
           {canManageConfig(user?.role) && (
-            <>
-              <div className="section-label">Configuração</div>
+            <NavSection id="configuracao" title="Configuração" novo={menuNovo}>
               <NavLink to="/products">
                 <IconBox /> Produtos
               </NavLink>
@@ -494,12 +562,11 @@ export function Layout() {
               <NavLink to="/suppliers">
                 <IconTruck /> Fornecedores
               </NavLink>
-            </>
+            </NavSection>
           )}
 
           {canManageUsers(user?.role) && (
-            <>
-              <div className="section-label">Administração</div>
+            <NavSection id="administracao" title="Administração" novo={menuNovo}>
               <NavLink to="/users">
                 <IconUsers /> Utilizadores e Permissões
               </NavLink>
@@ -512,7 +579,7 @@ export function Layout() {
               <NavLink to="/emails-automaticos">
                 <IconSend /> Avisos Semanais
               </NavLink>
-            </>
+            </NavSection>
           )}
         </nav>
 

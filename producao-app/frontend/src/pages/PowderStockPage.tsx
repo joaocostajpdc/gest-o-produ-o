@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { MultiSelect } from "../components/MultiSelect";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { api, downloadBlob } from "../api/client";
 import { canManageConfig, useAuth } from "../contexts/AuthContext";
@@ -127,6 +128,8 @@ export function PowderStockPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
+  // Filtros com várias escolhas (2026-11-09) — em teste: "filtrosNovos".
+  const novosFiltros = useFeature("filtrosNovos").available;
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
@@ -217,7 +220,7 @@ export function PowderStockPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((p) => {
-      if (locationFilter && localKey(p) !== locationFilter) return false;
+      if (locationFilter && !locationFilter.split(",").includes(localKey(p))) return false;
       if (!q) return true;
       return [p.referencia, p.marca, p.marcaPo ?? "", p.codigo, p.ral ?? "", localName(p)].some((v) => v.toLowerCase().includes(q));
     });
@@ -427,10 +430,19 @@ export function PowderStockPage() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Procurar referência, marca alumínio, código, RAL ou lavagem"
           />
-          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
-            <option value="">Todos os locais</option>
-            <LocalOptions suppliers={suppliers} />
-          </select>
+          {novosFiltros ? (
+            <MultiSelect
+              placeholder="Todos os locais"
+              options={[{ value: ARMAZEM, label: "Armazém" }, ...suppliers.map((x) => ({ value: x.id, label: x.name }))]}
+              value={locationFilter}
+              onChange={setLocationFilter}
+            />
+          ) : (
+            <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+              <option value="">Todos os locais</option>
+              <LocalOptions suppliers={suppliers} />
+            </select>
+          )}
         </div>
 
         {loading ? (

@@ -139,13 +139,24 @@ serviceOrdersRouter.get(
   requirePermission("serviceOrders:read"),
   asyncHandler(async (req, res) => {
     const { status, stageId, supplierId, clientId, priority, search, category } = req.query;
+    // Vários valores no mesmo filtro, separados por vírgula (filtros novos de
+    // 2026-11-09, como nas Listagens). Um só valor funciona como antes.
+    const list = (v: unknown): string[] =>
+      v == null || v === "" ? [] : String(v).split(",").map((x) => x.trim()).filter(Boolean);
+    const one = (vals: string[]) => (vals.length === 1 ? vals[0] : { in: vals });
+    const statuses = list(status);
+    const clientIds = list(clientId);
+    const categories = list(category);
+    const stageIds = list(stageId);
+    const supplierIds = list(supplierId);
+    const priorities = list(priority);
 
     const where: any = {};
-    if (status) where.status = String(status);
-    if (clientId) where.clientId = String(clientId);
+    if (statuses.length) where.status = one(statuses);
+    if (clientIds.length) where.clientId = one(clientIds);
     // Filtra pela categoria "leve" do produto associado (ex.: "Mosquiteiras"),
     // útil quando há muitas OS de categorias diferentes em simultâneo.
-    if (category) where.product = { category: String(category) };
+    if (categories.length) where.product = { category: one(categories) };
     if (search) {
       where.OR = [
         { externalId: { contains: String(search), mode: "insensitive" } },
@@ -157,10 +168,10 @@ serviceOrdersRouter.get(
         { product: { name: { contains: String(search), mode: "insensitive" } } },
       ];
     }
-    if (stageId || supplierId) {
+    if (stageIds.length || supplierIds.length) {
       where.currentStageInstance = {
-        ...(stageId ? { stageId: String(stageId) } : {}),
-        ...(supplierId ? { supplierId: String(supplierId) } : {}),
+        ...(stageIds.length ? { stageId: one(stageIds) } : {}),
+        ...(supplierIds.length ? { supplierId: one(supplierIds) } : {}),
       };
     }
 
@@ -168,8 +179,8 @@ serviceOrdersRouter.get(
     const now = new Date();
     let items = orders.map((o) => serializeListItem(o, now));
 
-    if (priority) {
-      items = items.filter((i) => i.priority === String(priority));
+    if (priorities.length) {
+      items = items.filter((i) => i.priority != null && priorities.includes(i.priority));
     }
 
     items.sort((a, b) =>

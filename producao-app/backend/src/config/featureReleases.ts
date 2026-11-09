@@ -49,6 +49,9 @@ export const FEATURES = {
   guiaLacagem: "Material em Lacagem: submeter a guia (foto ou PDF) para enviar ou retirar as OS da Lacagem",
   fichaNova: "Ficha de Produção com layout novo (etapa atual, tabela de etapas com data e rubrica, notas)",
   objetivos: "Objetivos: faturação e negócio fechado contra os objetivos do mês, trimestre e ano, para toda a equipa",
+  vidrosLote: "Pedidos de Vidros: escolher vários e passar todos para Encomendado com o mesmo nº de encomenda",
+  menuNovo: "Menu lateral mais arrumado (secções que abrem e fecham, mais compacto)",
+  filtrosNovos: "Filtros com várias escolhas (como nas Listagens) em todas as páginas com filtros",
   orcamentoTextos: "Orçamentos de painéis: acabamento face 1 e 2, vidro e observações escritos à mão, no PDF no formato das OS",
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
 } as const;

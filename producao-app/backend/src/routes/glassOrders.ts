@@ -187,6 +187,50 @@ glassOrdersRouter.put(
   })
 );
 
+// Passar vários pedidos para "Encomendado" de uma vez, com o mesmo nº de
+// encomenda (pedido do utilizador de 2026-11-09). Em teste: "vidrosLote".
+const bulkSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+  orderNumber: z.string().trim().min(1, "Falta o nº de encomenda.").max(60),
+  expectedDelivery: z.string().trim().max(60).optional(),
+});
+glassOrdersRouter.post(
+  "/encomendar-lote",
+  requirePermission("glassOrders:write"),
+  requireFeature("vidrosLote"),
+  asyncHandler(async (req, res) => {
+    const data = bulkSchema.parse(req.body);
+    const items = await prisma.$transaction(async (tx) => {
+      const existing = await tx.glassOrder.findMany({ where: { id: { in: data.ids } } });
+      const out = [];
+      for (const g of existing) {
+        const updated = await tx.glassOrder.update({
+          where: { id: g.id },
+          data: {
+            status: "ENCOMENDADO",
+            orderNumber: data.orderNumber,
+            ...(data.expectedDelivery ? { expectedDelivery: data.expectedDelivery } : {}),
+          },
+          include: INCLUDE,
+        });
+        if (updated.serviceOrderId && g.status !== "ENCOMENDADO") {
+          await logHistoryEvent({
+            tx,
+            serviceOrderId: updated.serviceOrderId,
+            type: "OUTRA_ALTERACAO",
+            description: `Vidro ${describe(updated)}: ${STATUS_LABELS[g.status]} → ${STATUS_LABELS.ENCOMENDADO} (encomenda ${data.orderNumber})`,
+            userId: req.user?.id,
+            metadata: { glassOrderId: updated.id },
+          });
+        }
+        out.push(updated);
+      }
+      return out;
+    });
+    res.json({ updated: items.length, items });
+  })
+);
+
 glassOrdersRouter.delete(
   "/:id",
   requirePermission("glassOrders:write"),

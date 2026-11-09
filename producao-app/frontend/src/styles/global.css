@@ -3356,3 +3356,36 @@ tr.fin-row-empty td { color: #98a2b3; }
 .obj-updated.stale .obj-updated-dot { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,.18); }
 .obj-updated.stale .obj-updated-detail { color: #92400e; }
 @media (max-width: 900px) { .obj-updated-detail { margin-left: 0; } }
+
+/* Pedidos de Vidros: encomendar vários de uma vez (2026-11-09) */
+.glass-bulk { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 10px 12px; margin: 8px 0 12px; border-radius: 8px; background: var(--color-primary-soft, #eef2ff); border: 1px solid var(--color-border); }
+.glass-bulk strong { align-self: center; }
+.glass-bulk label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--color-text-muted, #6b7280); }
+.glass-bulk input { font-size: 14px; min-width: 150px; }
+
+/* Menu lateral arrumado (2026-11-09) — em teste: "menuNovo" */
+.sidebar .nav-sec { display: flex; flex-direction: column; gap: 1px; }
+.sidebar .nav-sec + .nav-sec { border-top: 1px solid rgba(255, 255, 255, 0.06); margin-top: 4px; padding-top: 2px; }
+.sidebar .nav-sec-head {
+  display: flex; align-items: center; justify-content: space-between; width: calc(100% - 4px);
+  background: none; border: 0; cursor: pointer; font: inherit; text-align: left;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: #7c84ad; margin: 8px 2px 2px; padding: 6px 8px; border-radius: 6px;
+}
+.sidebar .nav-sec-head:hover { color: #c8cde0; background: rgba(255, 255, 255, 0.04); }
+.sidebar .nav-sec-head:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.sidebar .nav-sec-chev { transition: transform 0.15s ease; opacity: 0.7; }
+.sidebar .nav-sec.closed .nav-sec-chev { transform: rotate(-90deg); }
+.sidebar .nav-sec.closed .nav-sec-items { display: none; }
+.sidebar .nav-sec-items { display: flex; flex-direction: column; gap: 1px; }
+.sidebar .nav-sec-items a { padding: 7px 10px; font-size: 13.25px; }
+.sidebar .nav-sec-items a.active {
+  background: rgba(79, 99, 255, 0.18); color: #fff;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+.sidebar .nav-sec-items a.active svg { color: #9fb0ff; }
+/* menu que abre ao passar o rato: recolhido mostra todos os ícones */
+@media (min-width: 901px) {
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) .nav-sec.closed .nav-sec-items { display: flex; }
+  .app-shell.sb-hover .sidebar:not(:hover):not(:focus-within) .nav-sec-head { opacity: 0; }
+}

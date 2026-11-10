@@ -11,8 +11,10 @@ import leads from "../data/comercialLeads.json";
 export async function seedComercial(): Promise<void> {
   if (process.env.COMERCIAL_SEED !== "1") return;
   try {
-    const n = await prisma.comercialCliente.count();
-    if (n > 0) return;
+    // Volta a correr se alguma parte ficou vazia (ex.: arranque interrompido a
+    // meio). Não duplica nada: cada registo tem o id antigo (origemId).
+    const [nc, nl] = await Promise.all([prisma.comercialCliente.count(), prisma.comercialLead.count()]);
+    if (nc > 0 && nl > 0) return;
     const r = await importarCarteira({
       clients: (seed as unknown as { clients: never[] }).clients,
       visits: (seed as unknown as { visits: never[] }).visits,

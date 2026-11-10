@@ -1008,8 +1008,10 @@ async function buildPDF(q){
   // tabela
   const cols= ch? [{h:"#",w:7,a:"left"},{h:"Perfil",w:30},{h:"Descrição",w:46},{h:"Abas (mm)",w:28},{h:"Desenv. × Comp.",w:29,a:"right"},{h:"Qt",w:10,a:"right"},{h:"Preço un.",w:15,a:"right"},{h:"Total",w:15,a:"right"}]
                 : [{h:"#",w:7},{h:"Descrição",w:72},{h:"Medida (mm)",w:28,a:"right"},{h:"m²",w:14,a:"right"},{h:"Qt",w:12,a:"right"},{h:"Preço un.",w:22,a:"right"},{h:"Total",w:25,a:"right"}];
+  // Sem m² no orçamento de painéis (pedido de 2026-11-10: "tira os m2") — com os textos novos.
+  const semM2=!ch&&S.textosPdf; if(semM2){ cols[3].w=0; cols[3].h=""; }
   const tw=W-2*M; const sc=tw/cols.reduce((s,c)=>s+c.w,0); cols.forEach(c=>c.w*=sc);
-  function thead(){ doc.setFillColor(...INK); doc.rect(M,y,tw,7,"F"); let x=M; cols.forEach(c=>{ T(c.h.toUpperCase(),c.a==="right"?x+c.w-2:x+2,y+4.7,{s:7,b:1,c:[255,255,255],a:c.a==="right"?"right":"left"}); x+=c.w; }); y+=7; }
+  function thead(){ doc.setFillColor(...INK); doc.rect(M,y,tw,7,"F"); let x=M; cols.forEach(c=>{ if(c.h) T(c.h.toUpperCase(),c.a==="right"?x+c.w-2:x+2,y+4.7,{s:7,b:1,c:[255,255,255],a:c.a==="right"?"right":"left"}); x+=c.w; }); y+=7; }
   thead();
   r.linhas.forEach((x,i)=>{
     const L=x.L; let rows, rh;
@@ -1067,7 +1069,7 @@ async function buildPDF(q){
       doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...INK); doc.text(desc,xx+2+fw,y+5.5); if(S.textosPdf){ doc.setFont("helvetica","italic"); doc.setFontSize(8); doc.setTextColor(...INK); doc.text(spec,xx+5+fw,y+5.5+desc.length*3.8+.6,{lineHeightFactor:1.35}); }
       else { doc.setFont("helvetica","normal"); doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.text(spec,xx+2+fw,y+5.5+desc.length*3.8); } xx+=cols[1].w;
       T(`${fmt(num(L.larg),0)} × ${fmt(num(L.alt),0)}`,xx+cols[2].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[2].w;
-      T(fmt(x.m2,2),xx+cols[3].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[3].w;
+      if(!semM2) T(fmt(x.m2,2),xx+cols[3].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[3].w;
       T(String(x.qt),xx+cols[4].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[4].w;
       T(eur(x.unit),xx+cols[5].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[5].w;
       T(eur(x.venda),xx+cols[6].w-2,y+5.5,{s:8.5,b:1,a:"right"});
@@ -1075,7 +1077,7 @@ async function buildPDF(q){
     y+=rh; doc.setDrawColor(...LN); doc.setLineWidth(.2); doc.line(M,y,W-M,y);
   });
   const nUn=r.linhas.reduce((s,x)=>s+x.qt,0);
-  y+=4; T(`Total — ${nUn} unid. · ${fmt(r.m2Tot,2)} m²`,M,y+3,{s:8.5,c:MUT});
+  y+=4; T(semM2? `Total — ${nUn} unid.` : `Total — ${nUn} unid. · ${fmt(r.m2Tot,2)} m²`,M,y+3,{s:8.5,c:MUT});
   // totais
   const tl=[["Subtotal",eur(r.sub)]]; if(r.descEur) tl.push([`Desconto ${fmt(num(q.desconto),num(q.desconto)%1?1:0)}%`,"-"+eur(r.descEur)]);
   tl.push(["Total s/ IVA",eur(r.base)],[`IVA ${pct(num(P.iva))}`,eur(r.iva)]);

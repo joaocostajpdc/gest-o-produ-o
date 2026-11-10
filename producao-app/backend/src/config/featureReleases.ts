@@ -53,6 +53,7 @@ export const FEATURES = {
   menuNovo: "Menu lateral novo: barra das áreas à esquerda e páginas da área ao lado, com pesquisa (Ctrl K), atalhos ★ e contadores",
   filtrosNovos: "Filtros com várias escolhas (como nas Listagens) em todas as páginas com filtros",
   inicioNovo: "Início novo: pesquisa, números do dia, áreas com atalhos e contadores, Precisa de atenção e Abertas recentemente",
+  comercial: "Comercial: carteira de clientes, visitas e voltas, prospeção e painel comercial (acesso restrito)",
   orcamentoTextos: "Orçamentos de painéis: acabamento face 1 e 2, vidro e observações escritos à mão, no PDF no formato das OS",
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
 } as const;
@@ -68,7 +69,7 @@ export type FeatureKey = keyof typeof FEATURES;
 // voltar a restringir, tirar "orcamentos" de OPEN_TO_ALL e repô-lo aqui.
 // Financeiro (2026-10-24): "apenas eu" — nunca para todos. 2026-10-25: aberto
 // também à Alice Sousa (escolhida em testerUserIds).
-export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro", "financeiroAgenda", "relatorios"]);
+export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro", "financeiroAgenda", "relatorios", "comercial"]);
 export const OPEN_TO_ALL: ReadonlySet<string> = new Set(["orcamentos"]);
 
 export function isFeatureKey(value: string): value is FeatureKey {

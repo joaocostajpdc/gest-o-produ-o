@@ -24,6 +24,7 @@ import { orcamentosRouter } from "./routes/orcamentos";
 import { emailReportsRouter } from "./routes/emailReports";
 import { prisma } from "./config/prisma";
 import { financeiroRouter } from "./routes/financeiro";
+import { comercialRouter } from "./routes/comercial";
 import { relatoriosRouter } from "./routes/relatorios";
 import { colaboradoresRouter, horasRouter, viaturasRouter } from "./routes/equipaFrota";
 import { chatRouter } from "./routes/chat";
@@ -39,6 +40,8 @@ export function createApp() {
 
   // Guias da Lacagem: as fotografias vêm em base64 dentro do JSON (maiores que o limite normal).
   app.use("/api/lacagem-guias", express.json({ limit: "40mb" }));
+  // Comercial: importar a carteira antiga (ficheiro JSON grande).
+  app.use("/api/comercial/importar", express.json({ limit: "60mb" }));
   app.use(express.json());
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
@@ -79,6 +82,7 @@ export function createApp() {
   app.use("/api/viaturas", viaturasRouter);
   app.use("/api/chat", chatRouter);
   app.use("/api/financeiro", financeiroRouter);
+  app.use("/api/comercial", comercialRouter);
   app.use("/api/relatorios", relatoriosRouter);
   app.use("/api/planeamento", planeamentoRouter);
   app.use("/api/lacagem-guias", lacagemGuiasRouter);

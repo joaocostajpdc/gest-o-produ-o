@@ -908,3 +908,83 @@ model BusinessTarget {
   @@unique([kind, periodType, year, period])
   @@map("business_targets")
 }
+
+// ---------------------------------------------------------------------------
+// Comercial (pedido de 2026-11-10: "passar a parte comercial para a Central")
+// Carteira de clientes, visitas/voltas e prospeção — vinda do programa
+// "carteira-clientes". Acesso restrito ("comercial").
+// ---------------------------------------------------------------------------
+model ComercialCliente {
+  id         String   @id @default(cuid())
+  numero     String?  // nº de cliente no Goldylocks (liga a clients.externalId e às vendas)
+  nif        String?
+  nome       String
+  zona       String?
+  volta      String?
+  email      String?
+  telefone   String?
+  estado     String   @default("ativo") // ativo | prospecao | inativo
+  comercial  String?  // João, David, Balcão…
+  plafond    Decimal? @db.Decimal(12, 2)
+  morada     String?
+  codPostal  String?
+  localidade String?
+  notas      String?
+  origemId   String?  @unique // id no programa antigo (para importar sem duplicar)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  visitas ComercialVisita[]
+
+  @@index([comercial])
+  @@index([numero])
+  @@map("comercial_clientes")
+}
+
+model ComercialVisita {
+  id         String            @id @default(cuid())
+  clienteId  String?
+  cliente    ComercialCliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       ComercialLead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  data       DateTime          @db.Date
+  objetivo   String?
+  estado     String            @default("planeada") // planeada | realizada | cancelada
+  notas      String?
+  resultado  String?
+  proxima    DateTime?         @db.Date
+  userId     String?
+  origemId   String?           @unique
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([data])
+  @@index([clienteId])
+  @@map("comercial_visitas")
+}
+
+model ComercialLead {
+  id                String   @id @default(cuid())
+  mercado           String   @default("PT") // PT | ES
+  nif               String?
+  nome              String
+  distrito          String?
+  email             String?
+  telefone          String?
+  estado            String   @default("prospecao") // prospecao | conversas | cliente | concorrente | sem_interesse
+  newsletter        Boolean  @default(false)
+  whatsapp          Boolean  @default(false)
+  emailApresentacao String?
+  campanhas         String?
+  conversas         String?
+  notas             String?
+  origemId          String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  visitas ComercialVisita[]
+
+  @@index([distrito])
+  @@index([estado])
+  @@map("comercial_leads")
+}

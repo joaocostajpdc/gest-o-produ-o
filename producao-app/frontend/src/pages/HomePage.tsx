@@ -124,6 +124,7 @@ export function HomePage() {
   const kmViaturas = useFeature("kmViaturas");
   const financeiro = useFeature("financeiro");
   const relatorios = useFeature("relatorios");
+  const comercial = useFeature("comercial");
   const abas = useFeature("abas");
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -232,6 +233,25 @@ export function HomePage() {
           sub: "Painéis e chapas quinadas",
           icon: icons.orcamentos,
         },
+      ],
+    });
+  }
+
+  // Comercial (2026-11-10, em teste): carteira, visitas e prospeção.
+  if (comercial.available) {
+    areas.push({
+      key: "comercial",
+      title: "Comercial",
+      desc: "Clientes, visitas e prospeção",
+      icon: areaIcons.equipa,
+      color: "#0e7490",
+      soft: "#e0f4f8",
+      tiles: [
+        { to: "/comercial?tab=painel", title: "Painel comercial", sub: "Quem não compra, quem não é visitado", icon: icons.planeamento },
+        { to: "/comercial?tab=clientes", title: "Clientes", sub: "Carteira com ficha de cada cliente", icon: icons.os },
+        { to: "/comercial?tab=voltas", title: "Voltas", sub: "Clientes por volta e visitas em falta", icon: icons.carrinha },
+        { to: "/comercial?tab=visitas", title: "Visitas", sub: "Marcadas e realizadas", icon: icons.planeamento },
+        { to: "/comercial?tab=prospecao", title: "Prospeção", sub: "Empresas a angariar, no mapa", icon: icons.listagens },
       ],
     });
   }

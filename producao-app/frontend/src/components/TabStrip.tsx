@@ -76,6 +76,7 @@ const PAGES: { prefix: string; title: string; icon: ReactNode }[] = [
   { prefix: "/km-carrinhas", title: "Km das Carrinhas", icon: tabIcons.van },
   { prefix: "/chat", title: "Chat", icon: tabIcons.chat },
   { prefix: "/financeiro", title: "Financeiro", icon: tabIcons.wallet },
+  { prefix: "/comercial", title: "Comercial", icon: tabIcons.chart },
   { prefix: "/relatorios", title: "Relatório de Produção", icon: tabIcons.chart },
   { prefix: "/products", title: "Produtos", icon: tabIcons.gear },
   { prefix: "/stages", title: "Etapas", icon: tabIcons.gear },

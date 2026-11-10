@@ -8,6 +8,7 @@ import { announceTelegram } from "./scripts/announceTelegram";
 import { launchOS20261029 } from "./scripts/launchOS20261029";
 import { rereadPdfs20261029 } from "./scripts/rereadPdfs20261029";
 import { attachGuia20261030 } from "./scripts/attachGuia20261030";
+import { seedComercial } from "./scripts/seedComercial";
 import { attachGuia20261030b } from "./scripts/attachGuia20261030b";
 import { objetivos20261030 } from "./scripts/objetivos20261030";
 
@@ -43,6 +44,7 @@ void launchOS20261029();
 // Releitura pontual dos PDFs das OS abertas com a leitura melhorada (uma só vez).
 void rereadPdfs20261029();
 void attachGuia20261030();
+void seedComercial();
 void attachGuia20261030b();
 void objetivos20261030();
 

@@ -15,6 +15,7 @@ import { ScanPage } from "./pages/ScanPage";
 import { PowderStockPage } from "./pages/PowderStockPage";
 import { GlassOrdersPage } from "./pages/GlassOrdersPage";
 import { OrcamentosPage } from "./pages/OrcamentosPage";
+import { ComercialPage } from "./pages/ComercialPage";
 import { ComprasPage } from "./pages/ComprasPage";
 import { EmailsPage } from "./pages/EmailsPage";
 import { CutPlanNewPage, CutPlanPage, CutPlansPage } from "./pages/CutPlansPage";
@@ -63,6 +64,7 @@ export const protectedRoutes = (
     <Route path="/km-carrinhas" element={<KmPage />} />
     <Route path="/chat" element={<ChatPage />} />
     <Route path="/financeiro" element={<FinanceiroPage />} />
+    <Route path="/comercial" element={<ComercialPage />} />
     <Route path="/relatorios" element={<RelatoriosPage />} />
     <Route path="/reports" element={<PrintableListPage />} />
     <Route path="/products" element={<ProductsPage />} />

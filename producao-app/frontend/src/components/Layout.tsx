@@ -348,6 +348,7 @@ export function Layout() {
   const kmViaturas = useFeature("kmViaturas");
   const financeiro = useFeature("financeiro");
   const relatorios = useFeature("relatorios");
+  const comercial = useFeature("comercial");
   // Chat interno (2026-10-24): contador de mensagens por ler no menu.
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -448,7 +449,7 @@ export function Layout() {
           onMouseLeave={() => setSd2Flyout(false)}
         >
           <SidebarD2
-            f={{ inicio, objetivos, chat, planeamento, cutPlans, compras, glassOrders, powderStock, horas, kmViaturas, orcamentos, relatorios, financeiro }}
+            f={{ inicio, objetivos, chat, planeamento, cutPlans, compras, glassOrders, powderStock, horas, kmViaturas, orcamentos, relatorios, financeiro, comercial }}
             chatUnread={chatUnread}
             userName={user?.name}
             onLogout={logout}
@@ -577,6 +578,14 @@ export function Layout() {
             <NavSection id="orcamentacao" title="Orçamentação" novo={false}>
               <NavLink to="/orcamentos">
                 <IconFileText /> Orçamentos
+              </NavLink>
+            </NavSection>
+          )}
+
+          {comercial.available && (
+            <NavSection id="comercial" title="Comercial" novo={false}>
+              <NavLink to="/comercial">
+                <IconUsers /> Comercial
               </NavLink>
             </NavSection>
           )}
@@ -897,6 +906,24 @@ function SidebarD2({
           },
         ]
       : []),
+    ...(f.comercial?.available
+      ? [
+          {
+            id: "comercial",
+            label: "Comercial",
+            short: "Comercial",
+            sub: "Clientes, visitas e prospeção",
+            icon: IconTeam,
+            pages: [
+              { to: "/comercial?tab=painel", label: "Painel comercial", icon: IconChart },
+              { to: "/comercial?tab=clientes", label: "Clientes", icon: IconUsers },
+              { to: "/comercial?tab=voltas", label: "Voltas", icon: IconVan },
+              { to: "/comercial?tab=visitas", label: "Visitas", icon: IconCalendar },
+              { to: "/comercial?tab=prospecao", label: "Prospeção", icon: IconTarget },
+            ],
+          },
+        ]
+      : []),
     ...(f.orcamentos?.available
       ? [{ id: "orcam", label: "Orçamentação", short: "Orçam.", sub: "Orçamentos a clientes", icon: IconFileText, pages: [{ to: "/orcamentos", label: "Orçamentos", icon: IconFileText }] }]
       : []),
@@ -950,7 +977,13 @@ function SidebarD2({
   const all = configArea ? [...areas, configArea] : areas;
 
   const path = location.pathname;
-  const matches = (p: D2Page) => (p.end || p.to === "/" ? path === p.to : path === p.to || path.startsWith(p.to + "/"));
+  const full = path + location.search;
+  const matches = (p: D2Page) =>
+    p.to.includes("?")
+      ? full === p.to || (p.to.endsWith("tab=painel") && path === p.to.split("?")[0] && !location.search)
+      : p.end || p.to === "/"
+        ? path === p.to
+        : path === p.to || path.startsWith(p.to + "/");
   const areaOfPath = all.find((a) => a.pages.some((p) => !p.onClick && matches(p)))?.id ?? (path.startsWith("/service-orders") ? "producao" : null);
   const [areaId, setAreaId] = useState<string>(areaOfPath ?? "producao");
   useEffect(() => {
@@ -1103,7 +1136,7 @@ function SidebarD2({
                     to={p.to}
                     end={p.end}
                     onClick={p.onClick}
-                    className={({ isActive }) => (isActive && !p.onClick ? "active" : "")}
+                    className={({ isActive }) => ((p.to.includes("?") ? matches(p) : isActive) && !p.onClick ? "active" : "")}
                   >
                     <p.icon />
                     <span className="sd2-label">{p.label}</span>

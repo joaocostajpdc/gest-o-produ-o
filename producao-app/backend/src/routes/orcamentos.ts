@@ -64,6 +64,30 @@ async function aplicarBloqueio(data: Record<string, unknown>, stored: Record<str
   }
 }
 
+// ---------------------------------------------------------------------------
+// Numeração (pedido do utilizador de 2026-11-10: "o número de orçamento tem
+// que ser sempre seguido, seja que ramo for"). O número deixou de ser
+// calculado no ecrã de cada um (que só via a lista que tinha carregada e
+// chegou a repetir o ORC-2026-001): é o servidor que o dá, no momento em que
+// o orçamento é criado, a seguir ao maior número já usado nesse ano — um só
+// contador para painéis, chapas, estores e mosquiteiras. Um bloqueio na base
+// de dados garante que dois utilizadores ao mesmo tempo não apanham o mesmo.
+// Depois de criado, o número de um orçamento nunca muda.
+// ---------------------------------------------------------------------------
+const NUM_LOCK = 72400111;
+async function prefixoAno(): Promise<string> {
+  const row = await prisma.appSetting.findUnique({ where: { key: "orcamentos.precos" } });
+  const raw = String((row?.value as { P?: { prefixo?: unknown } } | null)?.P?.prefixo ?? "").trim();
+  const pre = raw.replace(/[^A-Za-z0-9]/g, "") || "ORC";
+  return `${pre}-${new Date().getFullYear()}-`;
+}
+async function proximoNumero(tx: Prisma.TransactionClient, pre: string): Promise<string> {
+  const re = "^" + pre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([0-9]+)$";
+  const rows = await tx.$queryRaw<{ n: number | null }[]>`select max((substring(data->>'num' from ${re}))::int) as n from orcamentos`;
+  const n = Number(rows[0]?.n ?? 0) || 0;
+  return pre + String(n + 1).padStart(3, "0");
+}
+
 function present(row: { id: string; data: Prisma.JsonValue }) {
   return { ...(row.data as Record<string, unknown>), id: row.id };
 }
@@ -147,9 +171,26 @@ orcamentosRouter.put(
     if (stored && stored.pedidoAut !== undefined) rest.pedidoAut = stored.pedidoAut;
     else delete rest.pedidoAut;
     if (!isAdmin(req)) await aplicarBloqueio(rest, stored);
-    const data = rest as Prisma.InputJsonValue;
-    await prisma.orcamento.upsert({ where: { id }, create: { id, data }, update: { data } });
-    res.json({ ok: true, margem: rest.margem, desconto: rest.desconto, pedidoAut: rest.pedidoAut ?? null });
+    if (row) {
+      // O número fica sempre o que foi dado ao criar.
+      if (stored && typeof stored.num === "string" && stored.num) rest.num = stored.num;
+      await prisma.orcamento.update({ where: { id }, data: { data: rest as Prisma.InputJsonValue } });
+    } else {
+      const pre = await prefixoAno();
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`select pg_advisory_xact_lock(${NUM_LOCK})`;
+        const ja = await tx.orcamento.findUnique({ where: { id } });
+        if (ja) {
+          const n = (ja.data as Record<string, unknown>).num;
+          if (typeof n === "string" && n) rest.num = n;
+          await tx.orcamento.update({ where: { id }, data: { data: rest as Prisma.InputJsonValue } });
+          return;
+        }
+        rest.num = await proximoNumero(tx, pre);
+        await tx.orcamento.create({ data: { id, data: rest as Prisma.InputJsonValue } });
+      });
+    }
+    res.json({ ok: true, num: rest.num, margem: rest.margem, desconto: rest.desconto, pedidoAut: rest.pedidoAut ?? null });
   })
 );
 
@@ -162,7 +203,7 @@ orcamentosRouter.patch(
     if (!ID_RE.test(id) || !isObject(req.body)) return res.status(400).json({ error: "Dados inválidos." });
     const row = await prisma.orcamento.findUnique({ where: { id } });
     if (!row) return res.status(404).json({ error: "Orçamento não encontrado." });
-    const { id: _ignored, pedidoAut: _p, ...rest } = req.body as Record<string, unknown>;
+    const { id: _ignored, pedidoAut: _p, num: _n, ...rest } = req.body as Record<string, unknown>;
     if (!isAdmin(req)) {
       delete rest.margem;
       delete rest.desconto;

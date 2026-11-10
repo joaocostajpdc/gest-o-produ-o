@@ -261,7 +261,7 @@ export function AnexoPicker({
       const l = await api.get<{ id: string; num?: string; tipo?: string; data?: string; estado?: string; cliente?: { nome?: string }; criado?: number }[]>("/orcamentos/lista");
       return l.map((o) => {
         const title = clean(`${o.num ?? "Orçamento"} — ${o.cliente?.nome || "sem cliente"}`);
-        const sub = clean([o.tipo === "paineis" ? "Painéis" : "Chapas quinadas", o.estado, dataPT(o.data)].filter(Boolean).join(" · "));
+        const sub = clean([o.tipo === "paineis" ? "Painéis" : o.tipo === "estores" ? "Estores" : o.tipo === "mosquiteiras" ? "Mosquiteiras" : "Chapas quinadas", o.estado, dataPT(o.data)].filter(Boolean).join(" · "));
         return { token: `[[doc:orc:${o.id}|${title}|${sub}]]`, label: title, title, sub, date: o.data || (o.criado ? new Date(o.criado).toISOString() : "") };
       });
     };

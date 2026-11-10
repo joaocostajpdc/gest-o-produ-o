@@ -92,6 +92,9 @@ textarea.i{resize:vertical;min-height:70px}
 .st-con{background:var(--sunken);color:var(--muted)}
 .tag{display:inline-block;padding:2px 7px;border-radius:4px;font:600 11px/1.4 var(--f-display);letter-spacing:.06em;text-transform:uppercase;background:var(--sunken);color:var(--muted)}
 .tag.ch{background:var(--accent-soft);color:var(--accent)}
+.tag.rv{background:#E6F4EE;color:#1B7F4B}
+.rvcost{background:#FFF8E6!important;border-color:#F1D58A!important}
+.line.rvnota{background:var(--sunken)}
 
 /* list */
 .sumrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
@@ -480,8 +483,72 @@ function finalizar(q,P,linhas,extra){
   const brk={}; linhas.forEach(r=>Object.entries(r.c).forEach(([k,v])=>brk[k]=(brk[k]||0)+v));
   return {linhas,custo,sub,descEur,base,iva,total,margemEur:base-custo,brk,...extra};
 }
-function calcQuote(q,P){ return q.tipo==="paineis"? calcPaineis(q,P) : calcChapas(q,P); }
-const BRK_LABEL={po:"Pó do cliente",chapa:"Chapa",acab:"Acabamento",lacagem:"Lacagem",corte:"Corte",quin:"Quinagem",cantos:"Corta-cantos",mo:"Mão de obra",emb:"Embalagem",transp:"Transporte",outros:"Outros",enchimento:"Enchimento",cola:"Cola",fresagem:"Fresagem",alunox:"Alunox",vidro:"Vidro",aro:"Aro",cilindro:"Cilindro",puxador:"Puxador",puxEmb:"Puxador embutido",led:"LED",fechadura:"Fechadura",extras:"Extras"};
+/* ===== Revenda: estores e mosquiteiras (pedido do utilizador de 2026-11-10) =====
+   "Meto as medidas, o preço de custo e a margem — é só para quando der ao
+   cliente sair tudo direitinho": o custo é o do fornecedor (por unidade ou por
+   m²), a margem é a do orçamento (ou a de cada linha) e o PDF sai só com os
+   dados da JPDC e os preços de venda — nada do fornecedor. */
+const REV_TIPOS=["estores","mosquiteiras"];
+function isRev(q){ return !!q&&REV_TIPOS.includes(q.tipo); }
+const SPEC185="Caixa PVC Decorativa 185, Decorativa RAL 7016, Enrazado RAL 7016, Inferior RAL 7016, Superior RAL 7016\nCor lâminas RAL 7016\nCor base 7016 texturado\nMotor Rolleasy 20Nm, sistema motor Rolleasy\nColocação de topos antideslize\nLâmina 45 mm\nSem calhas";
+const SPEC200="Caixa PVC Decorativa 200, Decorativa RAL 7016, Enrazado RAL 7016, Inferior RAL 7016, Superior RAL 7016, Isolamento caixa 200\nCor lâminas RAL 7016\nCor base 7016 texturado\nMotor TTGO 30Nm, sistema motor mecânico TTGO\nColocação de topos antideslize\nLâmina 50+ aberta\nSem calhas";
+const REV={
+  estores:{nome:"Estores",un:"Estore",modelos:[
+    {k:"c185",nome:"Estore compacto PVC – caixa 185",produto:"Estore Compacto PVC Decorativa",caixa:"CAIXA PVC 185",des:"estore",specs:SPEC185},
+    {k:"c200",nome:"Estore compacto PVC – caixa 200",produto:"Estore Compacto PVC Decorativa",caixa:"CAIXA PVC 200",des:"estore",specs:SPEC200},
+    {k:"livre",nome:"Outro artigo",produto:"",caixa:"",des:"retangulo",specs:""}]},
+  mosquiteiras:{nome:"Mosquiteiras",un:"Mosquiteira",modelos:[
+    {k:"enrV",nome:"Mosquiteira de enrolar vertical",produto:"Mosquiteira de enrolar vertical",des:"mosqV",specs:"Caixa e guias em alumínio lacado RAL 9016\nRede em fibra de vidro cinza\nGuias com escova\nPerfil inferior com puxador"},
+    {k:"enrL",nome:"Mosquiteira de enrolar lateral",produto:"Mosquiteira de enrolar lateral",des:"mosqL",specs:"Caixa e guias em alumínio lacado RAL 9016\nRede em fibra de vidro cinza\nFecho magnético\nGuia inferior rebaixada"},
+    {k:"plis",nome:"Mosquiteira plissada",produto:"Mosquiteira plissada",des:"plis",specs:"Perfis em alumínio lacado RAL 9016\nRede plissada em poliéster cinza\nGuia inferior rebaixada"},
+    {k:"fixa",nome:"Mosquiteira fixa",produto:"Mosquiteira fixa",des:"fixa",specs:"Aro em alumínio lacado RAL 9016\nRede em fibra de vidro cinza\nFixação por molas"},
+    {k:"correr",nome:"Mosquiteira de correr",produto:"Mosquiteira de correr",des:"correr",specs:"Aro em alumínio lacado RAL 9016\nRede em fibra de vidro cinza\nCalhas superior e inferior, rodízios"},
+    {k:"livre",nome:"Outro artigo",produto:"",caixa:"",des:"retangulo",specs:""}]}
+};
+const REV_DES=[["estore","Estore (caixa + lâminas)"],["mosqV","Mosquiteira de enrolar vertical"],["mosqL","Mosquiteira de enrolar lateral"],["plis","Mosquiteira plissada"],["fixa","Mosquiteira fixa"],["correr","Mosquiteira de correr"],["retangulo","Retângulo simples"],["nenhum","Sem desenho"]];
+function revCustoUn(L){ const m2=num(L.larg)*num(L.alt)/1e6; return L.custoModo==="m2"? num(L.custo)*Math.max(m2,num(L.minM2)) : num(L.custo); }
+function calcRevenda(q,P){
+  const out=q.linhas.map((L,idx)=>{
+    if(L.nota) return {L,idx,nota:true,m2:0,qt:0,c:{},custoUn:0,custo:0,venda:0,unit:0,m2Tot:0,margem:0,semCusto:false};
+    const m2=num(L.larg)*num(L.alt)/1e6, qt=Math.max(0,Math.round(num(L.qt))), cu=revCustoUn(L);
+    const mg=(L.margem===""||L.margem===undefined||L.margem===null)? num(q.margem) : num(L.margem)/100;
+    const unit=cu*(1+mg);
+    return {L,idx,m2,qt,c:{revenda:cu*qt},custoUn:cu,custo:cu*qt,venda:unit*qt,unit,m2Tot:m2*qt,margem:mg,semCusto:!(num(L.custo)>0)}; });
+  return finalizar(q,P,out,{m2Tot:out.reduce((s,r)=>s+r.m2Tot,0)});
+}
+/* desenho de cada posição: lista de formas, desenhada em SVG (ecrã) ou no PDF */
+function revShapes(L,bw,bhMax){
+  const Lg=num(L.larg), Al=num(L.alt), des=L.des||"retangulo"; if(des==="nenhum"||!Lg||!Al) return null;
+  const dw=bw-10; const dh=Math.max(bw*.32,Math.min(bhMax-9,dw*Al/Lg)); const x0=.5,y0=.5; const it=[];
+  const R=(x,y,w,h,f,lw)=>it.push({t:"r",x,y,w,h,f,lw:lw||.6}), Ln=(x1,y1,x2,y2,c,lw)=>it.push({t:"l",x1,y1,x2,y2,c:c||"#9aa4ae",lw:lw||.35}), Tx=(x,y,str,sz,rot)=>it.push({t:"t",x,y,str,sz,rot:!!rot});
+  const mesh=(x,y,w,h)=>{ const st=Math.max(2.6,Math.min(w,h)/14); for(let a=x+st;a<x+w-.3;a+=st) Ln(a,y,a,y+h,"#c9d0d7",.25); for(let b=y+st;b<y+h-.3;b+=st) Ln(x,b,x+w,b,"#c9d0d7",.25); };
+  R(x0,y0,dw,dh,"#fbfcfd",.7);
+  const band=Math.min(dh*.17,9);
+  if(des==="estore"){ R(x0,y0,dw,band,"#d9dee4",.7); if(L.caixa) Tx(x0+dw/2,y0+band/2+1.2,String(L.caixa),Math.min(4.2,band*.62));
+    for(let y=y0+band+2.2;y<y0+dh-.6;y+=2.2) Ln(x0+.5,y,x0+dw-.5,y,"#9aa4ae",.3); }
+  else if(des==="mosqV"){ R(x0,y0,dw,band,"#d9dee4",.7); R(x0,y0+band,2,dh-band,"#e6eaee",.5); R(x0+dw-2,y0+band,2,dh-band,"#e6eaee",.5); mesh(x0+2,y0+band,dw-4,dh-band-2.4); R(x0+2,y0+dh-2.4,dw-4,2.4,"#c3cad2",.5); }
+  else if(des==="mosqL"){ const b=Math.min(dw*.14,8); R(x0,y0,b,dh,"#d9dee4",.7); R(x0+b,y0,dw-b,2,"#e6eaee",.5); R(x0+b,y0+dh-2,dw-b,2,"#e6eaee",.5); mesh(x0+b,y0+2,dw-b-2.4,dh-4); R(x0+dw-2.4,y0+2,2.4,dh-4,"#c3cad2",.5); }
+  else if(des==="plis"){ R(x0,y0,dw,2,"#e6eaee",.5); R(x0,y0+dh-2,dw,2,"#e6eaee",.5); const mid=x0+dw*.55; for(let x=x0+1.6;x<mid-.5;x+=1.6) Ln(x,y0+2,x,y0+dh-2,"#aab3bc",.3); R(mid-1.2,y0+2,2.4,dh-4,"#c3cad2",.5); }
+  else if(des==="fixa"){ R(x0+2.2,y0+2.2,dw-4.4,dh-4.4,"#fbfcfd",.4); mesh(x0+2.2,y0+2.2,dw-4.4,dh-4.4); }
+  else if(des==="correr"){ R(x0,y0,dw,2,"#c3cad2",.5); R(x0,y0+dh-2,dw,2,"#c3cad2",.5); R(x0+2,y0+2,dw*.6,dh-4,"#fbfcfd",.5); mesh(x0+2,y0+2,dw*.6,dh-4); }
+  // cotas
+  Ln(x0,y0+dh+2.4,x0+dw,y0+dh+2.4,"#7a838e",.3); Tx(x0+dw/2,y0+dh+6.6,"L = "+fmt(Lg,0),4);
+  Ln(x0+dw+2.4,y0,x0+dw+2.4,y0+dh,"#7a838e",.3); Tx(x0+dw+6.8,y0+dh/2,"A = "+fmt(Al,0),4,true);
+  return {w:bw,h:dh+8,it};
+}
+function revSVG(L,bw,bhMax){ const S2=revShapes(L,bw||60,bhMax||70); if(!S2) return `<div class="hint" style="text-align:center;padding:14px 4px">${(L.des||"")==="nenhum"?"Sem desenho":"Indique largura e altura"}</div>`;
+  const k=3; let o=`<svg viewBox="0 0 ${S2.w*k} ${S2.h*k}" width="100%" style="max-height:${(bhMax||70)*3}px" role="img" aria-label="Desenho ${fmt(num(L.larg),0)} por ${fmt(num(L.alt),0)}">`;
+  S2.it.forEach(e=>{ if(e.t==="r") o+=`<rect x="${e.x*k}" y="${e.y*k}" width="${e.w*k}" height="${e.h*k}" fill="${e.f}" stroke="#3b4552" stroke-width="${e.lw*k*.6}"/>`;
+    else if(e.t==="l") o+=`<line x1="${e.x1*k}" y1="${e.y1*k}" x2="${e.x2*k}" y2="${e.y2*k}" stroke="${e.c}" stroke-width="${e.lw*k}"/>`;
+    else o+=`<text x="${e.x*k}" y="${e.y*k}" font-size="${e.sz*k}" text-anchor="middle" fill="#2b333d" font-family="IBM Plex Mono,monospace"${e.rot?` transform="rotate(-90 ${e.x*k} ${e.y*k})"`:""}>${esc(e.str)}</text>`; });
+  return o+"</svg>"; }
+function hexRGB(h){ const n=parseInt(String(h).slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function revPDFDraw(doc,L,x,y,bw,bh){ const S2=revShapes(L,bw,bh); if(!S2) return;
+  S2.it.forEach(e=>{ if(e.t==="r"){ doc.setFillColor(...hexRGB(e.f)); doc.setDrawColor(59,69,82); doc.setLineWidth(e.lw*.45); doc.rect(x+e.x,y+e.y,e.w,e.h,"FD"); }
+    else if(e.t==="l"){ doc.setDrawColor(...hexRGB(e.c)); doc.setLineWidth(e.lw*.6); doc.line(x+e.x1,y+e.y1,x+e.x2,y+e.y2); }
+    else { doc.setFont("helvetica","normal"); doc.setFontSize(e.sz*1.9); doc.setTextColor(43,51,61); if(e.rot){ const tw=doc.getTextWidth(e.str); doc.text(e.str,x+e.x+e.sz*.35,y+e.y+tw/2,{angle:90}); } else doc.text(e.str,x+e.x,y+e.y,{align:"center"}); } }); }
+function calcQuote(q,P){ return q.tipo==="paineis"? calcPaineis(q,P) : isRev(q)? calcRevenda(q,P) : calcChapas(q,P); }
+const BRK_LABEL={revenda:"Material (fornecedor)",po:"Pó do cliente",chapa:"Chapa",acab:"Acabamento",lacagem:"Lacagem",corte:"Corte",quin:"Quinagem",cantos:"Corta-cantos",mo:"Mão de obra",emb:"Embalagem",transp:"Transporte",outros:"Outros",enchimento:"Enchimento",cola:"Cola",fresagem:"Fresagem",alunox:"Alunox",vidro:"Vidro",aro:"Aro",cilindro:"Cilindro",puxador:"Puxador",puxEmb:"Puxador embutido",led:"LED",fechadura:"Fechadura",extras:"Extras"};
 const BRK_COL=["#1420E6","#5B8DEF","#2BB3A3","#E0A030","#D2553F","#8E5BD9","#6B7785","#A9B4C0","#3F7F4F","#C77DBA","#B5892F","#4A9BD1"];
 
 if(typeof module!=="undefined") module.exports={DEFAULT_P,calcQuote,calcPainelLinha,planoCorte,perfilLayout,num,fmt};
@@ -521,7 +588,9 @@ async function initServer(){
     // Preços bloqueados para quem não é administrador (2026-10-24).
     try{ const t=token(); const r=await fetch("/api/auth/me",{headers:t?{Authorization:"Bearer "+t}:{}}); const j=r.ok? await r.json():null; S.admin=!!(j&&j.user&&j.user.role==="ADMINISTRADOR"); S.userName=j&&j.user?j.user.name:""; }catch(_){ S.admin=false; }
     // Textos do orçamento por painel (pedido de 2026-11-09) — em teste: "orcamentoTextos".
-    try{ const t=token(); const r=await fetch("/api/features",{headers:t?{Authorization:"Bearer "+t}:{}}); const fs=r.ok? await r.json():[]; S.textosPdf=!!(Array.isArray(fs)&&fs.find(f=>f.key==="orcamentoTextos"&&f.available)); }catch(_){ S.textosPdf=false; }
+    try{ const t=token(); const r=await fetch("/api/features",{headers:t?{Authorization:"Bearer "+t}:{}}); const fs=r.ok? await r.json():[]; S.textosPdf=!!(Array.isArray(fs)&&fs.find(f=>f.key==="orcamentoTextos"&&f.available));
+      // Estores e mosquiteiras (revenda) — em teste: "orcamentosRevenda" (2026-11-10).
+      S.revenda=!!(Array.isArray(fs)&&fs.find(f=>f.key==="orcamentosRevenda"&&f.available)); }catch(_){ S.textosPdf=false; S.revenda=false; }
     S.db=SERVER_DB; S.assets=SERVER_FILES; S.downloads=SERVER_DL;
     if(b.precos&&b.precos.P) S.P=Object.assign(clone(DEFAULT_P),clone(b.precos.P));
     if(b.empresa) S.E=Object.assign(clone(DEFAULT_E),clone(b.empresa));
@@ -553,6 +622,9 @@ function saveQuote(){
   const {id,...body}=q;
   saveChain=saveChain.then(()=>S.db.doc("orcamentos/"+id).set(body)).then(resp=>{ if(S.cur&&S.cur.id===id&&JSON.stringify(S.cur.linhas)===JSON.stringify(q.linhas)) { S.dirty=false; }
       // O servidor repõe a margem/desconto bloqueados e devolve o pedido de autorização atual.
+      // O número é dado pelo servidor ao criar (2026-11-10: sempre seguido, seja que ramo for).
+      if(resp&&resp.num){ const qi=S.quotes.find(x=>x.id===id); if(qi) qi.num=resp.num;
+        if(S.cur&&S.cur.id===id&&S.cur.num!==resp.num){ S.cur.num=resp.num; const qn=$(".qhead .qn"); if(qn) qn.textContent=resp.num; } if(S.view==="lista") renderLista(); }
       if(resp&&S.cur&&S.cur.id===id){ let mud=false;
         if(!S.admin&&resp.margem!==undefined&&num(resp.margem)!==num(S.cur.margem)){ S.cur.margem=resp.margem; mud=true; }
         if(!S.admin&&resp.desconto!==undefined&&num(resp.desconto)!==num(S.cur.desconto)){ S.cur.desconto=resp.desconto; mud=true; }
@@ -625,11 +697,12 @@ function renderLista(){
   el.innerHTML=`
   <div class="view-head"><div><div class="eyebrow">${esc(S.E.nome)}</div><h1>Orçamentos</h1></div>
     <button class="btn pri" data-new="chapas">${ico("plus")}Chapas quinadas</button>
-    <button class="btn pri" data-new="paineis">${ico("plus")}Painéis</button></div>
+    <button class="btn pri" data-new="paineis">${ico("plus")}Painéis</button>
+    ${S.revenda?`<button class="btn pri" data-new="estores">${ico("plus")}Estores</button><button class="btn pri" data-new="mosquiteiras">${ico("plus")}Mosquiteiras</button>`:""}</div>
   <div class="filters"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}">${S.filtro?`<button class="btn ghost" id="clrF">Mostrar todos os estados</button>`:""}</div>
   ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Obra / ref.</th><th>Tipo</th><th class="r">Total s/ IVA</th><th>Estado</th><th></th></tr></thead><tbody>
   ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="pill autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
-   <td><span class="tag ${q.tipo==="chapas"?"ch":""}">${q.tipo==="chapas"?"Chapas":"Painéis"}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
+   <td><span class="tag ${q.tipo==="chapas"?"ch":isRev(q)?"rv":""}">${tipoNome(q.tipo)}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
    <td><select class="i" data-est="${q.id}" aria-label="Estado" style="width:auto;padding:4px 6px">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
    <td class="r" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar">${ico("trash")}</button></span></td></tr>`).join("")}
   </tbody></table></div>`
@@ -648,13 +721,18 @@ function renderLista(){
   el.onchange=e=>{ const s=e.target.closest("[data-est]"); if(s) mudarEstado(s.dataset.est,s.value); };
   const bi=$("#busca",el); bi.oninput=()=>{ S.busca=bi.value; const pos=bi.selectionStart; renderLista(); const n=$("#busca"); n.focus(); n.setSelectionRange(pos,pos); };
 }
+function tipoNome(t){ return t==="chapas"?"Chapas":t==="estores"?"Estores":t==="mosquiteiras"?"Mosquiteiras":"Painéis"; }
+// Número provisório (só para mostrar até o servidor responder — é ele que dá o número definitivo).
 function proximoNum(){ const y=new Date().getFullYear(); const pre=(S.P.prefixo||"ORC")+"-"+y+"-"; let mx=0; S.quotes.forEach(q=>{ if(String(q.num).startsWith(pre)){ mx=Math.max(mx,parseInt(String(q.num).slice(pre.length))||0); } }); return pre+String(mx+1).padStart(3,"0"); }
 function linhaChapa(prev){ return {id:uid(),desc:"",abas:"",angs:"",comp:3000,qt:1,medidas:[{comp:3000,qt:1}],esp:prev?prev.esp:1.5,liga:prev?prev.liga:(S.P.ligas[0]&&S.P.ligas[0].liga)||"1050",acab:prev?prev.acab:(S.P.acabamentos.find(a=>/quinad/i.test(a.nome))||S.P.acabamentos[0]||{}).nome||"",cantos:0}; }
 function linhaPainel(prev){ const p=prev||{}; return {id:uid(),tipo:p.tipo||"Liso",modelo:"",larg:2000,alt:800,espEnch:p.espEnch||24,espChapa:p.espChapa||1.5,liga:p.liga||"1050",nChapas:2,chComp:"",chLarg:"",acab1:p.acab1||"Lacado standard",acab2:p.acab2||"Lacado standard",vidro:"Sem vidro",alunoxRef:p.alunoxRef||"",alunoxM2:0,vidroM2:0,fresMin:S.P.fresagemMinDefault,moMin:S.P.moMinPainelDefault,aroM2:"",cilindro:0,puxador:0,puxEmb:0,led:0,fechadura:0,extras:0,qt:1,margem:""}; }
+function linhaRev(tipo,prev,k){ const T=REV[tipo]; const m=T.modelos.find(x=>x.k===(k||(prev&&prev.modelo)))||T.modelos[0];
+  if(prev&&!k){ const n=clone(prev); n.id=uid(); n.larg=""; n.alt=""; n.qt=1; n.custo=""; n.nota=false; delete n.texto; return n; }
+  return {id:uid(),modelo:m.k,produto:m.produto,caixa:m.caixa||"",des:m.des,specs:m.specs,larg:"",alt:"",qt:1,custo:"",custoModo:"un",minM2:"",margem:""}; }
 function novo(tipo){ if(S.dirty) saveQuote();
   const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
     margem:num(S.P.margem),desconto:0,notas:"",validade:num(S.P.validadeDias)||30,desenhos:[],
-    linhas:[tipo==="chapas"?linhaChapa():linhaPainel()], job:{moMin:num(S.P.moMinChapasDefault),transporte:0,outros:0,embalagem:true,override:{},overrideCortes:{},formatos:clone(S.P.formatos)}};
+    linhas:[tipo==="chapas"?linhaChapa():REV[tipo]?linhaRev(tipo):linhaPainel()], mostrar:"linha", job:{custoForn:"",moMin:num(S.P.moMinChapasDefault),transporte:0,outros:0,embalagem:true,override:{},overrideCortes:{},formatos:clone(S.P.formatos)}};
   S.cur=q; S.dirty=true; saveQuote(); go("editor"); }
 function abrir(id){ const q=S.quotes.find(x=>x.id===id); if(!q) return; S.cur=clone(q); S.cur.job ||= {}; S.cur.desenhos ||= []; S.dirty=false; go("editor"); }
 function duplicar(id){ const q=S.quotes.find(x=>x.id===id); if(!q) return; const n=clone(q); n.id=uid(); n.num=proximoNum(); n.criado=Date.now(); n.data=hoje(); n.estado="Em orçamento"; S.cur=n; S.dirty=true; saveQuote(); go("editor"); toast("Duplicado como "+n.num); }
@@ -665,9 +743,9 @@ async function mudarEstado(id,est){ const q=S.quotes.find(x=>x.id===id); if(!q) 
 function opts(list,sel,lab=x=>x,val=x=>x){ return list.map(x=>{ const v=String(val(x)); return `<option value="${esc(v)}" ${String(sel)===v?"selected":""}>${esc(lab(x))}</option>`; }).join(""); }
 function renderEditor(){
   const q=S.cur, el=$("#v-editor"); if(!q){ el.innerHTML=""; return; }
-  const ch=q.tipo==="chapas";
+  const ch=q.tipo==="chapas", rv=isRev(q), RT=rv?REV[q.tipo]:null;
   el.innerHTML=`
-  <div class="view-head"><div><div class="eyebrow">${ch?"Orçamento de chapas quinadas":"Orçamento de painéis"}</div>
+  <div class="view-head"><div><div class="eyebrow">${ch?"Orçamento de chapas quinadas":rv?"Orçamento de "+RT.nome.toLowerCase()+" (revenda)":"Orçamento de painéis"}</div>
     <div class="qhead"><span class="qn mono">${esc(q.num)}</span><select class="i" id="qEstado" style="width:auto">${opts(ESTADOS,q.estado)}</select><span class="savest" id="saveSt"></span></div></div>
     <button class="btn ghost" id="backL">${ico("back")}Voltar à lista</button></div>
   <div class="ed"><div class="ed-main">
@@ -681,8 +759,11 @@ function renderEditor(){
       <label class="f"><span>Validade (dias)</span><input class="i num" inputmode="numeric" data-q="validade" value="${esc(q.validade)}"></label>
     </div><datalist id="dlClientes">${[...new Set(S.quotes.map(x=>x.cliente&&x.cliente.nome).filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
 
-    <div class="panel"><header><h2>${ch?"Peças":"Painéis"}</h2><span class="hint">${ch?"Abas em mm separadas por espaço (ex.: 20 120 20). Ângulos opcionais (90 por defeito; negativo vira para o outro lado).":"Os campos a cinzento não se aplicam ao tipo de painel escolhido."}</span></header>
-      <div class="body"><div id="lines"></div><button class="btn" id="addLine" style="margin-top:12px">${ico("plus")}${ch?"Adicionar peça":"Adicionar painel"}</button></div></div>
+    ${rv?`<div class="panel"><header><h2>Custo do fornecedor</h2><span class="hint">Interno — o fornecedor e o custo nunca saem no PDF do cliente.</span></header><div class="body">
+      <div class="grid g4" style="align-items:end"><label class="f"><span>Custo total do fornecedor s/ IVA (€)</span><input class="i num" inputmode="decimal" data-q="job.custoForn" value="${esc(q.job.custoForn??"")}" placeholder="ex.: 3711,32"></label>
+      <div style="grid-column:span 3;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" id="bDistr">Distribuir pelas posições (por m²)</button><span class="hint">Para quando o fornecedor só dá o total: o custo é repartido pelas posições conforme a área. Depois pode ajustar posição a posição.</span></div></div></div></div>`:""}
+    <div class="panel"><header><h2>${ch?"Peças":rv?RT.nome:"Painéis"}</h2><span class="hint">${ch?"Abas em mm separadas por espaço (ex.: 20 120 20). Ângulos opcionais (90 por defeito; negativo vira para o outro lado).":rv?"Escolha o modelo (preenche o artigo e as especificações), meta as medidas, a quantidade e o preço de custo.":"Os campos a cinzento não se aplicam ao tipo de painel escolhido."}</span></header>
+      <div class="body"><div id="lines"></div><div class="row" style="margin-top:12px;gap:8px">${rv?`<select class="i" id="addModelo" style="width:auto" aria-label="Modelo da nova posição"><option value="">Igual à anterior</option>${RT.modelos.map(m=>`<option value="${m.k}">${esc(m.nome)}</option>`).join("")}</select>`:""}<button class="btn" id="addLine">${ico("plus")}${ch?"Adicionar peça":rv?"Adicionar "+RT.un.toLowerCase():"Adicionar painel"}</button>${rv?`<button class="btn ghost" id="addNota">${ico("plus")}Nota</button>`:""}</div></div></div>
 
     ${ch?`<div class="panel"><header><h2>Texto para o Goldylocks</h2><span class="hint">Medidas e quantidades de todas as peças, prontas a colar no orçamento.</span><button class="btn sm" id="bCopy">${ico("copy")}Copiar texto</button></header><div class="body" id="goldy"></div></div>`:""}
     ${ch?`<div class="panel"><header><h2>Plano de corte e trabalho</h2><span class="hint">Calculado automaticamente; pode substituir m² de chapa ou nº de cortes à mão.</span></header><div class="body">
@@ -707,6 +788,7 @@ function renderEditor(){
     <div class="panel sum"><div class="grid g2">
       <label class="f"><span>Margem %${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" id="qMargem" value="${esc(fmt(num(q.margem)*100,num(q.margem)*100%1?1:0))}" ${S.admin?"":"disabled"}></label>
       <label class="f"><span>Desconto ao cliente %${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" data-q="desconto" value="${esc(q.desconto)}" ${S.admin?"":"disabled"}></label></div>
+      ${rv?`<label class="f" style="margin-top:10px"><span>No PDF do cliente mostrar</span><select class="i" data-q="mostrar"><option value="linha" ${q.mostrar!=="total"?"selected":""}>Preço de cada posição e total</option><option value="total" ${q.mostrar==="total"?"selected":""}>Só o total</option></select></label>`:""}
       ${autHTML(q)}</div>
     <div class="actions">${ch?`<button class="btn pri" id="bFolha" style="justify-content:center">${ico("down")}Descarregar folha de desenho</button>
       <div class="row"><button class="btn" id="bFolhaPrev">${ico("eye")}Ver folha de desenho</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>
@@ -717,7 +799,12 @@ function renderEditor(){
   renderLines(); renderDrawings(); refreshCalc(); updSaveState();
   const bl=$("#bLer"); if(bl) bl.onclick=lerDesenho;
   $("#backL").onclick=()=>go("lista");
-  $("#addLine").onclick=()=>{ const last=q.linhas[q.linhas.length-1]; q.linhas.push(ch?linhaChapa(last):linhaPainel(last)); renderLines(); refreshCalc(); markDirty(); const ls=$$("#lines .line"); ls[ls.length-1].querySelector("input").focus(); };
+  $("#addLine").onclick=()=>{ const last=q.linhas[q.linhas.length-1];
+    if(rv){ const lastItem=[...q.linhas].reverse().find(L=>!L.nota); const k=$("#addModelo").value; q.linhas.push(linhaRev(q.tipo,k?null:lastItem,k||undefined)); }
+    else q.linhas.push(ch?linhaChapa(last):linhaPainel(last));
+    renderLines(); refreshCalc(); markDirty(); const ls=$$("#lines .line"); const inp=ls[ls.length-1].querySelector(rv?'[data-l="larg"]':"input"); if(inp) inp.focus(); };
+  const an=$("#addNota"); if(an) an.onclick=()=>{ q.linhas.push({id:uid(),nota:true,texto:""}); renderLines(); refreshCalc(); markDirty(); const ls=$$("#lines .line"); const t=ls[ls.length-1].querySelector("textarea"); if(t) t.focus(); };
+  const bd=$("#bDistr"); if(bd) bd.onclick=()=>distribuirCusto(q);
   $("#qEstado").onchange=e=>{ q.estado=e.target.value; markDirty(); };
   $("#qMargem").oninput=e=>{ q.margem=num(e.target.value)/100; refreshCalc(); markDirty(); };
   bindAut(q);
@@ -735,16 +822,20 @@ function setPath(o,p,v){ const k=p.split("."); let x=o; for(let i=0;i<k.length-1
 
 function renderLines(){
   const q=S.cur, box=$("#lines"); const ch=q.tipo==="chapas"; const P=S.P;
-  box.innerHTML=q.linhas.map((L,i)=>ch? lineChapaHTML(L,i,P) : linePainelHTML(L,i,P)).join("") || `<div class="hint">Sem linhas.</div>`;
+  const rv=isRev(q);
+  box.innerHTML=q.linhas.map((L,i)=>ch? lineChapaHTML(L,i,P) : rv? lineRevHTML(L,i,q) : linePainelHTML(L,i,P)).join("") || `<div class="hint">Sem linhas.</div>`;
   box.oninput=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line"); if(!card) return;
     if(t.dataset.m){ const L=q.linhas[+card.dataset.i]; const M=garantirMedidas(L); M[+t.closest(".med").dataset.k][t.dataset.m]=t.value; syncMedidas(L); refreshCalc(); markDirty(); return; }
     if(!t.dataset.l) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
     if(t.dataset.l==="aroM2") t.classList.toggle("autov", aroM2Auto(L));
     if(ch&&(t.dataset.l==="abas"||t.dataset.l==="angs")){ $(".pv .svgh",card).innerHTML=perfilSVG(L.abas,L.angs); }
+    if(rv&&["larg","alt","caixa"].includes(t.dataset.l)){ const sv=card.querySelector('[data-o="svg"]'); if(sv) sv.innerHTML=revSVG(L); }
     refreshCalc(); markDirty(); };
   box.onchange=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line");
     if(card&&t.dataset.foto!==undefined&&t.files&&t.files[0]){ fotoPainel(q.linhas[+card.dataset.i],t.files[0],card); t.value=""; return; }
     if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
+    if(rv&&t.dataset.l==="modelo"){ const m=REV[q.tipo].modelos.find(x=>x.k===t.value); if(m){ L.produto=m.produto; L.caixa=m.caixa||""; L.des=m.des; L.specs=m.specs; } renderLines(); refreshCalc(); markDirty(); return; }
+    if(rv&&(t.dataset.l==="des"||t.dataset.l==="custoModo")){ renderLines(); refreshCalc(); markDirty(); return; }
     if(!ch&&t.dataset.l==="aroM2"){ if(aroM2Auto(L)) L.aroM2=""; renderLines(); refreshCalc(); markDirty(); return; }
     if(!ch&&(t.dataset.l==="tipo"||t.dataset.l==="acab1"||t.dataset.l==="acab2")){ renderLines(); if(usaPoCliente(L)&&(t.dataset.l==="acab1"||t.dataset.l==="acab2")){ const c=$$("#lines .line")[+card.dataset.i]; const pi=c&&c.querySelector('[data-l="poPreco"]'); if(pi) pi.focus(); } } refreshCalc(); markDirty(); };
   box.onclick=e=>{ const b=e.target.closest("[data-act]"); if(!b) return; const i=+b.closest(".line").dataset.i;
@@ -757,6 +848,35 @@ function renderLines(){
     renderLines(); refreshCalc(); markDirty(); };
 }
 function lnHead(i,label){ return `<div class="lnhead"><span class="ln">${label} ${i+1}</span><span data-o="warn"></span><span class="sp"><button class="btn sm ghost" data-act="up" title="Subir" aria-label="Subir">${ico("up")}</button><button class="btn sm ghost" data-act="dup" title="Duplicar" aria-label="Duplicar">${ico("copy")}</button><button class="btn sm ghost danger" data-act="del" title="Remover" aria-label="Remover">${ico("trash")}</button></span></div>`; }
+function lineRevHTML(L,i,q){
+  const RT=REV[q.tipo];
+  if(L.nota) return `<div class="line rvnota" data-i="${i}">${lnHead(i,"Nota")}<div class="pv" style="display:grid;place-items:center"><span class="hint">Texto para o cliente</span></div>
+    <div><label class="f"><span>Nota (sai no PDF, sem preço)</span><textarea class="i" data-l="texto" rows="2" placeholder="Ex.: A lâmina e a caixa não é possível fazer na cor 7016 texturado.">${esc(L.texto||"")}</textarea></label></div></div>`;
+  return `<div class="line" data-i="${i}">${lnHead(i,RT.un)}
+   <div class="pv"><div style="width:100%" data-o="svg">${revSVG(L)}</div></div>
+   <div><div class="fields">
+    <label class="f w3"><span>Modelo</span><select class="i" data-l="modelo">${RT.modelos.map(m=>`<option value="${m.k}" ${L.modelo===m.k?"selected":""}>${esc(m.nome)}</option>`).join("")}</select></label>
+    <label class="f w3"><span>Artigo (título no PDF)</span><input class="i" data-l="produto" value="${esc(L.produto)}"></label>
+    <label class="f"><span>Largura (mm)</span><input class="i num" inputmode="decimal" data-l="larg" value="${esc(L.larg)}"></label>
+    <label class="f"><span>Altura (mm)</span><input class="i num" inputmode="decimal" data-l="alt" value="${esc(L.alt)}"></label>
+    <label class="f"><span>Quant.</span><input class="i num" inputmode="numeric" data-l="qt" value="${esc(L.qt)}"></label>
+    <label class="f"><span>Custo (€)</span><input class="i num rvcost" inputmode="decimal" data-l="custo" value="${esc(L.custo)}" placeholder="0,00"></label>
+    <label class="f"><span>Custo por</span><select class="i" data-l="custoModo"><option value="un" ${L.custoModo!=="m2"?"selected":""}>unidade</option><option value="m2" ${L.custoModo==="m2"?"selected":""}>m²</option></select></label>
+    ${L.custoModo==="m2"?`<label class="f"><span>Mínimo (m²)</span><input class="i num" inputmode="decimal" data-l="minM2" value="${esc(L.minM2??"")}" placeholder="—"></label>`:""}
+    <label class="f"><span>Margem % (opc.)${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" data-l="margem" value="${esc(L.margem)}" placeholder="geral" ${S.admin?"":"disabled"}></label>
+    <label class="f w2"><span>Desenho</span><select class="i" data-l="des">${REV_DES.map(([k,n])=>`<option value="${k}" ${L.des===k?"selected":""}>${esc(n)}</option>`).join("")}</select></label>
+    ${L.des==="estore"?`<label class="f w2"><span>Legenda da caixa</span><input class="i" data-l="caixa" value="${esc(L.caixa||"")}" placeholder="CAIXA PVC 185"></label>`:""}
+    <label class="f w6"><span>Especificações (saem no PDF)</span><textarea class="i" data-l="specs" rows="4">${esc(L.specs||"")}</textarea></label>
+   </div><div class="out"><span>m² <b data-o="m2"></b></span><span>Custo un. <b data-o="custo"></b></span><span>Preço un. <b data-o="unit"></b></span><span>Lucro <b data-o="lucro"></b></span><span class="tot">Total <b data-o="tot"></b></span></div></div></div>`;
+}
+function distribuirCusto(q){
+  const tot=num(q.job&&q.job.custoForn); if(!(tot>0)){ toast("Indique primeiro o custo total do fornecedor."); return; }
+  const items=q.linhas.filter(L=>!L.nota); const S2=items.reduce((s,L)=>s+num(L.larg)*num(L.alt)*Math.max(0,Math.round(num(L.qt))),0);
+  if(!S2){ toast("As posições precisam de largura, altura e quantidade."); return; }
+  let acc=0; items.forEach(L=>{ L.custoModo="un"; const v=Math.round(tot*num(L.larg)*num(L.alt)/S2*100)/100; L.custo=v.toFixed(2).replace(".",","); acc+=v*Math.max(0,Math.round(num(L.qt))); });
+  const diff=Math.round((tot-acc)*100)/100; if(diff){ const L=[...items].reverse().find(x=>Math.round(num(x.qt))===1)||items[items.length-1]; L.custo=(num(L.custo)+diff/Math.max(1,Math.round(num(L.qt)))).toFixed(2).replace(".",","); }
+  renderLines(); refreshCalc(); markDirty(); toast("Custo distribuído por m². Pode ajustar posição a posição.");
+}
 function lineChapaHTML(L,i,P){
   return `<div class="line" data-i="${i}">${lnHead(i,"Peça")}
    <div class="pv"><div class="svgh" style="width:100%">${perfilSVG(L.abas,L.angs)}</div><div class="lbl" data-o="dv"></div></div>
@@ -826,8 +946,10 @@ function linePainelHTML(L,i,P){
 }
 
 function refreshCalc(){
-  const q=S.cur; if(!q||S.view!=="editor") return; const r=calcQuote(q,S.P); S.lastCalc=r; const ch=q.tipo==="chapas";
+  const q=S.cur; if(!q||S.view!=="editor") return; const r=calcQuote(q,S.P); S.lastCalc=r; const ch=q.tipo==="chapas", rv=isRev(q);
   $$("#lines .line").forEach(card=>{ const x=r.linhas[+card.dataset.i]; if(!x) return; const o=k=>card.querySelector(`[data-o="${k}"]`);
+    if(rv){ if(x.nota||!o("unit")) return; o("m2").textContent=fmt(x.m2,2); o("custo").textContent=eur(x.custoUn); o("unit").textContent=eur(x.unit); o("lucro").textContent=eur(x.venda-x.custo); o("tot").textContent=eur(x.venda);
+      o("warn").innerHTML= x.semCusto? `<span class="warnchip">Falta o preço de custo</span>` : (!(num(x.L.larg)>0&&num(x.L.alt)>0)?`<span class="warnchip">Faltam as medidas</span>`:""); return; }
     if(ch&&!o("dv")) return; if(!ch&&!o("kg")) return;
     if(ch){ o("dv").textContent= x.dv? `desenv. ${fmt(x.dv,0)} mm` : ""; o("m2").textContent=fmt(x.m2,2); o("pecas").textContent=x.qt; o("quin").textContent=x.quin; o("custo").textContent=eur(x.custo); o("tot").textContent=eur(x.venda);
       x.med.forEach((m,k)=>{ const u=o("mu"+k), t=o("mt"+k); if(u) u.textContent= m.comp&&m.qt? eur(m.unit) : "—"; if(t) t.textContent= m.comp&&m.qt? eur(m.venda) : "—"; });
@@ -840,7 +962,7 @@ function refreshCalc(){
   const keys=Object.keys(r.brk).filter(k=>r.brk[k]>0.0049).sort((a,b)=>r.brk[b]-r.brk[a]);
   const tot=keys.reduce((s,k)=>s+r.brk[k],0)||1;
   $("#sumBox").innerHTML=`<h3>Resumo</h3>
-   <div class="kv"><span>${ch?"m² de peças":"m² de painéis"}</span><span class="num">${fmt(r.m2Tot,2)} m²</span></div>
+   <div class="kv"><span>${ch?"m² de peças":rv?"m² ("+REV[q.tipo].nome.toLowerCase()+")":"m² de painéis"}</span><span class="num">${fmt(r.m2Tot,2)} m²</span></div>
    ${ch?`<div class="kv"><span>m² de chapa gasta</span><span class="num">${fmt(r.grupos.reduce((s,g)=>s+g.m2Chapa,0),2)} m²</span></div>`:""}
    <div class="kv sep"><span>Custo</span><span class="num">${eur(r.custo)}</span></div>
    <div class="bar" aria-hidden="true">${keys.map((k,i)=>`<i style="width:${(r.brk[k]/tot*100).toFixed(2)}%;background:${BRK_COL[i%BRK_COL.length]}"></i>`).join("")}</div>
@@ -970,7 +1092,7 @@ function imgSize(d){ return new Promise(res=>{ const i=new Image(); i.onload=()=
 const PT=s=>String(s??"").replace(/[  ]/g," ").replace(/[−]/g,"-").replace(/[‘’]/g,"'").replace(/[“”]/g,'"');
 
 async function buildPDF(q){
-  const P=S.P, E=S.E, r=calcQuote(q,P), ch=q.tipo==="chapas";
+  const P=S.P, E=S.E, r=calcQuote(q,P), ch=q.tipo==="chapas", rv=isRev(q), soTotal=rv&&q.mostrar==="total";
   const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4",compress:true});
   const W=210,H=297,M=15; const A=[20,32,230], INK=[18,24,32], MUT=[95,105,118], LN=[205,211,219], SOFT=[238,240,253];
   const logo=await srcToDataURL(logoSrc()); const logoDim=logo? await imgSize(logo):null;
@@ -997,7 +1119,7 @@ async function buildPDF(q){
   header(true);
   // bloco título + cliente
   T("ORÇAMENTO",M,y+5,{b:1,s:20,c:INK});
-  T(ch?"Chapas quinadas":"Painéis",M,y+11,{s:10,c:A,b:1});
+  T(ch?"Chapas quinadas":rv?REV[q.tipo].nome:"Painéis",M,y+11,{s:10,c:A,b:1});
   const val=addDias(q.data,num(q.validade)||30);
   [["Nº",q.num],["Data",dataPT(q.data)],["Válido até",dataPT(val)],["Obra / ref.",q.obra||"—"]].forEach(([k,v],i)=>{ T(k,M,y+19+i*5,{s:8.5,c:MUT}); T(v,M+22,y+19+i*5,{s:9,b:i===0,w:65}); });
   const cx=W/2+4, cw=W-M-cx; doc.setFillColor(...SOFT); doc.roundedRect(cx,y,cw,36,1.5,1.5,"F");
@@ -1006,16 +1128,34 @@ async function buildPDF(q){
   [cl.morada,cl.nif?"NIF "+cl.nif:"",cl.contacto].filter(Boolean).forEach((l,i)=>T(l,cx+5,y+18+i*4.6,{s:8.5,c:MUT,w:cw-10}));
   y+=44;
   // tabela
-  const cols= ch? [{h:"#",w:7,a:"left"},{h:"Perfil",w:30},{h:"Descrição",w:46},{h:"Abas (mm)",w:28},{h:"Desenv. × Comp.",w:29,a:"right"},{h:"Qt",w:10,a:"right"},{h:"Preço un.",w:15,a:"right"},{h:"Total",w:15,a:"right"}]
+  const cols= rv? [{h:"#",w:7},{h:"Desenho",w:32},{h:"Descrição",w:soTotal?129:83},{h:"Qt",w:10,a:"right"},{h:soTotal?"":"Preço un.",w:soTotal?0:22,a:"right"},{h:soTotal?"":"Total",w:soTotal?0:24,a:"right"}]
+            : ch? [{h:"#",w:7,a:"left"},{h:"Perfil",w:30},{h:"Descrição",w:46},{h:"Abas (mm)",w:28},{h:"Desenv. × Comp.",w:29,a:"right"},{h:"Qt",w:10,a:"right"},{h:"Preço un.",w:15,a:"right"},{h:"Total",w:15,a:"right"}]
                 : [{h:"#",w:7},{h:"Descrição",w:72},{h:"Medida (mm)",w:28,a:"right"},{h:"m²",w:14,a:"right"},{h:"Qt",w:12,a:"right"},{h:"Preço un.",w:22,a:"right"},{h:"Total",w:25,a:"right"}];
   // Sem m² no orçamento de painéis (pedido de 2026-11-10: "tira os m2") — com os textos novos.
-  const semM2=!ch&&S.textosPdf; if(semM2){ cols[3].w=0; cols[3].h=""; }
+  const semM2=rv||(!ch&&S.textosPdf); if(semM2&&!rv){ cols[3].w=0; cols[3].h=""; }
   const tw=W-2*M; const sc=tw/cols.reduce((s,c)=>s+c.w,0); cols.forEach(c=>c.w*=sc);
   function thead(){ doc.setFillColor(...INK); doc.rect(M,y,tw,7,"F"); let x=M; cols.forEach(c=>{ if(c.h) T(c.h.toUpperCase(),c.a==="right"?x+c.w-2:x+2,y+4.7,{s:7,b:1,c:[255,255,255],a:c.a==="right"?"right":"left"}); x+=c.w; }); y+=7; }
   thead();
   r.linhas.forEach((x,i)=>{
     const L=x.L; let rows, rh;
-    if(ch){ const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.desc||"Chapa quinada"),cols[2].w-4); const spec=doc.setFontSize(7.5).splitTextToSize(PTL(`${fmt(num(L.esp),num(L.esp)%1?1:0)} mm · liga ${L.liga} · ${L.acab}`),cols[2].w-4);
+    if(rv&&x.nota){ const ls=doc.setFontSize(8.5).splitTextToSize(PTL(L.texto||""),tw-cols[0].w-6); rh=Math.max(9,5+ls.length*3.9);
+      if(need(rh)) thead(); T(String(i+1),M+2,y+5.5,{s:8.5,b:1,c:A}); doc.setFont("helvetica","italic"); doc.setFontSize(8.5); doc.setTextColor(...MUT); doc.text(ls,M+cols[0].w+2,y+5.5);
+    } else if(rv){
+      const desc=doc.setFontSize(8.8).splitTextToSize(PTL(L.produto||REV[q.tipo].un),cols[2].w-4);
+      const med=(num(L.larg)&&num(L.alt))? `Largura: ${fmt(num(L.larg),0)} mm × Altura: ${fmt(num(L.alt),0)} mm` : "";
+      const spec=doc.setFontSize(7.6).splitTextToSize(PTL(L.specs||""),cols[2].w-4).filter((l,k,a)=>!(l===""&&k===a.length-1));
+      const dbw=Math.min(cols[1].w-6,27), dbh=30; const shp=revShapes(L,dbw,dbh);
+      rh=Math.max(shp?shp.h+5:12, 6+desc.length*3.9+(med?4.3:0)+spec.length*3.35+2);
+      if(need(rh)) thead();
+      if(i%2===1){ doc.setFillColor(247,248,250); doc.rect(M,y,tw,rh,"F"); }
+      let xx=M; T(String(i+1),xx+2,y+5.5,{s:8.5,b:1,c:A}); xx+=cols[0].w;
+      if(shp) revPDFDraw(doc,L,xx+2,y+2.5,dbw,dbh); xx+=cols[1].w;
+      doc.setFont("helvetica","bold"); doc.setFontSize(8.8); doc.setTextColor(...INK); doc.text(desc,xx+2,y+5.5); let yy=y+5.5+desc.length*3.9;
+      if(med){ doc.setFont("helvetica","bold"); doc.setFontSize(7.9); doc.setTextColor(47,58,70); doc.text(PTL(med),xx+2,yy); yy+=4.3; }
+      doc.setFont("helvetica","normal"); doc.setFontSize(7.6); doc.setTextColor(...MUT); doc.text(spec,xx+2,yy); xx+=cols[2].w;
+      T(String(x.qt),xx+cols[3].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[3].w;
+      if(!soTotal){ T(eur(x.unit),xx+cols[4].w-2,y+5.5,{s:8.5,a:"right"}); xx+=cols[4].w; T(eur(x.venda),xx+cols[5].w-2,y+5.5,{s:8.5,b:1,a:"right"}); }
+    } else if(ch){ const desc=doc.setFontSize(8.5).splitTextToSize(PTL(L.desc||"Chapa quinada"),cols[2].w-4); const spec=doc.setFontSize(7.5).splitTextToSize(PTL(`${fmt(num(L.esp),num(L.esp)%1?1:0)} mm · liga ${L.liga} · ${L.acab}`),cols[2].w-4);
       const ab=doc.setFontSize(8).splitTextToSize(PTL(perfilGeom(L.abas,L.angs).abas.map(a=>fmt(a,a%1?1:0)).join(" / ")),cols[3].w-4);
       const MD=x.med.filter(m=>m.comp>0&&m.qt>0); const nMed=Math.max(1,MD.length);
       rh=Math.max(24,6+desc.length*3.8+spec.length*3.4+2, 9+nMed*4.2+4);
@@ -1076,7 +1216,7 @@ async function buildPDF(q){
     }
     y+=rh; doc.setDrawColor(...LN); doc.setLineWidth(.2); doc.line(M,y,W-M,y);
   });
-  const nUn=r.linhas.reduce((s,x)=>s+x.qt,0);
+  const nUn=r.linhas.reduce((s,x)=>s+(x.qt||0),0);
   y+=4; T(semM2? `Total — ${nUn} unid.` : `Total — ${nUn} unid. · ${fmt(r.m2Tot,2)} m²`,M,y+3,{s:8.5,c:MUT});
   // totais
   const tl=[["Subtotal",eur(r.sub)]]; if(r.descEur) tl.push([`Desconto ${fmt(num(q.desconto),num(q.desconto)%1?1:0)}%`,"-"+eur(r.descEur)]);

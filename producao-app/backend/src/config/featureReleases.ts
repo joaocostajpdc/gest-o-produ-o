@@ -54,6 +54,7 @@ export const FEATURES = {
   filtrosNovos: "Filtros com várias escolhas (como nas Listagens) em todas as páginas com filtros",
   inicioNovo: "Início novo: pesquisa, números do dia, áreas com atalhos e contadores, Precisa de atenção e Abertas recentemente",
   orcamentoTextos: "Orçamentos de painéis: acabamento face 1 e 2, vidro e observações escritos à mão, no PDF no formato das OS",
+  orcamentosRevenda: "Orçamentos de estores e mosquiteiras (revenda): medidas, preço de custo e margem, PDF limpo para o cliente",
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
 } as const;
 

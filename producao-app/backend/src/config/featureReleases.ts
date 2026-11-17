@@ -51,6 +51,7 @@ export const FEATURES = {
   objetivos: "Objetivos: faturação e negócio fechado contra os objetivos do mês, trimestre e ano, para toda a equipa",
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
   orcamentosRevenda: "Orçamentos: estores e mosquiteiras (revenda)",
+  documentos: "Documentos (catálogos, tabelas de preço, por departamento)",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

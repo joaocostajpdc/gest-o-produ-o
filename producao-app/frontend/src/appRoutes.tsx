@@ -27,6 +27,7 @@ import { RelatoriosPage } from "./pages/RelatoriosPage";
 import { ChatPage } from "./pages/ChatPage";
 import { PlaneamentoPage } from "./pages/PlaneamentoPage";
 import { ObjetivosPage } from "./pages/ObjetivosPage";
+import { DocumentosPage } from "./pages/DocumentosPage";
 
 // ============================================================================
 // Páginas da área protegida, num só sítio: usadas pelo App (rota normal) e
@@ -64,6 +65,7 @@ export const protectedRoutes = (
     <Route path="/chat" element={<ChatPage />} />
     <Route path="/financeiro" element={<FinanceiroPage />} />
     <Route path="/relatorios" element={<RelatoriosPage />} />
+    <Route path="/documentos" element={<DocumentosPage />} />
     <Route path="/reports" element={<PrintableListPage />} />
     <Route path="/products" element={<ProductsPage />} />
     <Route path="/stages" element={<StagesPage />} />

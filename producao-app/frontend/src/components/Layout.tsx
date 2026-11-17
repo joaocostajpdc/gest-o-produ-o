@@ -225,6 +225,15 @@ function IconChat(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Ícone dos "Documentos" (pasta aberta).
+function IconFolder(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+    </svg>
+  );
+}
+
 // Ícone do "Início" (casa).
 function IconHome(props: SVGProps<SVGSVGElement>) {
   return (
@@ -276,6 +285,7 @@ export function Layout() {
   const kmViaturas = useFeature("kmViaturas");
   const financeiro = useFeature("financeiro");
   const relatorios = useFeature("relatorios");
+  const documentos = useFeature("documentos");
   // Chat interno (2026-10-24): contador de mensagens por ler no menu.
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -457,6 +467,16 @@ export function Layout() {
               <div className="section-label">Orçamentação</div>
               <NavLink to="/orcamentos">
                 <IconFileText /> Orçamentos
+              </NavLink>
+            </>
+          )}
+
+          {documentos.available && (
+            <>
+              <div className="section-label">Documentos</div>
+              <NavLink to="/documentos">
+                <IconFolder /> Catálogos e Tabelas
+                {!documentos.released && <TestBadge />}
               </NavLink>
             </>
           )}

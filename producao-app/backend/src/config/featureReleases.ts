@@ -50,6 +50,7 @@ export const FEATURES = {
   fichaNova: "Ficha de Produção com layout novo (etapa atual, tabela de etapas com data e rubrica, notas)",
   objetivos: "Objetivos: faturação e negócio fechado contra os objetivos do mês, trimestre e ano, para toda a equipa",
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
+  orcamentosRevenda: "Orçamentos: estores e mosquiteiras (revenda)",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

@@ -124,6 +124,7 @@ export function HomePage() {
   const financeiro = useFeature("financeiro");
   const relatorios = useFeature("relatorios");
   const abas = useFeature("abas");
+  const documentos = useFeature("documentos");
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
   useEffect(() => {
@@ -247,6 +248,33 @@ export function HomePage() {
           sub: "O que vai sair do banco e quando",
           icon: areaIcons.financeiro,
           badge: <span className="home-lock" title="Acesso restrito">{icons.lock} Restrito</span>,
+        },
+      ],
+    });
+  }
+
+  if (documentos.available) {
+    areas.push({
+      key: "documentos",
+      title: "Documentos",
+      desc: "Catálogos, tabelas de preço por departamento",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+      color: "#0369a1",
+      soft: "#e0f2fe",
+      tiles: [
+        {
+          to: "/documentos",
+          title: "Catálogos e Tabelas",
+          sub: "Comercial, Produção, Compras e Administrativo",
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+          ),
         },
       ],
     });

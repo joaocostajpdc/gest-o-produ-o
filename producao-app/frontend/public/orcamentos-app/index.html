@@ -61,6 +61,14 @@ main{padding-block:22px 60px}
 .btn.sm{padding:5px 9px;font-size:13px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn svg{width:16px;height:16px;flex:none}
+/* novo-orc dropdown */
+.novo-orc{position:relative}
+.novo-orc .dropdown{position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:220px;overflow:hidden;z-index:50}
+.novo-orc .dropdown button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:11px 14px;cursor:pointer;font-size:14px;font-weight:600;text-align:left;color:var(--fg)}
+.novo-orc .dropdown button:hover{background:var(--surface-2)}
+.novo-orc .dropdown button .tipo-icon{width:32px;height:32px;border-radius:6px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.novo-orc .dropdown button .tipo-icon svg{width:17px;height:17px}
+.novo-orc .dropdown .sep{height:1px;background:var(--line);margin:0}
 
 /* forms */
 label.f{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -92,6 +100,8 @@ textarea.i{resize:vertical;min-height:70px}
 .st-con{background:var(--sunken);color:var(--muted)}
 .tag{display:inline-block;padding:2px 7px;border-radius:4px;font:600 11px/1.4 var(--f-display);letter-spacing:.06em;text-transform:uppercase;background:var(--sunken);color:var(--muted)}
 .tag.ch{background:var(--accent-soft);color:var(--accent)}
+.tag.mosq{background:#d1fae5;color:#065f46}
+.tag.est{background:#fef3c7;color:#92400e}
 
 /* list */
 .sumrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
@@ -620,18 +630,31 @@ function renderLista(){
   const lista=qs.filter(q=>(!S.filtro||q.estado===S.filtro)&&(!b||[q.num,q.cliente&&q.cliente.nome,q.obra].join(" ").toLowerCase().includes(b)));
   el.innerHTML=`
   <div class="view-head"><div><div class="eyebrow">${esc(S.E.nome)}</div><h1>Orçamentos</h1></div>
-    <button class="btn pri" data-new="chapas">${ico("plus")}Chapas quinadas</button>
-    <button class="btn pri" data-new="paineis">${ico("plus")}Painéis</button></div>
+    <div class="novo-orc" id="novoOrcWrap">
+      <button class="btn pri" id="bNovoOrc">${ico("plus")}Novo Orçamento</button>
+      <div class="dropdown" id="novoOrcDrop" hidden>
+        <button data-new="chapas"><span class="tipo-icon">${ico("layers")}</span><span>Chapas quinadas</span></button>
+        <div class="sep"></div>
+        <button data-new="paineis"><span class="tipo-icon">${ico("grid")}</span><span>Painéis</span></button>
+        <div class="sep"></div>
+        <button data-new="estores"><span class="tipo-icon">${ico("sun")}</span><span>Estores</span></button>
+        <div class="sep"></div>
+        <button data-new="mosquiteiras"><span class="tipo-icon">${ico("shield")}</span><span>Mosquiteiras (Revenda)</span></button>
+      </div>
+    </div></div>
   <div class="filters"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}">${S.filtro?`<button class="btn ghost" id="clrF">Mostrar todos os estados</button>`:""}</div>
   ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Obra / ref.</th><th>Tipo</th><th class="r">Total s/ IVA</th><th>Estado</th><th></th></tr></thead><tbody>
   ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="pill autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
-   <td><span class="tag ${q.tipo==="chapas"?"ch":""}">${q.tipo==="chapas"?"Chapas":"Painéis"}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
+   <td><span class="tag ${q.tipo==="chapas"?"ch":q.tipo==="mosquiteiras"?"mosq":q.tipo==="estores"?"est":""}">${q.tipo==="chapas"?"Chapas":q.tipo==="mosquiteiras"?"Mosquiteiras":q.tipo==="estores"?"Estores":"Painéis"}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
    <td><select class="i" data-est="${q.id}" aria-label="Estado" style="width:auto;padding:4px 6px">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
    <td class="r" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar">${ico("trash")}</button></span></td></tr>`).join("")}
   </tbody></table></div>`
-  : `<div class="panel empty"><h3>${qs.length?"Nenhum orçamento corresponde à pesquisa":"Ainda não há orçamentos"}</h3><p>${qs.length?"Altere a pesquisa ou o filtro de estado.":"Crie o primeiro com os botões <b>Chapas quinadas</b> ou <b>Painéis</b>. Os preços vêm das Tabelas de preços."}</p></div>`}`;
+  : `<div class="panel empty"><h3>${qs.length?"Nenhum orçamento corresponde à pesquisa":"Ainda não há orçamentos"}</h3><p>${qs.length?"Altere a pesquisa ou o filtro de estado.":"Clique em <b>+ Novo Orçamento</b> e escolha o tipo. Os preços vêm das Tabelas de preços."}</p></div>`}`;
+  // dropdown toggle
+  const bNovo=el.querySelector("#bNovoOrc"), drop=el.querySelector("#novoOrcDrop");
+  if(bNovo&&drop){ bNovo.onclick=e=>{ e.stopPropagation(); drop.hidden=!drop.hidden; }; }
   el.onclick=e=>{ const t=e.target;
-    const nb=t.closest("[data-new]"); if(nb) return novo(nb.dataset.new);
+    const nb=t.closest("[data-new]"); if(nb){ if(drop) drop.hidden=true; return novo(nb.dataset.new); }
     const f=t.closest("[data-f]"); if(f){ S.filtro=S.filtro===f.dataset.f?"":f.dataset.f; return renderLista(); }
     if(t.closest("#clrF")){ S.filtro=""; return renderLista(); }
     const d=t.closest("[data-dup]"); if(d){ e.stopPropagation(); return duplicar(d.dataset.dup); }
@@ -643,14 +666,25 @@ function renderLista(){
   };
   el.onchange=e=>{ const s=e.target.closest("[data-est]"); if(s) mudarEstado(s.dataset.est,s.value); };
   const bi=$("#busca",el); bi.oninput=()=>{ S.busca=bi.value; const pos=bi.selectionStart; renderLista(); const n=$("#busca"); n.focus(); n.setSelectionRange(pos,pos); };
+  // fechar dropdown ao clicar fora
+  document._novoDropClose=()=>{ const d2=document.getElementById("novoOrcDrop"); if(d2) d2.hidden=true; };
+  document.removeEventListener("click",document._novoDropClose);
+  document.addEventListener("click",document._novoDropClose);
 }
 function proximoNum(){ const y=new Date().getFullYear(); const pre=(S.P.prefixo||"ORC")+"-"+y+"-"; let mx=0; S.quotes.forEach(q=>{ if(String(q.num).startsWith(pre)){ mx=Math.max(mx,parseInt(String(q.num).slice(pre.length))||0); } }); return pre+String(mx+1).padStart(3,"0"); }
 function linhaChapa(prev){ return {id:uid(),desc:"",abas:"",angs:"",comp:3000,qt:1,medidas:[{comp:3000,qt:1}],esp:prev?prev.esp:1.5,liga:prev?prev.liga:(S.P.ligas[0]&&S.P.ligas[0].liga)||"1050",acab:prev?prev.acab:(S.P.acabamentos.find(a=>/quinad/i.test(a.nome))||S.P.acabamentos[0]||{}).nome||"",cantos:0}; }
 function linhaPainel(prev){ const p=prev||{}; return {id:uid(),tipo:p.tipo||"Liso",modelo:"",larg:2000,alt:800,espEnch:p.espEnch||24,espChapa:p.espChapa||1.5,liga:p.liga||"1050",nChapas:2,chComp:"",chLarg:"",acab1:p.acab1||"Lacado standard",acab2:p.acab2||"Lacado standard",vidro:"Sem vidro",alunoxRef:p.alunoxRef||"",alunoxM2:0,vidroM2:0,fresMin:S.P.fresagemMinDefault,moMin:S.P.moMinPainelDefault,aroM2:"",cilindro:0,puxador:0,puxEmb:0,led:0,fechadura:0,extras:0,qt:1,margem:""}; }
+function linhaMosquiteira(){ return {id:uid(),descricao:"",tipo:"Enrolar",larg:140,acabamento:"Branco",qt:1,pvUnit:0,total:0}; }
+function linhaEstor(){ return {id:uid(),descricao:"",larg:1000,alt:1200,acabamento:"Branco",qt:1,pvUnit:0,total:0}; }
 function novo(tipo){ if(S.dirty) saveQuote();
+  let linhas;
+  if(tipo==="chapas") linhas=[linhaChapa()];
+  else if(tipo==="mosquiteiras") linhas=[linhaMosquiteira()];
+  else if(tipo==="estores") linhas=[linhaEstor()];
+  else linhas=[linhaPainel()];
   const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
     margem:num(S.P.margem),desconto:0,notas:"",validade:num(S.P.validadeDias)||30,desenhos:[],
-    linhas:[tipo==="chapas"?linhaChapa():linhaPainel()], job:{moMin:num(S.P.moMinChapasDefault),transporte:0,outros:0,embalagem:true,override:{},overrideCortes:{},formatos:clone(S.P.formatos)}};
+    linhas, job:{moMin:num(S.P.moMinChapasDefault),transporte:0,outros:0,embalagem:true,override:{},overrideCortes:{},formatos:clone(S.P.formatos)}};
   S.cur=q; S.dirty=true; saveQuote(); go("editor"); }
 function abrir(id){ const q=S.quotes.find(x=>x.id===id); if(!q) return; S.cur=clone(q); S.cur.job ||= {}; S.cur.desenhos ||= []; S.dirty=false; go("editor"); }
 function duplicar(id){ const q=S.quotes.find(x=>x.id===id); if(!q) return; const n=clone(q); n.id=uid(); n.num=proximoNum(); n.criado=Date.now(); n.data=hoje(); n.estado="Em orçamento"; S.cur=n; S.dirty=true; saveQuote(); go("editor"); toast("Duplicado como "+n.num); }

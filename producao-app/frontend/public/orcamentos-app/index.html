@@ -601,6 +601,21 @@ async function initServer(){
       S.revenda=!!(Array.isArray(fs)&&fs.find(f=>f.key==="orcamentosRevenda"&&f.available)); }catch(_){ S.textosPdf=false; S.revenda=false; }
     S.db=SERVER_DB; S.assets=SERVER_FILES; S.downloads=SERVER_DL;
     if(b.precos&&b.precos.P) S.P=Object.assign(clone(DEFAULT_P),clone(b.precos.P));
+    // Carregar modelos e preços de revenda da DB (2026-11-17).
+    // Os modelos da DB têm {id,nome,pc,pv1,pv2}; convertemos para o formato do REV.
+    if(b.precos&&b.precos.REV){
+      ["mosquiteiras","estores"].forEach(tipo=>{
+        const dbT=b.precos.REV[tipo]; if(!dbT||!Array.isArray(dbT.modelos)||!dbT.modelos.length) return;
+        // Manter o modelo "livre" do código mas substituir os restantes pelos da DB
+        const livre=REV[tipo].modelos.find(x=>x.k==="livre");
+        const dbModelos=dbT.modelos.map(m=>({
+          k:m.id, nome:m.nome, produto:m.nome,
+          des: tipo==="mosquiteiras"? (m.nome.toLowerCase().includes("plissad")?"plis":m.nome.toLowerCase().includes("fixa")?"fixa":m.nome.toLowerCase().includes("correr")?"correr":"mosqV") : "estore",
+          specs:"", pc:m.pc, pv1:m.pv1, pv2:m.pv2
+        }));
+        REV[tipo].modelos=[...dbModelos,...(livre?[livre]:[])];
+      });
+    }
     if(b.empresa) S.E=Object.assign(clone(DEFAULT_E),clone(b.empresa));
     S.quotes=(b.orcamentos||[]).sort((x,y)=>(y.criado||0)-(x.criado||0)); S.ready=true; $("#banner").hidden=true;
     brand(); render();
@@ -748,7 +763,7 @@ function linhaChapa(prev){ return {id:uid(),desc:"",abas:"",angs:"",comp:3000,qt
 function linhaPainel(prev){ const p=prev||{}; return {id:uid(),tipo:p.tipo||"Liso",modelo:"",larg:2000,alt:800,espEnch:p.espEnch||24,espChapa:p.espChapa||1.5,liga:p.liga||"1050",nChapas:2,chComp:"",chLarg:"",acab1:p.acab1||"Lacado standard",acab2:p.acab2||"Lacado standard",vidro:"Sem vidro",alunoxRef:p.alunoxRef||"",alunoxM2:0,vidroM2:0,fresMin:S.P.fresagemMinDefault,moMin:S.P.moMinPainelDefault,aroM2:"",cilindro:0,puxador:0,puxEmb:0,led:0,fechadura:0,extras:0,qt:1,margem:""}; }
 function linhaRev(tipo,prev,k){ const T=REV[tipo]; const m=T.modelos.find(x=>x.k===(k||(prev&&prev.modelo)))||T.modelos[0];
   if(prev&&!k){ const n=clone(prev); n.id=uid(); n.larg=""; n.alt=""; n.qt=1; n.custo=""; n.nota=false; delete n.texto; return n; }
-  return {id:uid(),modelo:m.k,produto:m.produto,caixa:m.caixa||"",des:m.des,specs:m.specs,larg:"",alt:"",qt:1,custo:"",custoModo:"un",minM2:"",margem:""}; }
+  return {id:uid(),modelo:m.k,produto:m.produto,caixa:m.caixa||"",des:m.des,specs:m.specs,larg:"",alt:"",qt:1,custo:m.pc!=null?m.pc:"",custoModo:"m2",minM2:"",margem:""}; }
 function novo(tipo){ if(S.dirty) saveQuote();
   const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
     margem:num(S.P.margem),desconto:0,notas:"",validade:num(S.P.validadeDias)||30,desenhos:[],
@@ -854,7 +869,7 @@ function renderLines(){
   box.onchange=e=>{ if(q!==S.cur) return; const t=e.target, card=t.closest(".line");
     if(card&&t.dataset.foto!==undefined&&t.files&&t.files[0]){ fotoPainel(q.linhas[+card.dataset.i],t.files[0],card); t.value=""; return; }
     if(!card||!t.dataset.l||t.dataset.m) return; const L=q.linhas[+card.dataset.i]; L[t.dataset.l]=t.value;
-    if(rv&&t.dataset.l==="modelo"){ const m=REV[q.tipo].modelos.find(x=>x.k===t.value); if(m){ L.produto=m.produto; L.caixa=m.caixa||""; L.des=m.des; L.specs=m.specs; } renderLines(); refreshCalc(); markDirty(); return; }
+    if(rv&&t.dataset.l==="modelo"){ const m=REV[q.tipo].modelos.find(x=>x.k===t.value); if(m){ L.produto=m.produto; L.caixa=m.caixa||""; L.des=m.des; L.specs=m.specs; if(m.pc!=null) L.custo=m.pc; L.custoModo="m2"; } renderLines(); refreshCalc(); markDirty(); return; }
     if(rv&&(t.dataset.l==="des"||t.dataset.l==="custoModo")){ renderLines(); refreshCalc(); markDirty(); return; }
     if(!ch&&t.dataset.l==="aroM2"){ if(aroM2Auto(L)) L.aroM2=""; renderLines(); refreshCalc(); markDirty(); return; }
     if(!ch&&(t.dataset.l==="tipo"||t.dataset.l==="acab1"||t.dataset.l==="acab2")){ renderLines(); if(usaPoCliente(L)&&(t.dataset.l==="acab1"||t.dataset.l==="acab2")){ const c=$$("#lines .line")[+card.dataset.i]; const pi=c&&c.querySelector('[data-l="poPreco"]'); if(pi) pi.focus(); } } refreshCalc(); markDirty(); };

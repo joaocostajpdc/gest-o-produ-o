@@ -6,6 +6,7 @@ import { canManageConfig, canManageUsers, useAuth } from "../contexts/AuthContex
 import { useFeature } from "../contexts/FeaturesContext";
 import { FeatureTestBanner } from "../components/FeatureTestBanner";
 import logoMark from "../assets/logo-mark.png";
+import { HomepageCentral } from "./HomepageCentral";
 
 // ============================================================================
 // Ecrã inicial "Central Minho Ferragens" — pedido do utilizador de 2026-10-20.
@@ -112,6 +113,12 @@ const configSubs: Record<string, string> = {
 export function HomePage() {
   const { user, logout } = useAuth();
   const inicio = useFeature("inicio");
+  const homepageCentral = useFeature("homepageCentral");
+
+  // Nova homepage simplificada por departamentos (2026-11-19) — só para testers.
+  if (homepageCentral.available) {
+    return <HomepageCentral />;
+  }
   const cutPlans = useFeature("cutPlans");
   const planeamento = useFeature("planeamento");
   const objetivos = useFeature("objetivos");

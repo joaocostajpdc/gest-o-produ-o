@@ -219,52 +219,163 @@ function WidgetOS() {
   );
 }
 
+type ObjTab = "mes" | "trimestre" | "ano";
+
+interface ObjHistItem { label: string; fat: number | null; enc: number | null; fatTarget: number | null; encTarget: number | null; }
+
 function WidgetObjetivos() {
-  const [obj, setObj] = useState<ObjSummary | null>(null);
-  const [loading, setLoading] = useState(true);
   const now = new Date();
+  const [tab, setTab] = useState<ObjTab>("mes");
+  const [obj, setObj] = useState<ObjSummary | null>(null);
+  const [hist, setHist] = useState<ObjHistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Calcula período corrente por tab
+  const { periodType, period } = (() => {
+    if (tab === "mes")      return { periodType: "MES",       period: now.getMonth() + 1 };
+    if (tab === "trimestre") return { periodType: "TRIMESTRE", period: Math.ceil((now.getMonth() + 1) / 3) };
+    return                          { periodType: "ANO",        period: 1 };
+  })();
 
   useEffect(() => {
-    api.get<ObjSummary>(`/objetivos/resumo?periodType=MES&year=${now.getFullYear()}&period=${now.getMonth() + 1}`)
-      .then((r) => setObj(r))
+    setLoading(true);
+    setObj(null);
+    setHist([]);
+
+    const yr = now.getFullYear();
+
+    // Resumo do período atual
+    const main = api.get<ObjSummary>(`/objetivos/resumo?periodType=${periodType}&year=${yr}&period=${period}`);
+
+    // Histórico: 6 meses, 4 trimestres ou 3 anos
+    const histPromises: Promise<ObjSummary>[] = [];
+    const histLabels: string[] = [];
+
+    if (tab === "mes") {
+      const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(yr, now.getMonth() - i, 1);
+        histLabels.push(meses[d.getMonth()]);
+        histPromises.push(
+          api.get<ObjSummary>(`/objetivos/resumo?periodType=MES&year=${d.getFullYear()}&period=${d.getMonth() + 1}`)
+        );
+      }
+    } else if (tab === "trimestre") {
+      const curQ = Math.ceil((now.getMonth() + 1) / 3);
+      for (let i = 3; i >= 0; i--) {
+        let q = curQ - i; let y = yr;
+        if (q <= 0) { q += 4; y -= 1; }
+        histLabels.push(`Q${q} ${y}`);
+        histPromises.push(
+          api.get<ObjSummary>(`/objetivos/resumo?periodType=TRIMESTRE&year=${y}&period=${q}`)
+        );
+      }
+    } else {
+      for (let i = 2; i >= 0; i--) {
+        histLabels.push(String(yr - i));
+        histPromises.push(
+          api.get<ObjSummary>(`/objetivos/resumo?periodType=ANO&year=${yr - i}&period=1`)
+        );
+      }
+    }
+
+    Promise.all([main, Promise.all(histPromises)])
+      .then(([mainData, histData]) => {
+        setObj(mainData);
+        setHist(histData.map((h, i) => ({
+          label: histLabels[i],
+          fat: h.faturacao.actual,
+          enc: h.encomendas.actual,
+          fatTarget: h.faturacao.target,
+          encTarget: h.encomendas.target,
+        })));
+      })
       .catch(() => undefined)
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
   const fatPct = obj ? pct(obj.faturacao.actual, obj.faturacao.target) : null;
   const encPct = obj ? pct(obj.encomendas.actual, obj.encomendas.target) : null;
 
+  // Mini gráfico de barras
+  const MiniChart = ({ items, field }: { items: ObjHistItem[]; field: "fat" | "enc" }) => {
+    const vals = items.map(it => field === "fat" ? it.fat ?? 0 : it.enc ?? 0);
+    const targets = items.map(it => field === "fat" ? it.fatTarget : it.encTarget);
+    const maxVal = Math.max(...vals, 1);
+    return (
+      <div className="hw-chart">
+        {items.map((it, i) => {
+          const v = vals[i];
+          const t = targets[i];
+          const h = Math.round((v / maxVal) * 100);
+          const reached = t != null && v >= t;
+          return (
+            <div key={i} className="hw-chart-col" title={`${it.label}: ${fmt(v)}${t ? ` / ${fmt(t)}` : ""}`}>
+              <div className="hw-chart-bar-wrap">
+                {t != null && (
+                  <div className="hw-chart-target" style={{ bottom: `${Math.min(Math.round((t / maxVal) * 100), 100)}%` }} />
+                )}
+                <div
+                  className="hw-chart-bar"
+                  style={{ height: `${h}%`, background: reached ? "#16a34a" : field === "fat" ? "#1d4ed8" : "#0f766e" }}
+                />
+              </div>
+              <span className="hw-chart-lbl">{it.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const tabLabel = tab === "mes" ? `${now.toLocaleString("pt-PT",{month:"long"})} ${now.getFullYear()}`
+    : tab === "trimestre" ? `Q${Math.ceil((now.getMonth()+1)/3)} ${now.getFullYear()}`
+    : String(now.getFullYear());
+
   return (
     <div className="hw-body">
+      {/* Tabs */}
+      <div className="hw-obj-tabs">
+        {(["mes","trimestre","ano"] as ObjTab[]).map(t => (
+          <button key={t} className={`hw-obj-tab${tab===t?" hw-obj-tab--active":""}`} onClick={()=>setTab(t)}>
+            {t === "mes" ? "Mês" : t === "trimestre" ? "Trimestre" : "Ano"}
+          </button>
+        ))}
+      </div>
+
       {loading ? <p className="hw-load">A carregar…</p>
-      : !obj ? <p className="hw-empty">Sem dados para este mês.</p>
+      : !obj ? <p className="hw-empty">Sem dados.</p>
       : (
-        <div className="hw-obj-rows">
-          {[
-            { label: "Faturação",  data: obj.faturacao,  p: fatPct, c: "#1d4ed8" },
-            { label: "Encomendas", data: obj.encomendas, p: encPct, c: "#0f766e" },
-          ].map(({ label, data, p, c }) => (
-            <div key={label} className="hw-obj-row">
-              <div className="hw-obj-labels">
-                <span className="hw-obj-name">{label}</span>
-                <span className="hw-obj-vals">
-                  <strong>{fmt(data.actual)}</strong>
-                  {data.target && <span className="hw-obj-of"> / {fmt(data.target)}</span>}
-                </span>
-              </div>
-              {data.target && (
-                <div className="hw-bar-wrap">
-                  <div className="hw-bar" style={{ "--p": `${Math.min(p ?? 0, 100)}%`, "--c": p != null && p >= 100 ? "#16a34a" : c } as React.CSSProperties} />
-                  {data.expectedByNow != null && (
-                    <div className="hw-bar-pace" style={{ left: `${Math.min(Math.round((data.expectedByNow / data.target) * 100), 100)}%` }} title="Ritmo esperado" />
-                  )}
+        <>
+          <p className="hw-obj-period">{tabLabel}</p>
+          <div className="hw-obj-rows">
+            {[
+              { label: "Faturação",  data: obj.faturacao,  p: fatPct, c: "#1d4ed8", field: "fat" as const },
+              { label: "Encomendas", data: obj.encomendas, p: encPct, c: "#0f766e", field: "enc" as const },
+            ].map(({ label, data, p, c, field }) => (
+              <div key={label} className="hw-obj-block">
+                <div className="hw-obj-labels">
+                  <span className="hw-obj-name">{label}</span>
+                  <span className="hw-obj-vals">
+                    <strong>{fmt(data.actual)}</strong>
+                    {data.target && <span className="hw-obj-of"> / {fmt(data.target)}</span>}
+                    {p != null && <span className={`hw-pct${p >= 100 ? " hw-pct--ok" : ""}`}> {p}%</span>}
+                  </span>
                 </div>
-              )}
-              {p != null && <span className={`hw-pct${p >= 100 ? " hw-pct--ok" : ""}`}>{p}%</span>}
-            </div>
-          ))}
-        </div>
+                {data.target && (
+                  <div className="hw-bar-wrap">
+                    <div className="hw-bar" style={{ "--p": `${Math.min(p ?? 0, 100)}%`, "--c": p != null && p >= 100 ? "#16a34a" : c } as React.CSSProperties} />
+                    {data.expectedByNow != null && (
+                      <div className="hw-bar-pace" style={{ left: `${Math.min(Math.round((data.expectedByNow / data.target) * 100), 100)}%` }} title="Ritmo esperado" />
+                    )}
+                  </div>
+                )}
+                {hist.length > 0 && <MiniChart items={hist} field={field} />}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -743,7 +854,16 @@ export function HomepageCentral() {
         .hw-os-days--late { color:#dc2626; font-weight:700; }
 
         /* ── Objetivos widget ── */
+        .hw-obj-tabs { display:flex; gap:4px; margin-bottom:2px; }
+        .hw-obj-tab {
+          font-size:.75rem; font-weight:600; padding:3px 10px; border-radius:999px; border:none; cursor:pointer;
+          background:transparent; color:var(--fg-muted,#6b7280); transition:background .15s, color .15s;
+        }
+        .hw-obj-tab:hover { background:var(--surface-hover,#f3f4f6); color:var(--fg,#111827); }
+        .hw-obj-tab--active { background:var(--fg,#111827); color:#fff; }
+        .hw-obj-period { margin:0 0 4px; font-size:.75rem; color:var(--fg-muted,#9ca3af); text-transform:capitalize; }
         .hw-obj-rows { display:flex; flex-direction:column; gap:14px; }
+        .hw-obj-block { display:flex; flex-direction:column; gap:5px; }
         .hw-obj-row  { display:flex; flex-direction:column; gap:5px; }
         .hw-obj-labels { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
         .hw-obj-name { font-size:.82rem; color:var(--fg-muted,#6b7280); }
@@ -752,8 +872,15 @@ export function HomepageCentral() {
         .hw-bar-wrap { position:relative; height:6px; background:var(--border,#e5e7eb); border-radius:4px; overflow:visible; }
         .hw-bar { position:absolute; inset:0; width:var(--p,0%); background:var(--c,#1d4ed8); border-radius:4px; transition:width .4s; }
         .hw-bar-pace { position:absolute; top:-3px; width:2px; height:12px; background:#f59e0b; border-radius:2px; transform:translateX(-50%); }
-        .hw-pct { font-size:.78rem; font-weight:600; color:var(--fg-muted,#6b7280); text-align:right; }
+        .hw-pct { font-size:.78rem; font-weight:600; color:var(--fg-muted,#6b7280); }
         .hw-pct--ok { color:#16a34a; }
+        /* mini chart */
+        .hw-chart { display:flex; align-items:flex-end; gap:3px; height:38px; margin-top:4px; }
+        .hw-chart-col { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; min-width:0; }
+        .hw-chart-bar-wrap { position:relative; width:100%; flex:1; display:flex; align-items:flex-end; }
+        .hw-chart-bar { width:100%; border-radius:3px 3px 0 0; min-height:2px; transition:height .3s; }
+        .hw-chart-target { position:absolute; left:0; right:0; height:1px; background:#f59e0b; opacity:.8; }
+        .hw-chart-lbl { font-size:.62rem; color:var(--fg-muted,#9ca3af); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; }
 
         /* ── Planeamento widget ── */
         .hw-plan-summary { margin:0; font-size:.82rem; color:var(--fg-muted,#6b7280); }
@@ -807,6 +934,10 @@ export function HomepageCentral() {
           .hw-os-row:hover { background:#2a2a3e; }
           .hw-bar-wrap { background:#2d2d3f; }
           .hw-obj-vals strong { color:#f9fafb; }
+          .hw-obj-tab { color:#9ca3af; }
+          .hw-obj-tab:hover { background:#2a2a3e; color:#f9fafb; }
+          .hw-obj-tab--active { background:#f9fafb; color:#111827; }
+          .hw-chart-lbl { color:#6b7280; }
           .hw-plan-title { color:#f9fafb; }
           .hw-plan-summary strong { color:#f9fafb; }
           .hw-mat-desc { color:#f9fafb; }

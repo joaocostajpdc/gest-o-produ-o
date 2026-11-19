@@ -113,7 +113,7 @@ export function HomepageCentral() {
 
   useEffect(() => {
     api
-      .get<OSItem[]>("/service-orders?status=PENDENTE")
+      .get<OSItem[]>("/service-orders?status=NAO_INICIADA,EM_PRODUCAO")
       .then((r) => {
         // A API já devolve ordenado por prioridade. Limitamos a 8 para o painel.
         setOsList((r ?? []).slice(0, 8));

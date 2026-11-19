@@ -141,7 +141,14 @@ serviceOrdersRouter.get(
     const { status, stageId, supplierId, clientId, priority, search, category } = req.query;
 
     const where: any = {};
-    if (status) where.status = String(status);
+    if (status) {
+      const statusVal = String(status);
+      if (statusVal.includes(",")) {
+        where.status = { in: statusVal.split(",").map((s) => s.trim()) };
+      } else {
+        where.status = statusVal;
+      }
+    }
     if (clientId) where.clientId = String(clientId);
     // Filtra pela categoria "leve" do produto associado (ex.: "Mosquiteiras"),
     // útil quando há muitas OS de categorias diferentes em simultâneo.

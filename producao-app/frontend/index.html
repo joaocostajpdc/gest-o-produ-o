@@ -40,17 +40,32 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Remove o splash assim que o React montar o primeiro componente
+      // Remove o splash assim que o React montar (qualquer mudança no root)
       const obs = new MutationObserver(() => {
         const splash = document.getElementById('splash');
-        if (splash && document.getElementById('root').children.length > 1) {
+        if (splash) {
           splash.style.opacity = '0';
           splash.style.transition = 'opacity .3s';
           setTimeout(() => splash.remove(), 300);
           obs.disconnect();
         }
       });
-      obs.observe(document.getElementById('root'), { childList: true });
+      obs.observe(document.getElementById('root'), { childList: true, subtree: false });
+
+      // Fallback: se o React não carregou em 10s, mostra diagnóstico
+      setTimeout(() => {
+        const splash = document.getElementById('splash');
+        if (splash) {
+          // React ainda não carregou — mostrar erro visível
+          splash.innerHTML = '<div style="color:#f87171;font-size:16px;padding:32px;text-align:center;"><div style="font-size:24px;margin-bottom:16px;">⚠️ A aplicação não carregou</div><div style="color:#8e96b8;margin-bottom:16px;">Erro ao iniciar o React. Abra a consola do browser (F12 → Console) para ver o erro.</div><button onclick="window.location.reload()" style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">Tentar novamente</button></div>';
+          splash.style.position = 'fixed';
+          splash.style.inset = '0';
+          splash.style.background = '#0f1322';
+          splash.style.display = 'flex';
+          splash.style.alignItems = 'center';
+          splash.style.justifyContent = 'center';
+        }
+      }, 10000);
     </script>
   </body>
 </html>

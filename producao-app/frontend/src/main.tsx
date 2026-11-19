@@ -5,6 +5,22 @@ import App from "./App";
 import { AuthProvider } from "./contexts/AuthContext";
 import "./styles/global.css";
 
+// Captura erros JS não tratados e mostra-os no ecrã (diagnóstico)
+window.addEventListener("error", (e) => {
+  const root = document.getElementById("root");
+  if (!root) return;
+  root.innerHTML = `<div style="position:fixed;inset:0;background:#0f1322;color:#fff;font-family:monospace;padding:32px;overflow-y:auto;z-index:9999">
+    <div style="font-size:20px;font-weight:700;color:#f87171;margin-bottom:16px">❌ Erro JavaScript</div>
+    <div style="color:#fca5a5;margin-bottom:12px">${e.message || "Erro desconhecido"}</div>
+    <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">Ficheiro: ${e.filename || "?"} linha ${e.lineno || "?"}:${e.colno || "?"}</div>
+    <button onclick="window.location.reload()" style="margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">Recarregar</button>
+  </div>`;
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("🔴 Promise não tratada:", e.reason);
+});
+
 // ErrorBoundary temporário para diagnóstico — mostra o erro em vez de página em branco
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },

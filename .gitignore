@@ -34,3 +34,4 @@ Thumbs.db
 
 # Prisma
 prisma/.env
+producao-app/frontend/tsconfig.tsbuildinfo

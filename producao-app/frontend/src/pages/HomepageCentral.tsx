@@ -94,12 +94,13 @@ function greeting() {
   return h < 13 ? "Bom dia" : h < 20 ? "Boa tarde" : "Boa noite";
 }
 
-function fmt(v: number) {
+function fmt(v: number | undefined | null) {
+  if (v == null) return "—";
   return v.toLocaleString("pt-PT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 }
 
-function pct(actual: number, target: number | null) {
-  if (!target) return null;
+function pct(actual: number | undefined | null, target: number | null | undefined) {
+  if (actual == null || !target) return null;
   return Math.min(Math.round((actual / target) * 100), 999);
 }
 

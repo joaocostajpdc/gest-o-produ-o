@@ -12,7 +12,45 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Ecrã de arranque — desaparece quando o React monta -->
+      <div id="splash" style="
+        position:fixed;inset:0;
+        background:#0f1322;
+        display:flex;flex-direction:column;
+        align-items:center;justify-content:center;
+        gap:20px;font-family:Inter,sans-serif;
+      ">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="12" fill="white"/>
+          <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle"
+            font-size="22" font-weight="800" fill="#1d4ed8">MF</text>
+        </svg>
+        <div style="color:#8e96b8;font-size:14px;letter-spacing:.05em;">A carregar…</div>
+        <div style="width:160px;height:3px;background:#1e2540;border-radius:99px;overflow:hidden;">
+          <div style="
+            height:100%;width:40%;background:#3b6ef0;border-radius:99px;
+            animation:sl 1.4s ease-in-out infinite;
+          "></div>
+        </div>
+        <style>
+          @keyframes sl{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+        </style>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Remove o splash assim que o React montar o primeiro componente
+      const obs = new MutationObserver(() => {
+        const splash = document.getElementById('splash');
+        if (splash && document.getElementById('root').children.length > 1) {
+          splash.style.opacity = '0';
+          splash.style.transition = 'opacity .3s';
+          setTimeout(() => splash.remove(), 300);
+          obs.disconnect();
+        }
+      });
+      obs.observe(document.getElementById('root'), { childList: true });
+    </script>
   </body>
 </html>

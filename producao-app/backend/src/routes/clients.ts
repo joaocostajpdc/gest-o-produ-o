@@ -189,7 +189,7 @@ clientsRouter.get(
           take: 50,
           select: {
             id: true,
-            orderNumber: true,
+            externalId: true,
             status: true,
             createdAt: true,
             description: true,

@@ -192,7 +192,7 @@ clientsRouter.get(
             externalId: true,
             status: true,
             createdAt: true,
-            description: true,
+            specifications: true,
           },
         },
       },

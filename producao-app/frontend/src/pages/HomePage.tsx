@@ -296,16 +296,9 @@ export function HomePage() {
     config.push({ to: "/users", label: "Utilizadores e Permissões" }, { to: "/acessos", label: "Acessos" }, { to: "/avisos-telegram", label: "Avisos Telegram" }, { to: "/emails-automaticos", label: "Avisos Semanais" });
   }
 
-  // Nova homepage simplificada por departamentos (2026-11-19) — só para testers.
-  // Colocado após todos os hooks para respeitar as regras do React.
-  if (homepageCentral.available) {
-    return <HomepageCentral />;
-  }
-
-  const firstName = user?.name?.split(" ")[0];
-
   // Lembra neste computador que já há acesso ao novo visual, para o ecrã de
   // entrada também aparecer novo aqui enquanto está em teste.
+  // ATENÇÃO: tem de ficar ANTES de qualquer return condicional (regras dos hooks).
   useEffect(() => {
     try {
       localStorage.setItem(CENTRAL_UI_KEY, "1");
@@ -313,6 +306,13 @@ export function HomePage() {
       /* sem armazenamento: não faz mal */
     }
   }, []);
+
+  // Nova homepage simplificada por departamentos (2026-11-19) — só para testers.
+  if (homepageCentral.available) {
+    return <HomepageCentral />;
+  }
+
+  const firstName = user?.name?.split(" ")[0];
 
   // Novo Início só com os ícones das áreas (2026-10-25), junto com as abas.
   if (abas.available) {

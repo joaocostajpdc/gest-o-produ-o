@@ -115,10 +115,6 @@ export function HomePage() {
   const inicio = useFeature("inicio");
   const homepageCentral = useFeature("homepageCentral");
 
-  // Nova homepage simplificada por departamentos (2026-11-19) — só para testers.
-  if (homepageCentral.available) {
-    return <HomepageCentral />;
-  }
   const cutPlans = useFeature("cutPlans");
   const planeamento = useFeature("planeamento");
   const objetivos = useFeature("objetivos");
@@ -298,6 +294,12 @@ export function HomePage() {
   }
   if (canManageUsers(user?.role)) {
     config.push({ to: "/users", label: "Utilizadores e Permissões" }, { to: "/acessos", label: "Acessos" }, { to: "/avisos-telegram", label: "Avisos Telegram" }, { to: "/emails-automaticos", label: "Avisos Semanais" });
+  }
+
+  // Nova homepage simplificada por departamentos (2026-11-19) — só para testers.
+  // Colocado após todos os hooks para respeitar as regras do React.
+  if (homepageCentral.available) {
+    return <HomepageCentral />;
   }
 
   const firstName = user?.name?.split(" ")[0];

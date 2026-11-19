@@ -53,6 +53,7 @@ export const FEATURES = {
   orcamentosRevenda: "Orçamentos: estores e mosquiteiras (revenda)",
   documentos: "Documentos (catálogos, tabelas de preço, por departamento)",
   homepageCentral: "Homepage Central simplificada por departamentos (Produção, Administrativo, Financeiro, Comercial, Objetivos)",
+  clientes: "Clientes: listagem e área comercial com filtros por zona e comercial",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

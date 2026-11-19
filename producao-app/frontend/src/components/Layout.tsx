@@ -286,6 +286,7 @@ export function Layout() {
   const financeiro = useFeature("financeiro");
   const relatorios = useFeature("relatorios");
   const documentos = useFeature("documentos");
+  const clientesFt = useFeature("clientes");
   // Chat interno (2026-10-24): contador de mensagens por ler no menu.
   const chat = useFeature("chat");
   const [chatUnread, setChatUnread] = useState(0);
@@ -462,12 +463,20 @@ export function Layout() {
             </>
           )}
 
-          {orcamentos.available && (
+          {(orcamentos.available || clientesFt.available) && (
             <>
-              <div className="section-label">Orçamentação</div>
-              <NavLink to="/orcamentos">
-                <IconFileText /> Orçamentos
-              </NavLink>
+              <div className="section-label">Comercial</div>
+              {clientesFt.available && (
+                <NavLink to="/clientes">
+                  <IconUsers /> Clientes
+                  {!clientesFt.released && <TestBadge />}
+                </NavLink>
+              )}
+              {orcamentos.available && (
+                <NavLink to="/orcamentos">
+                  <IconFileText /> Orçamentos
+                </NavLink>
+              )}
             </>
           )}
 

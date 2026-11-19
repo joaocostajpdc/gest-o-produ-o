@@ -219,6 +219,17 @@ export interface Client {
   externalId: string;
   name: string;
   taxNumber?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  zone?: string | null;
+  comercial?: string | null;
+  status?: string | null;
+  newsletter?: string | null;
+  creditlimit?: number | null;
+  whatsappactive?: boolean | null;
+  syncedAt?: string;
+  _count?: { serviceOrders: number };
 }
 
 // ---------------------------------------------------------------------------

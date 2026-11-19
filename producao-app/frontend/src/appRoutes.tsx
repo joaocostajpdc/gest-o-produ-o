@@ -28,6 +28,7 @@ import { ChatPage } from "./pages/ChatPage";
 import { PlaneamentoPage } from "./pages/PlaneamentoPage";
 import { ObjetivosPage } from "./pages/ObjetivosPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
+import { ClientesPage } from "./pages/ClientesPage";
 
 // ============================================================================
 // Páginas da área protegida, num só sítio: usadas pelo App (rota normal) e
@@ -59,6 +60,7 @@ export const protectedRoutes = (
     <Route path="/otimizacao-corte/novo" element={<CutPlanNewPage />} />
     <Route path="/otimizacao-corte/:id" element={<CutPlanPage />} />
     <Route path="/orcamentos" element={<OrcamentosPage />} />
+    <Route path="/clientes" element={<ClientesPage />} />
     <Route path="/compras" element={<ComprasPage />} />
     <Route path="/controlo-horas" element={<HorasPage />} />
     <Route path="/km-carrinhas" element={<KmPage />} />

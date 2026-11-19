@@ -62,13 +62,20 @@ model User {
 // ---------------------------------------------------------------------------
 
 model Client {
-  id          String   @id @default(cuid())
-  externalId  String   @unique // id no Goldylocks
-  name        String
-  taxNumber   String?
-  email       String?
-  phone       String?
-  syncedAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  externalId     String   @unique // id no Goldylocks
+  name           String
+  taxNumber      String?
+  email          String?
+  phone          String?
+  mobile         String?
+  zone           String?  // Zona geográfica / comercial
+  comercial      String?  // Nome do comercial responsável
+  status         String?  // "Ativo", "Inativo", etc.
+  newsletter     String?
+  creditlimit    Decimal? @map("creditlimit")
+  whatsappactive Boolean? @map("whatsappactive")
+  syncedAt       DateTime @default(now())
 
   serviceOrders ServiceOrder[]
 

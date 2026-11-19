@@ -52,6 +52,7 @@ export const FEATURES = {
   leituraCodigo: "Ler código de barras: janela com a OS, a etapa atual e o botão para passar à seguinte (também com leitor USB)",
   orcamentosRevenda: "Orçamentos: estores e mosquiteiras (revenda)",
   documentos: "Documentos (catálogos, tabelas de preço, por departamento)",
+  homepageCentral: "Homepage Central simplificada por departamentos (Produção, Administrativo, Financeiro, Comercial, Objetivos)",
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;
@@ -65,7 +66,7 @@ export type FeatureKey = keyof typeof FEATURES;
 // voltar a restringir, tirar "orcamentos" de OPEN_TO_ALL e repô-lo aqui.
 // Financeiro (2026-10-24): "apenas eu" — nunca para todos. 2026-10-25: aberto
 // também à Alice Sousa (escolhida em testerUserIds).
-export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro", "financeiroAgenda", "relatorios"]);
+export const RESTRICTED_FEATURES: ReadonlySet<string> = new Set<string>(["financeiro", "financeiroAgenda", "relatorios", "homepageCentral"]);
 export const OPEN_TO_ALL: ReadonlySet<string> = new Set(["orcamentos"]);
 
 export function isFeatureKey(value: string): value is FeatureKey {

@@ -84,7 +84,7 @@ textarea.i{resize:vertical;min-height:70px}
 .hint{font-size:13px;color:var(--muted)}
 
 /* status pills */
-.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:3px;font-size:12px;font-weight:600;white-space:nowrap}
 .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .st-orc{background:var(--info-soft);color:var(--info)}
 .st-ace{background:var(--ok-soft);color:var(--ok)}
@@ -113,7 +113,15 @@ textarea.i{resize:vertical;min-height:70px}
 .sumcard .c{font-size:13px;color:var(--muted)}
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .filters .i{max-width:320px}
-.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+/* Barra de filtros ERP */
+.filters-bar{margin-bottom:14px;display:flex;flex-direction:column;gap:6px}
+.filters-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filter-search{flex:1;min-width:200px}
+.filter-search .i{width:100%}
+.filter-selects{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filter-selects .i{width:auto;min-width:140px}
+.filter-summary{font-size:12px;color:var(--muted);padding:0 2px}
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:3px}
 table.t{width:100%;border-collapse:collapse;font-size:14px}
 table.t th{font:600 12px/1.2 var(--f-display);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--surface-2);white-space:nowrap}
 table.t td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -253,16 +261,16 @@ table.mx td:first-child{text-align:left;white-space:nowrap;font-weight:500}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 /* Dentro da Gestão de Produção: mesmo aspeto do resto do programa */
-:root{--bg:#f3f4f8;--line:#e4e6ed;--line-2:#cfd3de;--fg:#1b2033;--muted:#667085;--accent:#1f3fe0;--accent-soft:#eef1ff;--r:9px;
+:root{--bg:#f3f4f8;--line:#e4e6ed;--line-2:#cfd3de;--fg:#1b2033;--muted:#667085;--accent:#1f3fe0;--accent-soft:#eef1ff;--r:3px;
   --f-body:"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif;--f-display:"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 .top{background:var(--surface);color:var(--fg);border-bottom:1px solid var(--line)}
 .top .brand{display:none}
 .top .wrap{padding-block:8px}
 nav.tabs{gap:4px}
-nav.tabs button{opacity:1;color:var(--muted);text-transform:none;letter-spacing:0;font:600 14px/1 var(--f-body);padding:9px 14px;border-radius:9px}
+nav.tabs button{opacity:1;color:var(--muted);text-transform:none;letter-spacing:0;font:600 14px/1 var(--f-body);padding:9px 14px;border-radius:3px}
 nav.tabs button:hover{background:var(--surface-2);color:var(--fg)}
 nav.tabs button[aria-current="page"]{background:var(--accent);color:#fff;box-shadow:none}
-.panel,.tbl-wrap,.sumcard{border-radius:12px;box-shadow:0 1px 2px rgba(20,24,45,.06)}
+.panel,.tbl-wrap,.sumcard{border-radius:3px;box-shadow:0 1px 2px rgba(20,24,45,.06)}
 .view-head h1{font-size:24px;font-weight:700}
 .qhead .qn{font-size:24px}
 .eyebrow{letter-spacing:.07em}
@@ -566,6 +574,7 @@ if(typeof module!=="undefined") module.exports={DEFAULT_P,calcQuote,calcPainelLi
 "use strict";
 /* ============================== ESTADO ============================== */
 const S = { P:clone(DEFAULT_P), E:clone(DEFAULT_E), quotes:[], cur:null, dirty:false, view:"lista", filtro:"", busca:"",
+  filtroEstado:"", filtroTipo:"", filtroAno:"",
   db:null, assets:null, downloads:null, ready:false, pTab:null, eTab:null, pDirty:false, eDirty:false, blobCache:{} };
 
 /* ---- ligação à API da Gestão de Produção (sessão do próprio programa) ---- */
@@ -714,9 +723,17 @@ function bindAut(q){
 }
 function renderLista(){
   const el=$("#v-lista"); const qs=S.quotes;
-  S.filtro=""; // cartões de totais por estado retirados (2026-10-26)
   const b=S.busca.toLowerCase();
-  const lista=qs.filter(q=>(!S.filtro||q.estado===S.filtro)&&(!b||[q.num,q.cliente&&q.cliente.nome,q.obra].join(" ").toLowerCase().includes(b)));
+  // Anos disponíveis nos orçamentos existentes
+  const anos=[...new Set(qs.map(q=>q.data?String(q.data).slice(0,4):null).filter(Boolean))].sort().reverse();
+  const lista=qs.filter(q=>{
+    if(S.filtroEstado && q.estado!==S.filtroEstado) return false;
+    if(S.filtroTipo && q.tipo!==S.filtroTipo) return false;
+    if(S.filtroAno && !String(q.data||"").startsWith(S.filtroAno)) return false;
+    if(b && ![q.num,q.cliente&&q.cliente.nome,q.obra].join(" ").toLowerCase().includes(b)) return false;
+    return true;
+  });
+  const temFiltro=S.filtroEstado||S.filtroTipo||S.filtroAno||S.busca;
   el.innerHTML=`
   <div class="view-head"><div><div class="eyebrow">${esc(S.E.nome)}</div><h1>Orçamentos</h1></div>
     <div class="novo-orc" id="novoOrcWrap">
@@ -728,14 +745,25 @@ function renderLista(){
         ${S.revenda?`<div class="sep"></div><button data-new="estores"><span class="tipo-icon">${ico("sun")}</span><span>Estores</span></button><div class="sep"></div><button data-new="mosquiteiras"><span class="tipo-icon">${ico("shield")}</span><span>Mosquiteiras (Revenda)</span></button>`:""}
       </div>
     </div></div>
-  <div class="filters"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}">${S.filtro?`<button class="btn ghost" id="clrF">Mostrar todos os estados</button>`:""}</div>
+  <div class="filters-bar">
+    <div class="filters-row">
+      <div class="filter-search"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}"></div>
+      <div class="filter-selects">
+        <select class="i" id="fEstado"><option value="">Todos os estados</option>${ESTADOS.map(e=>`<option value="${esc(e)}" ${S.filtroEstado===e?"selected":""}>${esc(e)}</option>`).join("")}</select>
+        <select class="i" id="fTipo"><option value="">Todos os tipos</option><option value="chapas" ${S.filtroTipo==="chapas"?"selected":""}>Chapas quinadas</option><option value="paineis" ${S.filtroTipo==="paineis"?"selected":""}>Painéis</option>${S.revenda?`<option value="estores" ${S.filtroTipo==="estores"?"selected":""}>Estores</option><option value="mosquiteiras" ${S.filtroTipo==="mosquiteiras"?"selected":""}>Mosquiteiras</option>`:""}</select>
+        ${anos.length?`<select class="i" id="fAno"><option value="">Todos os anos</option>${anos.map(a=>`<option value="${a}" ${S.filtroAno===a?"selected":""}>${a}</option>`).join("")}</select>`:""}
+        ${temFiltro?`<button class="btn ghost sm" id="clrF">Limpar filtros</button>`:""}
+      </div>
+    </div>
+    <div class="filter-summary">${lista.length} orçamento${lista.length!==1?"s":""} ${temFiltro?"encontrado"+(lista.length!==1?"s":""):"no total"}</div>
+  </div>
   ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Obra / ref.</th><th>Tipo</th><th class="r">Total s/ IVA</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="pill autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
+  ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="tag autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
    <td><span class="tag ${q.tipo==="chapas"?"ch":isRev(q)?"rv":""}">${tipoNome(q.tipo)}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
    <td><select class="i" data-est="${q.id}" aria-label="Estado" style="width:auto;padding:4px 6px">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
    <td class="r" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar">${ico("trash")}</button></span></td></tr>`).join("")}
   </tbody></table></div>`
-  : `<div class="panel empty"><h3>${qs.length?"Nenhum orçamento corresponde à pesquisa":"Ainda não há orçamentos"}</h3><p>${qs.length?"Altere a pesquisa ou o filtro de estado.":"Clique em <b>+ Novo Orçamento</b> e escolha o tipo. Os preços vêm das Tabelas de preços."}</p></div>`}`;
+  : `<div class="panel empty"><h3>${qs.length?"Nenhum orçamento corresponde aos filtros":"Ainda não há orçamentos"}</h3><p>${qs.length?"Ajuste os filtros ou pesquisa para ver resultados.":"Clique em <b>+ Novo Orçamento</b> e escolha o tipo. Os preços vêm das Tabelas de preços."}</p></div>`}`;
   // dropdown toggle
   const bNovo=el.querySelector("#bNovoOrc"), drop=el.querySelector("#novoOrcDrop");
   if(bNovo&&drop){ bNovo.onclick=e=>{ e.stopPropagation(); drop.hidden=!drop.hidden; }; }
@@ -745,7 +773,7 @@ function renderLista(){
   el.onclick=e=>{ const t=e.target;
     const nb=t.closest("[data-new]"); if(nb){ if(drop) drop.hidden=true; return novo(nb.dataset.new); }
     const f=t.closest("[data-f]"); if(f){ S.filtro=S.filtro===f.dataset.f?"":f.dataset.f; return renderLista(); }
-    if(t.closest("#clrF")){ S.filtro=""; return renderLista(); }
+    if(t.closest("#clrF")){ S.filtroEstado=""; S.filtroTipo=""; S.filtroAno=""; S.busca=""; return renderLista(); }
     const d=t.closest("[data-dup]"); if(d){ e.stopPropagation(); return duplicar(d.dataset.dup); }
     const x=t.closest("[data-del]"); if(x){ e.stopPropagation(); const w=$(`[data-delw="${x.dataset.del}"]`); w.innerHTML=`<span class="confirm">Apagar? <button class="btn sm danger" data-delok="${x.dataset.del}">Sim</button><button class="btn sm ghost" data-delno>Não</button></span>`; return; }
     const ok=t.closest("[data-delok]"); if(ok){ e.stopPropagation(); return apagar(ok.dataset.delok); }
@@ -753,8 +781,13 @@ function renderLista(){
     if(t.closest("select")) return;
     const o=t.closest("[data-open]"); if(o) abrir(o.dataset.open);
   };
-  el.onchange=e=>{ const s=e.target.closest("[data-est]"); if(s) mudarEstado(s.dataset.est,s.value); };
-  const bi=$("#busca",el); bi.oninput=()=>{ S.busca=bi.value; const pos=bi.selectionStart; renderLista(); const n=$("#busca"); n.focus(); n.setSelectionRange(pos,pos); };
+  el.onchange=e=>{
+    const s=e.target.closest("[data-est]"); if(s) return mudarEstado(s.dataset.est,s.value);
+    if(e.target.id==="fEstado"){ S.filtroEstado=e.target.value; return renderLista(); }
+    if(e.target.id==="fTipo"){ S.filtroTipo=e.target.value; return renderLista(); }
+    if(e.target.id==="fAno"){ S.filtroAno=e.target.value; return renderLista(); }
+  };
+  const bi=$("#busca",el); if(bi) bi.oninput=()=>{ S.busca=bi.value; const pos=bi.selectionStart; renderLista(); const n=$("#busca"); if(n){n.focus(); n.setSelectionRange(pos,pos);} };
 }
 function tipoNome(t){ return t==="chapas"?"Chapas":t==="estores"?"Estores":t==="mosquiteiras"?"Mosquiteiras":"Painéis"; }
 // Número provisório (só para mostrar até o servidor responder — é ele que dá o número definitivo).

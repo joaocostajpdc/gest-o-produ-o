@@ -808,8 +808,18 @@ function renderEditor(){
         <label class="f"><span>Outros (€)</span><input class="i num" inputmode="decimal" data-q="job.outros" value="${esc(q.job.outros)}"></label>
         <label class="f"><span>Embalagem</span><select class="i" data-q="job.embalagem" data-bool="1"><option value="1" ${q.job.embalagem!==false?"selected":""}>Incluir</option><option value="0" ${q.job.embalagem===false?"selected":""}>Não incluir</option></select></label>
       </div>
-      <div class="hint" style="margin-bottom:6px">Formatos de chapa a usar</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:14px">${(q.job.formatos||S.P.formatos).map((f,i)=>`<label style="display:flex;gap:6px;align-items:center" class="mono"><input type="checkbox" class="chk" data-fmt="${i}" ${f.on?"checked":""}>${f.c}×${f.l}</label>`).join("")}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div class="hint" style="margin:0">Formatos de chapa a usar</div>
+        <button class="btn secondary sm" id="bAddFmt" type="button" style="padding:2px 8px;font-size:.8rem">+ Formato especial</button>
+      </div>
+      <div id="fmtList" style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:6px">${(q.job.formatos||S.P.formatos).map((f,i)=>`<label style="display:flex;gap:6px;align-items:center" class="mono"><input type="checkbox" class="chk" data-fmt="${i}" ${f.on?"checked":""}>${f.c}×${f.l}${f._custom?` <span data-rmfmt="${i}" title="Remover" style="cursor:pointer;color:#ef4444;font-size:.85em;line-height:1">✕</span>`:""}  </label>`).join("")}</div>
+      <div id="fmtAddRow" style="display:none;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <input id="fmtC" class="i num" inputmode="numeric" placeholder="Comprimento" style="width:110px" type="text">
+        <span style="color:var(--muted)">×</span>
+        <input id="fmtL" class="i num" inputmode="numeric" placeholder="Largura" style="width:90px" type="text">
+        <button class="btn pri sm" id="bFmtOk" type="button">Adicionar</button>
+        <button class="btn secondary sm" id="bFmtCancel" type="button">Cancelar</button>
+      </div>
       <div class="plans" id="plans"></div></div></div>`:""}
 
     <div class="panel"><header><h2>Desenho do cliente</h2><span class="hint">Fotografia, imagem ou PDF do desenho. Sai no orçamento em PDF.</span>${ch&&S.readDrawing?`<button class="btn pri sm" id="bLer" ${q.desenhos.length?"":"disabled"}>${ico("eye")}Ler medidas do desenho</button>`:""}</header><div class="body">
@@ -852,6 +862,23 @@ function renderEditor(){
     if(t.dataset.fmt!==undefined){ q.job.formatos ||= clone(S.P.formatos); q.job.formatos[+t.dataset.fmt].on=t.checked; refreshCalc(); markDirty(); }
     if(t.dataset.ov!==undefined){ q.job.override ||= {}; q.job.override[t.dataset.ov]=t.value; refreshCalc(); markDirty(); }
     if(t.dataset.ovc!==undefined){ q.job.overrideCortes ||= {}; q.job.overrideCortes[t.dataset.ovc]=t.value; refreshCalc(); markDirty(); } };
+  // ── Formato especial (chapa não standard para este orçamento) ──────────────
+  if(ch){
+    const bAdd=$("#bAddFmt"), row=$("#fmtAddRow"), inpC=$("#fmtC"), inpL=$("#fmtL"), fmtList=$("#fmtList");
+    function renderFmtList(){ const fmts=q.job.formatos||S.P.formatos; fmtList.innerHTML=fmts.map((f,i)=>`<label style="display:flex;gap:6px;align-items:center" class="mono"><input type="checkbox" class="chk" data-fmt="${i}" ${f.on?"checked":""}>${f.c}×${f.l}${f._custom?` <span data-rmfmt="${i}" title="Remover" style="cursor:pointer;color:#ef4444;font-size:.85em;line-height:1">✕</span>`:""}</label>`).join(""); }
+    bAdd.onclick=()=>{ row.style.display="flex"; inpC.value=""; inpL.value=""; inpC.focus(); };
+    $("#bFmtCancel").onclick=()=>{ row.style.display="none"; };
+    $("#bFmtOk").onclick=()=>{
+      const c=parseInt(inpC.value)||0, l=parseInt(inpL.value)||0;
+      if(c<=0||l<=0){ toast("Indica o comprimento e a largura (em mm)"); return; }
+      q.job.formatos ||= clone(S.P.formatos);
+      q.job.formatos.push({c,l,on:true,_custom:true});
+      row.style.display="none"; renderFmtList(); refreshCalc(); markDirty();
+    };
+    fmtList.onclick=e=>{ const t=e.target; if(t.dataset.rmfmt!==undefined){ q.job.formatos ||= clone(S.P.formatos); q.job.formatos.splice(+t.dataset.rmfmt,1); renderFmtList(); refreshCalc(); markDirty(); } };
+    // Enter confirma nos inputs
+    [inpC,inpL].forEach(inp=>inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#bFmtOk").click(); } });
+  }
 }
 function setPath(o,p,v){ const k=p.split("."); let x=o; for(let i=0;i<k.length-1;i++){ x[k[i]] ||= {}; x=x[k[i]]; } x[k[k.length-1]]=v; }
 

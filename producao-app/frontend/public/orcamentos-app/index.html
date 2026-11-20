@@ -115,6 +115,21 @@ textarea.i{resize:vertical;min-height:70px}
 .sumcard .c{font-size:13px;color:var(--muted)}
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .filters .i{max-width:320px}
+/* lista — estado summary cards */
+.lista-sumrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:stretch}
+.lista-card{background:var(--surface);border:1px solid var(--line);border-left:3px solid currentColor;border-radius:6px;padding:10px 14px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:box-shadow .15s,border-color .15s;min-width:140px;flex:1}
+.lista-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.lista-card.lista-card-active{background:var(--accent-soft);border-color:var(--accent);border-left-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.lista-card-n{font:700 22px/1 var(--f-mono);color:var(--fg)}
+.lista-card-l{font:600 11px/1.3 var(--f-display);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.lista-card.lista-card-active .lista-card-l{color:var(--accent)}
+.lista-card.st-orc{border-left-color:var(--info)}
+.lista-card.st-ace{border-left-color:var(--ok)}
+.lista-card.st-rec{border-left-color:var(--bad)}
+.lista-card.st-con{border-left-color:var(--muted)}
+.lista-total-box{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 14px;display:flex;flex-direction:column;gap:4px;min-width:160px;align-self:stretch;justify-content:center}
+.lista-total-lbl{font:600 11px/1 var(--f-display);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.lista-total-v{font:700 18px/1 var(--f-mono);color:var(--fg)}
 /* Barra de filtros ERP */
 .filters-bar{margin-bottom:14px;display:flex;flex-direction:column;gap:6px}
 .filters-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -123,14 +138,32 @@ textarea.i{resize:vertical;min-height:70px}
 .filter-selects{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .filter-selects .i{width:auto;min-width:140px}
 .filter-summary{font-size:12px;color:var(--muted);padding:0 2px}
-.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:3px}
+/* tabela */
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
 table.t{width:100%;border-collapse:collapse;font-size:14px}
-table.t th{font:600 12px/1.2 var(--f-display);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--surface-2);white-space:nowrap}
-table.t td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.t th{font:600 11px/1.2 var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:2px solid var(--line);background:var(--surface);white-space:nowrap;user-select:none}
+table.t td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 table.t tr:last-child td{border-bottom:0}
 table.t td.r,table.t th.r{text-align:right}
 table.t tbody tr.click{cursor:pointer}
 table.t tbody tr.click:hover td{background:var(--surface-2)}
+/* sortable headers */
+.th-sort{cursor:pointer}
+.th-sort:hover{color:var(--fg)}
+.th-sort-active{color:var(--accent)!important}
+.sort-ico{display:inline-block;margin-left:4px;opacity:.45;font-size:11px}
+.th-sort-active .sort-ico{opacity:1}
+/* row helpers */
+.muted-cell{color:var(--muted);font-size:13px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-cell{font-size:13px;color:var(--muted)}
+.fw6{font-weight:600}
+.acts{opacity:0;transition:opacity .12s}
+table.t tbody tr:hover .acts{opacity:1}
+/* dias indicators */
+.dias-bad{color:var(--bad)!important;font-weight:600}
+.dias-warn{color:#D97706!important;font-weight:600}
+/* estado select inline */
+.est-sel{font-size:12px!important;padding:3px 6px!important;height:auto!important;border-radius:4px!important;min-width:0!important;cursor:pointer}
 .empty{padding:40px 20px;text-align:center;color:var(--muted)}
 .empty h3{font-size:20px;color:var(--fg);margin-bottom:6px}
 

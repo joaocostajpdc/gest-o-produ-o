@@ -70,6 +70,8 @@ input.i:hover,select.i:hover,textarea.i:hover{border-color:var(--line-2)}
 input.i:focus,select.i:focus,textarea.i:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 input.i.num{text-align:right}
 input.i:disabled,select.i:disabled{background:var(--sunken);color:var(--faint);border-color:transparent}
+@keyframes autofill-flash{0%{background:var(--ok-soft)}100%{background:var(--surface)}}
+input.autofill{animation:autofill-flash 1.8s ease forwards;border-color:var(--ok)!important}
 textarea.i{resize:vertical;min-height:70px}
 .grid{display:grid;gap:12px}
 .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -574,7 +576,8 @@ if(typeof module!=="undefined") module.exports={DEFAULT_P,calcQuote,calcPainelLi
 "use strict";
 /* ============================== ESTADO ============================== */
 const S = { P:clone(DEFAULT_P), E:clone(DEFAULT_E), quotes:[], cur:null, dirty:false, view:"lista", filtro:"", busca:"",
-  filtroEstado:"", filtroTipo:"", filtroAno:"",
+  filtroEstado:"", filtroTipo:"", filtroAno:"", filtroUser:"",
+  sortCol:"criado", sortDir:-1,
   db:null, assets:null, downloads:null, ready:false, pTab:null, eTab:null, pDirty:false, eDirty:false, blobCache:{} };
 
 /* ---- ligação à API da Gestão de Produção (sessão do próprio programa) ---- */
@@ -721,19 +724,45 @@ function bindAut(q){
       toast(aprovar?"Autorizado — margem/desconto aplicados":"Pedido recusado"); renderEditor(); }
     catch(e){ toast("Não foi possível decidir ("+(e.code||"?")+")"); b.disabled=false; } });
 }
+function diasAberto(q){
+  if(q.estado!=="Em orçamento"||!q.criado) return null;
+  return Math.floor((Date.now()-q.criado)/(1000*60*60*24));
+}
 function renderLista(){
   const el=$("#v-lista"); const qs=S.quotes;
   const b=S.busca.toLowerCase();
-  // Anos disponíveis nos orçamentos existentes
+  // Opções dinâmicas de filtro
   const anos=[...new Set(qs.map(q=>q.data?String(q.data).slice(0,4):null).filter(Boolean))].sort().reverse();
+  const users=[...new Set(qs.map(q=>q.criadoNome||"").filter(Boolean))].sort();
   const lista=qs.filter(q=>{
     if(S.filtroEstado && q.estado!==S.filtroEstado) return false;
     if(S.filtroTipo && q.tipo!==S.filtroTipo) return false;
     if(S.filtroAno && !String(q.data||"").startsWith(S.filtroAno)) return false;
-    if(b && ![q.num,q.cliente&&q.cliente.nome,q.obra].join(" ").toLowerCase().includes(b)) return false;
+    if(S.filtroUser && (q.criadoNome||"")!==S.filtroUser) return false;
+    if(b && ![q.num,q.cliente&&q.cliente.nome,q.obra,q.criadoNome].join(" ").toLowerCase().includes(b)) return false;
     return true;
   });
-  const temFiltro=S.filtroEstado||S.filtroTipo||S.filtroAno||S.busca;
+  // Sort
+  const col=S.sortCol, dir=S.sortDir;
+  lista.sort((a,b)=>{
+    let va,vb;
+    if(col==="num"){ va=String(a.num||""); vb=String(b.num||""); return dir*va.localeCompare(vb); }
+    if(col==="data"){ va=a.data||""; vb=b.data||""; return dir*va.localeCompare(vb); }
+    if(col==="cliente"){ va=(a.cliente&&a.cliente.nome)||""; vb=(b.cliente&&b.cliente.nome)||""; return dir*va.localeCompare(vb); }
+    if(col==="total"){ va=num(a.totais&&a.totais.base); vb=num(b.totais&&b.totais.base); return dir*(va-vb); }
+    if(col==="estado"){ va=a.estado||""; vb=b.estado||""; return dir*va.localeCompare(vb); }
+    if(col==="dias"){ va=diasAberto(a)??-1; vb=diasAberto(b)??-1; return dir*(va-vb); }
+    // default: criado
+    return dir*((a.criado||0)-(b.criado||0));
+  });
+  const temFiltro=S.filtroEstado||S.filtroTipo||S.filtroAno||S.filtroUser||S.busca;
+  // Total filtrado
+  const totalFiltrado=lista.reduce((s,q)=>s+num(q.totais&&q.totais.base),0);
+  // Contagens por estado para os cards
+  const cnt={};ESTADOS.forEach(e=>cnt[e]=0); qs.forEach(q=>{ if(cnt[q.estado]!==undefined) cnt[q.estado]++; });
+  // Sort icon helper
+  function thSort(c,lbl){ const active=col===c; const arr=active?(dir>0?"↑":"↓"):"↕"; return `<th class="${c==="total"||c==="dias"?"r":""} th-sort${active?" th-sort-active":""}" data-sort="${c}">${lbl}<span class="sort-ico">${arr}</span></th>`; }
+
   el.innerHTML=`
   <div class="view-head"><div><div class="eyebrow">${esc(S.E.nome)}</div><h1>Orçamentos</h1></div>
     <div class="novo-orc" id="novoOrcWrap">
@@ -745,23 +774,50 @@ function renderLista(){
         ${S.revenda?`<div class="sep"></div><button data-new="estores"><span class="tipo-icon">${ico("sun")}</span><span>Estores</span></button><div class="sep"></div><button data-new="mosquiteiras"><span class="tipo-icon">${ico("shield")}</span><span>Mosquiteiras (Revenda)</span></button>`:""}
       </div>
     </div></div>
+  <div class="lista-sumrow">
+    ${ESTADOS.map(e=>{
+      const cls=e==="Em orçamento"?"st-orc":e==="Aceite"?"st-ace":e==="Recusado"?"st-rec":"st-con";
+      return `<button class="lista-card ${cls}${S.filtroEstado===e?" lista-card-active":""}" data-f="${esc(e)}">
+        <span class="lista-card-n">${cnt[e]}</span>
+        <span class="lista-card-l">${esc(e)}</span>
+      </button>`;
+    }).join("")}
+    ${temFiltro?`<div class="lista-total-box"><div class="lista-total-lbl">Total filtrado s/ IVA</div><div class="lista-total-v">${eur(totalFiltrado)}</div></div>`:""}
+  </div>
   <div class="filters-bar">
     <div class="filters-row">
-      <div class="filter-search"><input class="i" id="busca" placeholder="Procurar por cliente, nº ou obra" value="${esc(S.busca)}"></div>
+      <div class="filter-search"><input class="i" id="busca" placeholder="Procurar por cliente, nº, obra ou utilizador" value="${esc(S.busca)}"></div>
       <div class="filter-selects">
         <select class="i" id="fEstado"><option value="">Todos os estados</option>${ESTADOS.map(e=>`<option value="${esc(e)}" ${S.filtroEstado===e?"selected":""}>${esc(e)}</option>`).join("")}</select>
         <select class="i" id="fTipo"><option value="">Todos os tipos</option><option value="chapas" ${S.filtroTipo==="chapas"?"selected":""}>Chapas quinadas</option><option value="paineis" ${S.filtroTipo==="paineis"?"selected":""}>Painéis</option>${S.revenda?`<option value="estores" ${S.filtroTipo==="estores"?"selected":""}>Estores</option><option value="mosquiteiras" ${S.filtroTipo==="mosquiteiras"?"selected":""}>Mosquiteiras</option>`:""}</select>
         ${anos.length?`<select class="i" id="fAno"><option value="">Todos os anos</option>${anos.map(a=>`<option value="${a}" ${S.filtroAno===a?"selected":""}>${a}</option>`).join("")}</select>`:""}
-        ${temFiltro?`<button class="btn ghost sm" id="clrF">Limpar filtros</button>`:""}
+        ${users.length>1?`<select class="i" id="fUser"><option value="">Todos os utilizadores</option>${users.map(u=>`<option value="${esc(u)}" ${S.filtroUser===u?"selected":""}>${esc(u)}</option>`).join("")}</select>`:""}
+        ${temFiltro?`<button class="btn ghost sm" id="clrF">Limpar</button>`:""}
       </div>
     </div>
-    <div class="filter-summary">${lista.length} orçamento${lista.length!==1?"s":""} ${temFiltro?"encontrado"+(lista.length!==1?"s":""):"no total"}</div>
+    <div class="filter-summary">${lista.length} orçamento${lista.length!==1?"s":""} ${temFiltro?"encontrado"+(lista.length!==1?"s":""):"no total"}${temFiltro?` · <b>${eur(totalFiltrado)}</b> s/ IVA`:""}</div>
   </div>
-  ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Obra / ref.</th><th>Tipo</th><th class="r">Total s/ IVA</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${lista.map(q=>`<tr class="click" data-open="${q.id}"><td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="tag autp" title="Autorização de preço pendente">Autorização</span>`:""}</td><td class="num">${dataPT(q.data)}</td><td>${esc(q.cliente&&q.cliente.nome||"—")}</td><td>${esc(q.obra||"")}</td>
-   <td><span class="tag ${q.tipo==="chapas"?"ch":isRev(q)?"rv":""}">${tipoNome(q.tipo)}</span></td><td class="r num">${eur(num(q.totais&&q.totais.base))}</td>
-   <td><select class="i" data-est="${q.id}" aria-label="Estado" style="width:auto;padding:4px 6px">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
-   <td class="r" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar">${ico("trash")}</button></span></td></tr>`).join("")}
+  ${lista.length?`<div class="tbl-wrap"><table class="t"><thead><tr>
+    ${thSort("num","Nº")}${thSort("data","Data")}${thSort("cliente","Cliente")}<th>Obra / ref.</th><th>Tipo</th>
+    ${users.length>1?`<th>Utilizador</th>`:""}
+    ${thSort("total","Total s/ IVA")}${thSort("dias","Dias")}${thSort("estado","Estado")}<th></th>
+  </tr></thead><tbody>
+  ${lista.map(q=>{
+    const dias=diasAberto(q);
+    const diasClass=dias===null?"":dias>=30?"dias-bad":dias>=14?"dias-warn":"";
+    return `<tr class="click" data-open="${q.id}">
+      <td class="mono">${esc(q.num)}${q.pedidoAut&&q.pedidoAut.estado==="pendente"?` <span class="tag autp" title="Autorização pendente">Aut.</span>`:""}</td>
+      <td class="num">${dataPT(q.data)}</td>
+      <td>${esc(q.cliente&&q.cliente.nome||"—")}</td>
+      <td class="muted-cell">${esc(q.obra||"")}</td>
+      <td><span class="tag ${q.tipo==="chapas"?"ch":isRev(q)?"rv":""}">${tipoNome(q.tipo)}</span></td>
+      ${users.length>1?`<td class="user-cell">${esc(q.criadoNome||"—")}</td>`:""}
+      <td class="r num fw6">${eur(num(q.totais&&q.totais.base))}</td>
+      <td class="r num ${diasClass}">${dias!==null?dias+"d":"—"}</td>
+      <td><select class="i est-sel" data-est="${q.id}" aria-label="Estado" onclick="event.stopPropagation()">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
+      <td class="r acts" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar" onclick="event.stopPropagation()">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar" onclick="event.stopPropagation()">${ico("trash")}</button></span></td>
+    </tr>`;
+  }).join("")}
   </tbody></table></div>`
   : `<div class="panel empty"><h3>${qs.length?"Nenhum orçamento corresponde aos filtros":"Ainda não há orçamentos"}</h3><p>${qs.length?"Ajuste os filtros ou pesquisa para ver resultados.":"Clique em <b>+ Novo Orçamento</b> e escolha o tipo. Os preços vêm das Tabelas de preços."}</p></div>`}`;
   // dropdown toggle
@@ -772,8 +828,10 @@ function renderLista(){
   document.addEventListener("click",document._novoDropClose);
   el.onclick=e=>{ const t=e.target;
     const nb=t.closest("[data-new]"); if(nb){ if(drop) drop.hidden=true; return novo(nb.dataset.new); }
-    const f=t.closest("[data-f]"); if(f){ S.filtro=S.filtro===f.dataset.f?"":f.dataset.f; return renderLista(); }
-    if(t.closest("#clrF")){ S.filtroEstado=""; S.filtroTipo=""; S.filtroAno=""; S.busca=""; return renderLista(); }
+    const fc=t.closest("[data-f]"); if(fc){ const v=fc.dataset.f; S.filtroEstado=S.filtroEstado===v?"":v; return renderLista(); }
+    if(t.closest("#clrF")){ S.filtroEstado=""; S.filtroTipo=""; S.filtroAno=""; S.filtroUser=""; S.busca=""; return renderLista(); }
+    // sort
+    const th=t.closest("[data-sort]"); if(th){ const c=th.dataset.sort; if(S.sortCol===c) S.sortDir*=-1; else{S.sortCol=c;S.sortDir=(c==="num"||c==="data"||c==="cliente")?1:-1;} return renderLista(); }
     const d=t.closest("[data-dup]"); if(d){ e.stopPropagation(); return duplicar(d.dataset.dup); }
     const x=t.closest("[data-del]"); if(x){ e.stopPropagation(); const w=$(`[data-delw="${x.dataset.del}"]`); w.innerHTML=`<span class="confirm">Apagar? <button class="btn sm danger" data-delok="${x.dataset.del}">Sim</button><button class="btn sm ghost" data-delno>Não</button></span>`; return; }
     const ok=t.closest("[data-delok]"); if(ok){ e.stopPropagation(); return apagar(ok.dataset.delok); }
@@ -786,6 +844,7 @@ function renderLista(){
     if(e.target.id==="fEstado"){ S.filtroEstado=e.target.value; return renderLista(); }
     if(e.target.id==="fTipo"){ S.filtroTipo=e.target.value; return renderLista(); }
     if(e.target.id==="fAno"){ S.filtroAno=e.target.value; return renderLista(); }
+    if(e.target.id==="fUser"){ S.filtroUser=e.target.value; return renderLista(); }
   };
   const bi=$("#busca",el); if(bi) bi.oninput=()=>{ S.busca=bi.value; const pos=bi.selectionStart; renderLista(); const n=$("#busca"); if(n){n.focus(); n.setSelectionRange(pos,pos);} };
 }
@@ -798,7 +857,7 @@ function linhaRev(tipo,prev,k){ const T=REV[tipo]; const m=T.modelos.find(x=>x.k
   if(prev&&!k){ const n=clone(prev); n.id=uid(); n.larg=""; n.alt=""; n.qt=1; n.custo=""; n.nota=false; delete n.texto; return n; }
   return {id:uid(),modelo:m.k,produto:m.produto,caixa:m.caixa||"",des:m.des,specs:m.specs,larg:"",alt:"",qt:1,custo:m.pc!=null?m.pc:"",custoModo:"m2",minM2:"",margem:""}; }
 function novo(tipo){ if(S.dirty) saveQuote();
-  const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
+  const q={id:uid(),num:proximoNum(),tipo,estado:"Em orçamento",criado:Date.now(),data:hoje(),criadoNome:S.userName||"",cliente:{nome:"",nif:"",morada:"",contacto:"",email:""},obra:"",
     margem:num(S.P.margem),desconto:0,notas:"",validade:num(S.P.validadeDias)||30,desenhos:[],
     linhas:[tipo==="chapas"?linhaChapa():REV[tipo]?linhaRev(tipo):linhaPainel()], mostrar:"linha", job:{custoForn:"",moMin:num(S.P.moMinChapasDefault),transporte:0,outros:0,embalagem:true,override:{},overrideCortes:{},formatos:clone(S.P.formatos)}};
   S.cur=q; S.dirty=true; saveQuote(); go("editor"); }
@@ -822,10 +881,11 @@ function renderEditor(){
       <label class="f"><span>NIF</span><input class="i" data-q="cliente.nif" value="${esc(q.cliente.nif)}"></label>
       <label class="f" style="grid-column:span 2"><span>Morada</span><input class="i" data-q="cliente.morada" value="${esc(q.cliente.morada)}"></label>
       <label class="f"><span>Contacto</span><input class="i" data-q="cliente.contacto" value="${esc(q.cliente.contacto)}"></label>
+      <label class="f"><span>Email</span><input class="i" type="email" data-q="cliente.email" value="${esc(q.cliente.email||"")}"></label>
       <label class="f"><span>Obra / referência</span><input class="i" data-q="obra" value="${esc(q.obra)}"></label>
       <label class="f"><span>Data</span><input class="i" type="date" data-q="data" value="${esc(q.data)}"></label>
       <label class="f"><span>Validade (dias)</span><input class="i num" inputmode="numeric" data-q="validade" value="${esc(q.validade)}"></label>
-    </div><datalist id="dlClientes">${[...new Set(S.quotes.map(x=>x.cliente&&x.cliente.nome).filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
+    </div><datalist id="dlClientes">${(()=>{ const seen=new Map(); S.quotes.forEach(x=>{ const c=x.cliente; if(c&&c.nome&&!seen.has(c.nome)) seen.set(c.nome,c); }); return [...seen.entries()].map(([n,c])=>`<option value="${esc(n)}">${c.nif?`NIF ${esc(c.nif)}`:""}</option>`).join(""); })()}</datalist></div>
 
     ${rv?`<div class="panel"><header><h2>Custo do fornecedor</h2><span class="hint">Interno — o fornecedor e o custo nunca saem no PDF do cliente.</span></header><div class="body">
       <div class="grid g4" style="align-items:end"><label class="f"><span>Custo total do fornecedor s/ IVA (€)</span><input class="i num" inputmode="decimal" data-q="job.custoForn" value="${esc(q.job.custoForn??"")}" placeholder="ex.: 3711,32"></label>
@@ -890,7 +950,22 @@ function renderEditor(){
   $("#bPdf").onclick=()=>descarregarPDF();
   $("#bPrev").onclick=()=>preVisualizar();
   if(ch){ $("#bFolha").onclick=descarregarFolha; $("#bFolhaPrev").onclick=()=>preVisualizar(buildFolhaDesenho); $("#bCopy").onclick=copiarGoldy; }
-  el.oninput=e=>{ const t=e.target; if(t.dataset.q){ setPath(q,t.dataset.q,t.dataset.bool?t.value==="1":t.value); refreshCalc(); markDirty(); } };
+  el.oninput=e=>{ const t=e.target; if(t.dataset.q){ setPath(q,t.dataset.q,t.dataset.bool?t.value==="1":t.value);
+    // Auto-fill dados do cliente quando o nome coincide com um cliente já existente
+    if(t.dataset.q==="cliente.nome"){
+      const nome=t.value.trim();
+      if(nome){ const match=S.quotes.filter(x=>x.id!==q.id&&x.cliente&&x.cliente.nome&&x.cliente.nome.trim()===nome).sort((a,b)=>(b.criado||0)-(a.criado||0))[0];
+        if(match&&match.cliente){
+          const cl=match.cliente; const cur=q.cliente||{};
+          // Só preenche campos que estão vazios no orçamento atual
+          if(!cur.nif&&cl.nif){ setPath(q,"cliente.nif",cl.nif); const ni=el.querySelector('[data-q="cliente.nif"]'); if(ni){ni.value=cl.nif;ni.classList.add("autofill");setTimeout(()=>ni.classList.remove("autofill"),1800);} }
+          if(!cur.morada&&cl.morada){ setPath(q,"cliente.morada",cl.morada); const mi=el.querySelector('[data-q="cliente.morada"]'); if(mi){mi.value=cl.morada;mi.classList.add("autofill");setTimeout(()=>mi.classList.remove("autofill"),1800);} }
+          if(!cur.contacto&&cl.contacto){ setPath(q,"cliente.contacto",cl.contacto); const ci=el.querySelector('[data-q="cliente.contacto"]'); if(ci){ci.value=cl.contacto;ci.classList.add("autofill");setTimeout(()=>ci.classList.remove("autofill"),1800);} }
+          if(!cur.email&&cl.email){ setPath(q,"cliente.email",cl.email); const ei=el.querySelector('[data-q="cliente.email"]'); if(ei){ei.value=cl.email;ei.classList.add("autofill");setTimeout(()=>ei.classList.remove("autofill"),1800);} }
+        }
+      }
+    }
+    refreshCalc(); markDirty(); } };
   el.onchange=e=>{ const t=e.target; if(t.dataset.q&&t.tagName==="SELECT"){ setPath(q,t.dataset.q,t.dataset.bool?t.value==="1":t.value); refreshCalc(); markDirty(); }
     if(t.dataset.fmt!==undefined){ q.job.formatos ||= clone(S.P.formatos); q.job.formatos[+t.dataset.fmt].on=t.checked; refreshCalc(); markDirty(); }
     if(t.dataset.ov!==undefined){ q.job.override ||= {}; q.job.override[t.dataset.ov]=t.value; refreshCalc(); markDirty(); }
@@ -1217,11 +1292,12 @@ async function buildPDF(q){
   T(ch?"Chapas quinadas":rv?REV[q.tipo].nome:"Painéis",M,y+11,{s:10,c:A,b:1});
   const val=addDias(q.data,num(q.validade)||30);
   [["Nº",q.num],["Data",dataPT(q.data)],["Válido até",dataPT(val)],["Obra / ref.",q.obra||"—"]].forEach(([k,v],i)=>{ T(k,M,y+19+i*5,{s:8.5,c:MUT}); T(v,M+22,y+19+i*5,{s:9,b:i===0,w:65}); });
-  const cx=W/2+4, cw=W-M-cx; doc.setFillColor(...SOFT); doc.roundedRect(cx,y,cw,36,1.5,1.5,"F");
-  T("CLIENTE",cx+5,y+6,{s:7.5,b:1,c:A});
-  const cl=q.cliente||{}; T(cl.nome||"—",cx+5,y+12,{s:11,b:1,w:cw-10});
-  [cl.morada,cl.nif?"NIF "+cl.nif:"",cl.contacto].filter(Boolean).forEach((l,i)=>T(l,cx+5,y+18+i*4.6,{s:8.5,c:MUT,w:cw-10}));
-  y+=44;
+  const cx=W/2+4, cw=W-M-cx;
+  const cl=q.cliente||{}; const clLines=[cl.morada,cl.nif?"NIF "+cl.nif:"",cl.contacto,cl.email].filter(Boolean);
+  const clH=Math.max(36,22+clLines.length*4.6); doc.setFillColor(...SOFT); doc.roundedRect(cx,y,cw,clH,1.5,1.5,"F");
+  T("CLIENTE",cx+5,y+6,{s:7.5,b:1,c:A}); T(cl.nome||"—",cx+5,y+12,{s:11,b:1,w:cw-10});
+  clLines.forEach((l,i)=>T(l,cx+5,y+18+i*4.6,{s:8.5,c:MUT,w:cw-10}));
+  y+=clH+8;
   // tabela
   const cols= rv? [{h:"#",w:7},{h:"Desenho",w:32},{h:"Descrição",w:soTotal?129:83},{h:"Qt",w:10,a:"right"},{h:soTotal?"":"Preço un.",w:soTotal?0:22,a:"right"},{h:soTotal?"":"Total",w:soTotal?0:24,a:"right"}]
             : ch? [{h:"#",w:7,a:"left"},{h:"Perfil",w:30},{h:"Descrição",w:46},{h:"Abas (mm)",w:28},{h:"Desenv. × Comp.",w:29,a:"right"},{h:"Qt",w:10,a:"right"},{h:"Preço un.",w:15,a:"right"},{h:"Total",w:15,a:"right"}]

@@ -570,34 +570,135 @@ function calcRevenda(q,P){
 /* desenho de cada posição: lista de formas, desenhada em SVG (ecrã) ou no PDF */
 function revShapes(L,bw,bhMax){
   const Lg=num(L.larg), Al=num(L.alt), des=L.des||"retangulo"; if(des==="nenhum"||!Lg||!Al) return null;
-  const dw=bw-10; const dh=Math.max(bw*.32,Math.min(bhMax-9,dw*Al/Lg)); const x0=.5,y0=.5; const it=[];
-  const R=(x,y,w,h,f,lw)=>it.push({t:"r",x,y,w,h,f,lw:lw||.6}), Ln=(x1,y1,x2,y2,c,lw)=>it.push({t:"l",x1,y1,x2,y2,c:c||"#9aa4ae",lw:lw||.35}), Tx=(x,y,str,sz,rot)=>it.push({t:"t",x,y,str,sz,rot:!!rot});
-  const mesh=(x,y,w,h)=>{ const st=Math.max(2.6,Math.min(w,h)/14); for(let a=x+st;a<x+w-.3;a+=st) Ln(a,y,a,y+h,"#c9d0d7",.25); for(let b=y+st;b<y+h-.3;b+=st) Ln(x,b,x+w,b,"#c9d0d7",.25); };
-  R(x0,y0,dw,dh,"#fbfcfd",.7);
-  const band=Math.min(dh*.17,9);
-  if(des==="estore"){ R(x0,y0,dw,band,"#d9dee4",.7); if(L.caixa) Tx(x0+dw/2,y0+band/2+1.2,String(L.caixa),Math.min(4.2,band*.62));
-    for(let y=y0+band+2.2;y<y0+dh-.6;y+=2.2) Ln(x0+.5,y,x0+dw-.5,y,"#9aa4ae",.3); }
-  else if(des==="mosqV"){ R(x0,y0,dw,band,"#d9dee4",.7); R(x0,y0+band,2,dh-band,"#e6eaee",.5); R(x0+dw-2,y0+band,2,dh-band,"#e6eaee",.5); mesh(x0+2,y0+band,dw-4,dh-band-2.4); R(x0+2,y0+dh-2.4,dw-4,2.4,"#c3cad2",.5); }
-  else if(des==="mosqL"){ const b=Math.min(dw*.14,8); R(x0,y0,b,dh,"#d9dee4",.7); R(x0+b,y0,dw-b,2,"#e6eaee",.5); R(x0+b,y0+dh-2,dw-b,2,"#e6eaee",.5); mesh(x0+b,y0+2,dw-b-2.4,dh-4); R(x0+dw-2.4,y0+2,2.4,dh-4,"#c3cad2",.5); }
-  else if(des==="plis"){ R(x0,y0,dw,2,"#e6eaee",.5); R(x0,y0+dh-2,dw,2,"#e6eaee",.5); const mid=x0+dw*.55; for(let x=x0+1.6;x<mid-.5;x+=1.6) Ln(x,y0+2,x,y0+dh-2,"#aab3bc",.3); R(mid-1.2,y0+2,2.4,dh-4,"#c3cad2",.5); }
-  else if(des==="fixa"){ R(x0+2.2,y0+2.2,dw-4.4,dh-4.4,"#fbfcfd",.4); mesh(x0+2.2,y0+2.2,dw-4.4,dh-4.4); }
-  else if(des==="correr"){ R(x0,y0,dw,2,"#c3cad2",.5); R(x0,y0+dh-2,dw,2,"#c3cad2",.5); R(x0+2,y0+2,dw*.6,dh-4,"#fbfcfd",.5); mesh(x0+2,y0+2,dw*.6,dh-4); }
-  // cotas
-  Ln(x0,y0+dh+2.4,x0+dw,y0+dh+2.4,"#7a838e",.3); Tx(x0+dw/2,y0+dh+6.6,"L = "+fmt(Lg,0),4);
-  Ln(x0+dw+2.4,y0,x0+dw+2.4,y0+dh,"#7a838e",.3); Tx(x0+dw+6.8,y0+dh/2,"A = "+fmt(Al,0),4,true);
-  return {w:bw,h:dh+8,it};
+  const dw=bw-14; const dh=Math.max(bw*.35,Math.min(bhMax-10,dw*Al/Lg)); const x0=1,y0=1; const it=[];
+  const R=(x,y,w,h,f,sw,sc)=>it.push({t:"r",x,y,w,h,f,lw:sw||.5,sc:sc||"#2e3a46"});
+  const Ln=(x1,y1,x2,y2,c,lw)=>it.push({t:"l",x1,y1,x2,y2,c:c||"#8a95a0",lw:lw||.3});
+  const Tx=(x,y,str,sz,rot)=>it.push({t:"t",x,y,str,sz,rot:!!rot});
+  // malha de rede (linhas cruzadas)
+  const mesh=(x,y,w,h,col,step)=>{
+    const s=step||Math.max(2.2,Math.min(w,h)/16);
+    for(let a=x+s;a<x+w-.2;a+=s) Ln(a,y+.3,a,y+h-.3,col||"#b8c4cc",.22);
+    for(let b=y+s;b<y+h-.2;b+=s) Ln(x+.3,b,x+w-.3,b,col||"#b8c4cc",.22);
+  };
+  // fundo branco base
+  R(x0,y0,dw,dh,"#f7f9fb",.8,"#2e3a46");
+  const aro=Math.max(2.0,Math.min(dw,dh)*.055); // espessura do aro exterior
+  const band=Math.min(dh*.16,8); // caixa enrolar
+
+  if(des==="estore"){
+    // caixa topo
+    R(x0,y0,dw,band,"#cdd4db",.6,"#2e3a46");
+    // sombra interior da caixa
+    R(x0+.6,y0+band,dw-1.2,1.4,"#b8c0c8",.0,"#b8c0c8");
+    // lâminas horizontais
+    const sp=2.6; for(let yy=y0+band+sp;yy<y0+dh-1;yy+=sp){
+      Ln(x0+.8,yy,x0+dw-.8,yy,"#8a9baa",.35);
+      Ln(x0+.8,yy+.9,x0+dw-.8,yy+.9,"#c8d2da",.18);
+    }
+    // perfil inferior
+    R(x0,y0+dh-aro*.7,dw,aro*.7,"#cdd4db",.5,"#2e3a46");
+    if(L.caixa) Tx(x0+dw/2,y0+band*.55+.8,String(L.caixa),Math.min(3.8,band*.5));
+  }
+  else if(des==="mosqV"){
+    // caixa topo com detalhe
+    R(x0,y0,dw,band,"#cdd4db",.6,"#2e3a46");
+    R(x0+.5,y0+.4,dw-1,band*.55,"#dde3e8",.0,"#dde3e8");
+    // guias laterais (aro)
+    R(x0,y0+band,aro,dh-band,"#cdd4db",.5,"#2e3a46");
+    R(x0+dw-aro,y0+band,aro,dh-band,"#cdd4db",.5,"#2e3a46");
+    // rede
+    mesh(x0+aro,y0+band,dw-aro*2,dh-band-aro);
+    // perfil inferior com puxador
+    R(x0+aro,y0+dh-aro,dw-aro*2,aro,"#cdd4db",.5,"#2e3a46");
+    // puxador centrado
+    const pw=Math.min(dw*.35,14); R(x0+dw/2-pw/2,y0+dh-aro*.6,pw,aro*.5,"#b0bac3",.4,"#2e3a46");
+  }
+  else if(des==="mosqL"){
+    // caixa lateral esquerda
+    const cb=Math.min(dw*.15,9);
+    R(x0,y0,cb,dh,"#cdd4db",.6,"#2e3a46");
+    R(x0+.5,y0+.5,cb*.55,dh-1,"#dde3e8",.0,"#dde3e8");
+    // guias topo e base
+    R(x0+cb,y0,dw-cb,aro,"#cdd4db",.5,"#2e3a46");
+    R(x0+cb,y0+dh-aro,dw-cb,aro,"#cdd4db",.5,"#2e3a46");
+    // rede
+    mesh(x0+cb,y0+aro,dw-cb-aro,dh-aro*2);
+    // fecho lateral direito
+    R(x0+dw-aro,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+    const ph=Math.min(dh*.3,12); R(x0+dw-aro*.6,y0+dh/2-ph/2,aro*.45,ph,"#b0bac3",.4,"#2e3a46");
+  }
+  else if(des==="plis"){
+    // aro exterior
+    R(x0,y0,dw,aro,"#cdd4db",.5,"#2e3a46");
+    R(x0,y0+dh-aro,dw,aro,"#cdd4db",.5,"#2e3a46");
+    R(x0,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+    R(x0+dw-aro,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+    // prega do meio (haste central)
+    const mx=x0+dw*.54;
+    R(mx-aro*.7,y0+aro,aro*1.4,dh-aro*2,"#b8c2cc",.5,"#2e3a46");
+    // pregas plissadas — lado esquerdo
+    const psp=1.8; for(let xp=x0+aro+psp;xp<mx-aro;xp+=psp){
+      Ln(xp,y0+aro+.4,xp,y0+dh-aro-.4,"#9daab5",.28);
+    }
+    // pregas plissadas — lado direito (menos, pois está recolhida)
+    for(let xp=mx+aro*1.4+psp;xp<x0+dw-aro-psp;xp+=psp*1.6){
+      Ln(xp,y0+aro+.4,xp,y0+dh-aro-.4,"#9daab5",.28);
+    }
+  }
+  else if(des==="fixa"){
+    // aro exterior
+    R(x0,y0,dw,aro,"#cdd4db",.5,"#2e3a46");
+    R(x0,y0+dh-aro,dw,aro,"#cdd4db",.5,"#2e3a46");
+    R(x0,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+    R(x0+dw-aro,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+    // rede interior
+    mesh(x0+aro,y0+aro,dw-aro*2,dh-aro*2,"#aab8c2");
+  }
+  else if(des==="correr"){
+    // calhas topo e base
+    R(x0,y0,dw,aro,"#cdd4db",.5,"#2e3a46");
+    R(x0,y0+dh-aro,dw,aro,"#cdd4db",.5,"#2e3a46");
+    // divisória ao centro
+    const divX=x0+dw*.5-aro*.35;
+    R(divX,y0+aro,aro*.7,dh-aro*2,"#b8c2cc",.4,"#2e3a46");
+    // folha esquerda (rede visível, posição semi-aberta)
+    R(x0,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+    mesh(x0+aro,y0+aro,dw*.5-aro*1.7,dh-aro*2,"#aab8c2");
+    // folha direita (apenas aro, posição atrás)
+    R(x0+dw*.5+aro*.35,y0+aro,aro,dh-aro*2,"#cdd4db",.4,"#2e3a46");
+    R(x0+dw-aro,y0+aro,aro,dh-aro*2,"#cdd4db",.5,"#2e3a46");
+  }
+  else if(des==="retangulo"){
+    R(x0+aro,y0+aro,dw-aro*2,dh-aro*2,"#edf1f4",.5,"#2e3a46");
+  }
+
+  // cotas com setas
+  const cotaY=y0+dh+2.6, cotaX=x0+dw+3.0;
+  Ln(x0,cotaY,x0+dw,cotaY,"#5a6672",.35);
+  Ln(x0,cotaY-.9,x0,cotaY+.9,"#5a6672",.35);
+  Ln(x0+dw,cotaY-.9,x0+dw,cotaY+.9,"#5a6672",.35);
+  Tx(x0+dw/2,cotaY+5.0,"L = "+fmt(Lg,0),3.8);
+  Ln(cotaX,y0,cotaX,y0+dh,"#5a6672",.35);
+  Ln(cotaX-.9,y0,cotaX+.9,y0,"#5a6672",.35);
+  Ln(cotaX-.9,y0+dh,cotaX+.9,y0+dh,"#5a6672",.35);
+  Tx(cotaX+5.5,y0+dh/2,"A = "+fmt(Al,0),3.8,true);
+  return {w:bw+2,h:dh+10,it};
 }
-function revSVG(L,bw,bhMax){ const S2=revShapes(L,bw||60,bhMax||70); if(!S2) return `<div class="hint" style="text-align:center;padding:14px 4px">${(L.des||"")==="nenhum"?"Sem desenho":"Indique largura e altura"}</div>`;
-  const k=3; let o=`<svg viewBox="0 0 ${S2.w*k} ${S2.h*k}" width="100%" style="max-height:${(bhMax||70)*3}px" role="img" aria-label="Desenho ${fmt(num(L.larg),0)} por ${fmt(num(L.alt),0)}">`;
-  S2.it.forEach(e=>{ if(e.t==="r") o+=`<rect x="${e.x*k}" y="${e.y*k}" width="${e.w*k}" height="${e.h*k}" fill="${e.f}" stroke="#3b4552" stroke-width="${e.lw*k*.6}"/>`;
+function revSVG(L,bw,bhMax){ const S2=revShapes(L,bw||70,bhMax||80); if(!S2) return `<div class="hint" style="text-align:center;padding:14px 4px">${(L.des||"")==="nenhum"?"Sem desenho":"Indique largura e altura"}</div>`;
+  const k=3.2; let o=`<svg viewBox="0 0 ${S2.w*k} ${S2.h*k}" width="100%" style="max-height:${(bhMax||80)*3.2}px" role="img" aria-label="Desenho ${fmt(num(L.larg),0)} por ${fmt(num(L.alt),0)}">`;
+  S2.it.forEach(e=>{
+    if(e.t==="r") o+=`<rect x="${e.x*k}" y="${e.y*k}" width="${e.w*k}" height="${e.h*k}" fill="${e.f}" stroke="${e.sc||"#2e3a46"}" stroke-width="${e.lw*k*.55}" rx="0.5"/>`;
     else if(e.t==="l") o+=`<line x1="${e.x1*k}" y1="${e.y1*k}" x2="${e.x2*k}" y2="${e.y2*k}" stroke="${e.c}" stroke-width="${e.lw*k}"/>`;
-    else o+=`<text x="${e.x*k}" y="${e.y*k}" font-size="${e.sz*k}" text-anchor="middle" fill="#2b333d" font-family="IBM Plex Mono,monospace"${e.rot?` transform="rotate(-90 ${e.x*k} ${e.y*k})"`:""}>${esc(e.str)}</text>`; });
+    else o+=`<text x="${e.x*k}" y="${e.y*k}" font-size="${e.sz*k}" text-anchor="middle" fill="#3a4654" font-family="monospace"${e.rot?` transform="rotate(-90 ${e.x*k} ${e.y*k})"`:""}>${esc(e.str)}</text>`;
+  });
   return o+"</svg>"; }
 function hexRGB(h){ const n=parseInt(String(h).slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
 function revPDFDraw(doc,L,x,y,bw,bh){ const S2=revShapes(L,bw,bh); if(!S2) return;
-  S2.it.forEach(e=>{ if(e.t==="r"){ doc.setFillColor(...hexRGB(e.f)); doc.setDrawColor(59,69,82); doc.setLineWidth(e.lw*.45); doc.rect(x+e.x,y+e.y,e.w,e.h,"FD"); }
-    else if(e.t==="l"){ doc.setDrawColor(...hexRGB(e.c)); doc.setLineWidth(e.lw*.6); doc.line(x+e.x1,y+e.y1,x+e.x2,y+e.y2); }
-    else { doc.setFont("helvetica","normal"); doc.setFontSize(e.sz*1.9); doc.setTextColor(43,51,61); if(e.rot){ const tw=doc.getTextWidth(e.str); doc.text(e.str,x+e.x+e.sz*.35,y+e.y+tw/2,{angle:90}); } else doc.text(e.str,x+e.x,y+e.y,{align:"center"}); } }); }
+  S2.it.forEach(e=>{
+    if(e.t==="r"){ doc.setFillColor(...hexRGB(e.f)); doc.setDrawColor(...hexRGB(e.sc||"#2e3a46")); doc.setLineWidth(e.lw*.4); doc.rect(x+e.x,y+e.y,e.w,e.h,"FD"); }
+    else if(e.t==="l"){ doc.setDrawColor(...hexRGB(e.c)); doc.setLineWidth(e.lw*.55); doc.line(x+e.x1,y+e.y1,x+e.x2,y+e.y2); }
+    else { doc.setFont("helvetica","normal"); doc.setFontSize(e.sz*1.8); doc.setTextColor(43,51,61); if(e.rot){ const tw=doc.getTextWidth(e.str); doc.text(e.str,x+e.x+e.sz*.3,y+e.y+tw/2,{angle:90}); } else doc.text(e.str,x+e.x,y+e.y,{align:"center"}); }
+  }); }
 function calcQuote(q,P){ return q.tipo==="paineis"? calcPaineis(q,P) : isRev(q)? calcRevenda(q,P) : calcChapas(q,P); }
 const BRK_LABEL={revenda:"Material (fornecedor)",po:"Pó do cliente",chapa:"Chapa",acab:"Acabamento",lacagem:"Lacagem",corte:"Corte",quin:"Quinagem",cantos:"Corta-cantos",mo:"Mão de obra",emb:"Embalagem",transp:"Transporte",outros:"Outros",enchimento:"Enchimento",cola:"Cola",fresagem:"Fresagem",alunox:"Alunox",vidro:"Vidro",aro:"Aro",cilindro:"Cilindro",puxador:"Puxador",puxEmb:"Puxador embutido",led:"LED",fechadura:"Fechadura",extras:"Extras"};
 const BRK_COL=["#1420E6","#5B8DEF","#2BB3A3","#E0A030","#D2553F","#8E5BD9","#6B7785","#A9B4C0","#3F7F4F","#C77DBA","#B5892F","#4A9BD1"];

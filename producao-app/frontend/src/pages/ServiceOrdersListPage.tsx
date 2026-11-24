@@ -621,6 +621,32 @@ export function ServiceOrdersListPage() {
                   value={deadlinePopup.confirmedDeadline}
                   onChange={(e) => setDeadlinePopup((prev) => prev && { ...prev, confirmedDeadline: e.target.value })}
                 />
+                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+                  {deadlinePopup.estimatedDeadline && (
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      style={{ flex: 1, fontSize: "0.78rem", padding: "0.3rem 0.6rem", minWidth: 0 }}
+                      onClick={() => setDeadlinePopup((prev) => prev && { ...prev, confirmedDeadline: deadlinePopup.estimatedDeadline! })}
+                    >
+                      📋 Prazo estipulado — {deadlinePopup.productionDays}d ({new Date(deadlinePopup.estimatedDeadline + "T12:00:00").toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" })})
+                    </button>
+                  )}
+                  {deadlinePopup.avgDays !== null && (() => {
+                    const d = new Date(); d.setDate(d.getDate() + deadlinePopup.avgDays!);
+                    const iso = d.toISOString().slice(0, 10);
+                    return (
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        style={{ flex: 1, fontSize: "0.78rem", padding: "0.3rem 0.6rem", minWidth: 0 }}
+                        onClick={() => setDeadlinePopup((prev) => prev && { ...prev, confirmedDeadline: iso })}
+                      >
+                        ⏱️ Prazo médio — {deadlinePopup.avgDays}d ({d.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" })})
+                      </button>
+                    );
+                  })()}
+                </div>
               </div>
 
               {deadlinePopup.error && <p className="error-text" style={{ marginTop: "0.5rem" }}>{deadlinePopup.error}</p>}

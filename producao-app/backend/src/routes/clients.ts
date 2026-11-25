@@ -156,7 +156,7 @@ clientsRouter.get(
 
     // Totais por zona e comercial (filtrados pelo período)
     const osComCliente = await prisma.serviceOrder.findMany({
-      where: { ...whereOS, clientId: { not: null } },
+      where: { ...whereOS, clientId: { not: null as unknown as string } },
       select: {
         client: { select: { zone: true, comercial: true } },
       },

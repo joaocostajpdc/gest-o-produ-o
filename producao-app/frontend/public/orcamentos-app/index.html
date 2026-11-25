@@ -92,6 +92,16 @@ textarea.i{resize:vertical;min-height:70px}
 .st-ace{background:var(--ok-soft);color:var(--ok)}
 .st-rec{background:var(--bad-soft);color:var(--bad)}
 .st-con{background:var(--sunken);color:var(--muted)}
+.st-an{background:#fef3c7;color:#92400e}
+/* modal de anulação */
+.an-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
+.an-modal{background:var(--surface);border-radius:10px;padding:1.5rem;width:min(420px,92vw);box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.an-modal h3{margin:0 0 .5rem;font-size:1.05rem;color:var(--bad)}
+.an-modal p{margin:0 0 .75rem;font-size:.9rem;color:var(--muted)}
+.an-modal textarea{width:100%;box-sizing:border-box;min-height:90px;resize:vertical}
+.an-modal .row{display:flex;gap:8px;margin-top:1rem;justify-content:flex-end}
+.an-banner{background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:.6rem .9rem;margin-top:.75rem;font-size:.88rem;color:#78350f}
+.an-banner strong{display:block;margin-bottom:2px}
 .tag{display:inline-block;padding:2px 7px;border-radius:4px;font:600 11px/1.4 var(--f-display);letter-spacing:.06em;text-transform:uppercase;background:var(--sunken);color:var(--muted)}
 .tag.ch{background:var(--accent-soft);color:var(--accent)}
 .tag.rv{background:#E6F4EE;color:#1B7F4B}
@@ -347,7 +357,7 @@ const DEFAULT_E = {
   condicoes:"Preços sem IVA, acrescidos de IVA à taxa legal em vigor.\nValidade da proposta: {validade} dias.\nMedidas e desenvolvimentos conforme desenho fornecido pelo cliente; alterações implicam revisão do orçamento.\nPrazo de entrega a confirmar na adjudicação.",
 };
 const ESTADOS = ["Em orçamento","Aceite","Recusado","Concluído"];
-const ESTCLS = {"Em orçamento":"st-orc","Aceite":"st-ace","Recusado":"st-rec","Concluído":"st-con"};
+const ESTCLS = {"Em orçamento":"st-orc","Aceite":"st-ace","Recusado":"st-rec","Concluído":"st-con","Anulado":"st-an"};
 const GASTOS = [
   ["chapas","Chapas"],["acab1","Acabamento face 1"],["acab2","Acabamento face 2"],["enchimento","Enchimento"],["cola","Cola"],
   ["mo","Mão de obra"],["embalagem","Embalamento"],["fresagem","Fresagem"],["alunox","Alunox"],["vidro","Vidro"],["aro","Aro"],
@@ -1062,11 +1072,13 @@ function renderEditor(){
       <label class="f"><span>Desconto ao cliente %${S.admin?"":" 🔒"}</span><input class="i num" inputmode="decimal" data-q="desconto" value="${esc(q.desconto)}" ${S.admin?"":"disabled"}></label></div>
       ${rv?`<label class="f" style="margin-top:10px"><span>No PDF do cliente mostrar</span><select class="i" data-q="mostrar"><option value="linha" ${q.mostrar!=="total"?"selected":""}>Preço de cada posição e total</option><option value="total" ${q.mostrar==="total"?"selected":""}>Só o total</option></select></label>`:""}
       ${autHTML(q)}</div>
+    ${q.estado==="Anulado"&&q.motivoAnulacao?`<div class="an-banner"><strong>Anulado${q.anuladoEm?" em "+new Date(q.anuladoEm).toLocaleDateString("pt-PT"):""}</strong>${esc(q.motivoAnulacao)}</div>`:""}
     <div class="actions">${ch?`<button class="btn pri" id="bFolha" style="justify-content:center">${ico("down")}Descarregar folha de desenho</button>
       <div class="row"><button class="btn" id="bFolhaPrev">${ico("eye")}Ver folha de desenho</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>
       <div class="row"><button class="btn" id="bPdf">${ico("down")}Orçamento PDF</button><button class="btn" id="bPrev">${ico("eye")}Ver orçamento</button></div>`
       :`<button class="btn pri" id="bPdf" style="justify-content:center">${ico("down")}Descarregar orçamento PDF</button>
-      <div class="row"><button class="btn" id="bPrev">${ico("eye")}Pré-visualizar</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>`}</div>
+      <div class="row"><button class="btn" id="bPrev">${ico("eye")}Pré-visualizar</button><button class="btn" id="bSave">${ico("save")}Guardar</button></div>`}
+      ${q.estado!=="Anulado"?`<button class="btn ghost danger" id="bAnular" style="margin-top:4px;justify-content:center;color:var(--bad);border-color:var(--bad)">${ico("trash")}Anular orçamento</button>`:""}</div>
   </aside></div>`;
   renderLines(); renderDrawings(); refreshCalc(); updSaveState();
   const bl=$("#bLer"); if(bl) bl.onclick=lerDesenho;
@@ -1081,6 +1093,7 @@ function renderEditor(){
   $("#qMargem").oninput=e=>{ q.margem=num(e.target.value)/100; refreshCalc(); markDirty(); };
   bindAut(q);
   $("#bSave").onclick=async()=>{ await saveQuote(); toast(S.db?"Orçamento guardado":"Sem ligação: não foi guardado"); };
+  const bAn=$("#bAnular"); if(bAn) bAn.onclick=()=>anularOrcamento(q.id);
   $("#bPdf").onclick=()=>descarregarPDF();
   $("#bPrev").onclick=()=>preVisualizar();
   if(ch){ $("#bFolha").onclick=descarregarFolha; $("#bFolhaPrev").onclick=()=>preVisualizar(buildFolhaDesenho); $("#bCopy").onclick=copiarGoldy; }
@@ -1829,6 +1842,42 @@ function ico(n){ const p={plus:"M12 5v14M5 12h14",copy:"M8 8h11v11H8zM5 16V5h11"
 
 window.addEventListener("beforeunload",()=>{ if(S.dirty) saveQuote(); });
 brand(); render(); initServer();
+
+/* ============================== ANULAÇÃO ============================== */
+function anularOrcamento(id){
+  const q=S.quotes.find(x=>x.id===id); if(!q) return;
+  // Criar overlay
+  const ov=document.createElement("div");
+  ov.className="an-ov";
+  ov.innerHTML=`<div class="an-modal" role="dialog" aria-modal="true" aria-labelledby="anTit">
+    <h3 id="anTit">⚠ Anular orçamento ${esc(q.num)}</h3>
+    <p>Esta ação marca o orçamento como <strong>Anulado</strong>. Indique o motivo — é obrigatório.</p>
+    <label class="f"><span>Motivo da anulação</span><textarea class="i" id="anMotivo" rows="4" placeholder="Ex.: Cliente optou por outro fornecedor. / Preço não aprovado. / Projeto cancelado."></textarea></label>
+    <div class="row">
+      <button class="btn ghost" id="anCancelar">Cancelar</button>
+      <button class="btn" id="anConfirmar" style="background:var(--bad);border-color:var(--bad);color:#fff">Anular orçamento</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const ta=ov.querySelector("#anMotivo");
+  ta.focus();
+  ov.querySelector("#anCancelar").onclick=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) ov.remove(); });
+  ov.querySelector("#anConfirmar").onclick=async()=>{
+    const motivo=ta.value.trim();
+    if(!motivo){ ta.style.border="2px solid var(--bad)"; ta.focus(); return; }
+    q.estado="Anulado";
+    q.motivoAnulacao=motivo;
+    q.anuladoEm=Date.now();
+    if(S.cur&&S.cur.id===id){ S.cur.estado="Anulado"; S.cur.motivoAnulacao=motivo; S.cur.anuladoEm=q.anuladoEm; }
+    ov.remove();
+    S.dirty=true;
+    await saveQuote();
+    if(S.db){ try{ await S.db.doc("orcamentos/"+id).update({estado:"Anulado",motivoAnulacao:motivo,anuladoEm:q.anuladoEm}); }catch(e){ toast("DB: "+e.code); } }
+    renderEditor();
+    toast("Orçamento anulado");
+  };
+}
 </script>
 </body>
 </html>

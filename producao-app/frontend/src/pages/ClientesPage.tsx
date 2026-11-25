@@ -14,7 +14,11 @@ type Analytics = {
   porCliente: { clientId: string | null; name: string; zone: string | null; comercial: string | null; totalOS: number }[];
   porZona: { zona: string; total: number }[];
   porComercial: { comercial: string; total: number }[];
+  tendenciaMensal: { mes: string; total: number }[];
+  kpis: { totalOSPeriodo: number; totalOSGlobal: number; totalClientesAtivos: number; mediaOSporCliente: number };
 };
+
+type Periodo = "mes" | "trimestre" | "ano" | "tudo";
 
 type View = "lista" | "analytics";
 
@@ -59,6 +63,7 @@ export function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [meta, setMeta] = useState<Meta>({ zonas: [], comerciais: [], statuses: [] });
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [periodo, setPeriodo] = useState<Periodo>("ano");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,14 +103,20 @@ export function ClientesPage() {
     }
   }
 
-  async function loadAnalytics() {
-    if (analytics) return;
+  async function loadAnalytics(p?: Periodo) {
+    const per = p ?? periodo;
     try {
-      const data = await api.get<Analytics>("/clients/comercial/analytics");
+      const data = await api.get<Analytics>(`/clients/comercial/analytics?periodo=${per}`);
       setAnalytics(data);
     } catch {
       /* silencioso */
     }
+  }
+
+  function handlePeriodo(p: Periodo) {
+    setPeriodo(p);
+    setAnalytics(null);
+    loadAnalytics(p);
   }
 
   useEffect(() => {
@@ -125,7 +136,7 @@ export function ClientesPage() {
   }, [q, zona, comercialFiltro, statusFiltro]);
 
   useEffect(() => {
-    if (view === "analytics") loadAnalytics();
+    if (view === "analytics" && !analytics) loadAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
@@ -298,7 +309,7 @@ export function ClientesPage() {
       )}
 
       {view === "analytics" && (
-        <AnalyticsView analytics={analytics} />
+        <AnalyticsView analytics={analytics} periodo={periodo} onPeriodo={handlePeriodo} />
       )}
     </div>
   );
@@ -313,70 +324,199 @@ function Detail({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function AnalyticsView({ analytics }: { analytics: Analytics | null }) {
-  if (!analytics) return <div className="card" style={{ padding: 32, textAlign: "center" }}>A carregar analytics…</div>;
+function BarChart({ value, max, color = "var(--color-primary, #3b82f6)" }: { value: number; max: number; color?: string }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+      <div style={{ flex: 1, background: "var(--color-muted-bg, #f3f4f6)", borderRadius: 4, height: 8, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, background: color, height: "100%", borderRadius: 4, transition: "width 0.3s" }} />
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 600, minWidth: 28, textAlign: "right" }}>{value}</span>
+    </div>
+  );
+}
+
+function MiniSparkline({ dados }: { dados: { mes: string; total: number }[] }) {
+  if (dados.length < 2) return null;
+  const max = Math.max(...dados.map(d => d.total));
+  const h = 48, w = 180;
+  const pts = dados.map((d, i) => {
+    const x = (i / (dados.length - 1)) * w;
+    const y = max > 0 ? h - (d.total / max) * h : h;
+    return `${x},${y}`;
+  }).join(" ");
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-      {/* Top clientes por OS */}
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Top Clientes (por OS)</h3>
-        <table className="table" style={{ fontSize: 13 }}>
-          <thead>
-            <tr><th>Cliente</th><th>Zona</th><th>OS</th></tr>
-          </thead>
-          <tbody>
-            {analytics.porCliente.slice(0, 15).map((r, i) => (
-              <tr key={i}>
-                <td>{r.name}</td>
-                <td style={{ color: "var(--color-muted)" }}>{r.zone ?? "—"}</td>
-                <td style={{ textAlign: "right", fontWeight: 600 }}>{r.totalOS}</td>
-              </tr>
-            ))}
-            {analytics.porCliente.length === 0 && (
-              <tr><td colSpan={3} style={{ color: "var(--color-muted)", textAlign: "center" }}>Sem dados</td></tr>
-            )}
-          </tbody>
-        </table>
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", maxWidth: w, height: h, display: "block" }}>
+      <polyline points={pts} fill="none" stroke="var(--color-primary, #3b82f6)" strokeWidth="2" strokeLinejoin="round" />
+      {dados.map((d, i) => {
+        const x = (i / (dados.length - 1)) * w;
+        const y = max > 0 ? h - (d.total / max) * h : h;
+        return <circle key={i} cx={x} cy={y} r={3} fill="var(--color-primary, #3b82f6)" />;
+      })}
+    </svg>
+  );
+}
+
+const PERIODO_LABELS: Record<Periodo, string> = {
+  mes: "Este mês",
+  trimestre: "Últimos 3 meses",
+  ano: "Este ano",
+  tudo: "Tudo",
+};
+
+function AnalyticsView({ analytics, periodo, onPeriodo }: {
+  analytics: Analytics | null;
+  periodo: Periodo;
+  onPeriodo: (p: Periodo) => void;
+}) {
+  return (
+    <div>
+      {/* Filtro de período */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {(["mes", "trimestre", "ano", "tudo"] as Periodo[]).map((p) => (
+          <button
+            key={p}
+            className={`btn${periodo === p ? " btn-primary" : ""}`}
+            style={{ fontSize: 13 }}
+            onClick={() => onPeriodo(p)}
+          >
+            {PERIODO_LABELS[p]}
+          </button>
+        ))}
       </div>
 
-      {/* Por zona */}
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>OS por Zona</h3>
-        <table className="table" style={{ fontSize: 13 }}>
-          <thead><tr><th>Zona</th><th style={{ textAlign: "right" }}>OS</th></tr></thead>
-          <tbody>
-            {analytics.porZona.map((r, i) => (
-              <tr key={i}>
-                <td>{r.zona}</td>
-                <td style={{ textAlign: "right", fontWeight: 600 }}>{r.total}</td>
-              </tr>
+      {!analytics ? (
+        <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--color-muted)" }}>
+          A carregar…
+        </div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
+            {[
+              { label: `Encomendas (${PERIODO_LABELS[periodo].toLowerCase()})`, value: analytics.kpis.totalOSPeriodo },
+              { label: "Total encomendas", value: analytics.kpis.totalOSGlobal },
+              { label: "Clientes com OS", value: analytics.kpis.totalClientesAtivos },
+              { label: "Média OS / cliente", value: analytics.kpis.mediaOSporCliente },
+            ].map((k) => (
+              <div key={k.label} className="card" style={{ padding: "14px 16px" }}>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-muted)", marginBottom: 4 }}>
+                  {k.label}
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700 }}>{k.value}</div>
+              </div>
             ))}
-            {analytics.porZona.length === 0 && (
-              <tr><td colSpan={2} style={{ color: "var(--color-muted)", textAlign: "center" }}>Sem dados</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          </div>
 
-      {/* Por comercial */}
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>OS por Comercial</h3>
-        <table className="table" style={{ fontSize: 13 }}>
-          <thead><tr><th>Comercial</th><th style={{ textAlign: "right" }}>OS</th></tr></thead>
-          <tbody>
-            {analytics.porComercial.map((r, i) => (
-              <tr key={i}>
-                <td>{r.comercial}</td>
-                <td style={{ textAlign: "right", fontWeight: 600 }}>{r.total}</td>
-              </tr>
-            ))}
-            {analytics.porComercial.length === 0 && (
-              <tr><td colSpan={2} style={{ color: "var(--color-muted)", textAlign: "center" }}>Sem dados</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          {/* Tendência mensal */}
+          {analytics.tendenciaMensal.length > 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <h3 style={{ marginTop: 0, fontSize: 14 }}>Tendência — últimos 6 meses</h3>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 72 }}>
+                {(() => {
+                  const max = Math.max(...analytics.tendenciaMensal.map(d => d.total));
+                  return analytics.tendenciaMensal.map((d, i) => {
+                    const pct = max > 0 ? (d.total / max) * 100 : 0;
+                    const mes = new Date(d.mes).toLocaleDateString("pt-PT", { month: "short" });
+                    return (
+                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600 }}>{d.total}</span>
+                        <div
+                          title={`${mes}: ${d.total} OS`}
+                          style={{
+                            width: "100%",
+                            height: `${Math.max(pct, 4)}%`,
+                            background: i === analytics.tendenciaMensal.length - 1
+                              ? "var(--color-primary, #3b82f6)"
+                              : "var(--color-muted, #9ca3af)",
+                            borderRadius: "3px 3px 0 0",
+                            opacity: 0.85,
+                            minHeight: 4,
+                          }}
+                        />
+                        <span style={{ fontSize: 10, color: "var(--color-muted)" }}>{mes}</span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            {/* Top clientes */}
+            <div className="card" style={{ gridColumn: analytics.porCliente.length > 10 ? "span 2" : undefined }}>
+              <h3 style={{ marginTop: 0, fontSize: 14 }}>Top Clientes por Encomendas</h3>
+              {analytics.porCliente.length === 0 ? (
+                <p style={{ color: "var(--color-muted)", fontSize: 13 }}>Sem dados para o período.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {analytics.porCliente.slice(0, 15).map((r, i) => {
+                    const max = analytics.porCliente[0]?.totalOS ?? 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, color: "var(--color-muted)", minWidth: 18, textAlign: "right" }}>{i + 1}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {r.name}
+                          </div>
+                          {(r.zone || r.comercial) && (
+                            <div style={{ fontSize: 11, color: "var(--color-muted)" }}>
+                              {[r.zone, r.comercial].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </div>
+                        <BarChart value={r.totalOS} max={max} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Por zona */}
+            <div className="card">
+              <h3 style={{ marginTop: 0, fontSize: 14 }}>Encomendas por Zona</h3>
+              {analytics.porZona.length === 0 ? (
+                <p style={{ color: "var(--color-muted)", fontSize: 13 }}>Sem dados para o período.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {analytics.porZona.map((r, i) => {
+                    const max = analytics.porZona[0]?.total ?? 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ flex: 1, fontSize: 13 }}>{r.zona}</div>
+                        <BarChart value={r.total} max={max} color="var(--color-success, #10b981)" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Por comercial */}
+            <div className="card">
+              <h3 style={{ marginTop: 0, fontSize: 14 }}>Encomendas por Comercial</h3>
+              {analytics.porComercial.length === 0 ? (
+                <p style={{ color: "var(--color-muted)", fontSize: 13 }}>Sem dados para o período.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {analytics.porComercial.map((r, i) => {
+                    const max = analytics.porComercial[0]?.total ?? 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ flex: 1, fontSize: 13 }}>{r.comercial}</div>
+                        <BarChart value={r.total} max={max} color="var(--color-warning, #f59e0b)" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

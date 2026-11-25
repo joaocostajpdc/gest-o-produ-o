@@ -116,13 +116,30 @@ clientsRouter.get(
   })
 );
 
-// GET /clients/comercial/analytics — totais de vendas por cliente / zona / comercial
+// GET /clients/comercial/analytics — totais de encomendas por cliente / zona / comercial + tendência mensal
 clientsRouter.get(
   "/comercial/analytics",
-  asyncHandler(async (_req, res) => {
-    // Totais de OS por cliente (contagem e valor total se disponível)
+  asyncHandler(async (req, res) => {
+    const { periodo } = req.query as Record<string, string>;
+
+    // Calcular data de início com base no período
+    let dataInicio: Date | undefined;
+    const agora = new Date();
+    if (periodo === "mes") {
+      dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    } else if (periodo === "trimestre") {
+      dataInicio = new Date(agora.getFullYear(), agora.getMonth() - 2, 1);
+    } else if (periodo === "ano") {
+      dataInicio = new Date(agora.getFullYear(), 0, 1);
+    }
+    // "tudo" ou omitido => sem filtro
+
+    const whereOS = dataInicio ? { createdAt: { gte: dataInicio } } : {};
+
+    // Totais de OS por cliente
     const porCliente = await prisma.serviceOrder.groupBy({
       by: ["clientId"],
+      where: whereOS,
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 20,
@@ -132,31 +149,47 @@ clientsRouter.get(
     const clientIds = porCliente.map((r: any) => r.clientId).filter((id: any): id is string => !!id);
     const clientNames = await prisma.client.findMany({
       where: { id: { in: clientIds } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, zone: true, comercial: true },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nameMap = Object.fromEntries(clientNames.map((c: any) => [c.id, c]));
 
-    // Totais por zona (via clientes ligados a OS)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const clientesComOS = await (prisma.client as any).findMany({
-      where: { serviceOrders: { some: {} } },
+    // Totais por zona e comercial (filtrados pelo período)
+    const osComCliente = await prisma.serviceOrder.findMany({
+      where: { ...whereOS, clientId: { not: null } },
       select: {
-        zone: true,
-        comercial: true,
-        _count: { select: { serviceOrders: true } },
+        client: { select: { zone: true, comercial: true } },
       },
     });
 
     const porZona: Record<string, number> = {};
     const porComercial: Record<string, number> = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const c of clientesComOS as any[]) {
-      const zona = c.zone ?? "Sem zona";
-      const com = c.comercial ?? "Sem comercial";
-      porZona[zona] = (porZona[zona] ?? 0) + c._count.serviceOrders;
-      porComercial[com] = (porComercial[com] ?? 0) + c._count.serviceOrders;
+    for (const os of osComCliente as any[]) {
+      const zona = os.client?.zone ?? "Sem zona";
+      const com = os.client?.comercial ?? "Sem comercial";
+      porZona[zona] = (porZona[zona] ?? 0) + 1;
+      porComercial[com] = (porComercial[com] ?? 0) + 1;
     }
+
+    // Tendência mensal — últimos 6 meses (independente do filtro período)
+    const seisMesesAtras = new Date(agora.getFullYear(), agora.getMonth() - 5, 1);
+    const tendenciaRaw = await prisma.$queryRaw<{ mes: Date; total: bigint }[]>`
+      SELECT DATE_TRUNC('month', "createdAt") as mes, COUNT(*) as total
+      FROM "service_orders"
+      WHERE "createdAt" >= ${seisMesesAtras}
+      GROUP BY mes
+      ORDER BY mes ASC
+    `;
+
+    // KPIs globais (sem filtro de período — refletem o estado atual)
+    const [totalClientesAtivos, totalOSGlobal] = await Promise.all([
+      prisma.client.count({ where: { serviceOrders: { some: {} } } }),
+      prisma.serviceOrder.count(),
+    ]);
+
+    // Total OS no período
+    const totalOSPeriodo = await prisma.serviceOrder.count({ where: whereOS });
 
     res.json({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,6 +206,16 @@ clientsRouter.get(
       porComercial: Object.entries(porComercial)
         .map(([comercial, total]) => ({ comercial, total }))
         .sort((a, b) => b.total - a.total),
+      tendenciaMensal: tendenciaRaw.map((r) => ({
+        mes: r.mes,
+        total: Number(r.total),
+      })),
+      kpis: {
+        totalOSPeriodo,
+        totalOSGlobal,
+        totalClientesAtivos,
+        mediaOSporCliente: totalClientesAtivos > 0 ? Math.round(totalOSGlobal / totalClientesAtivos * 10) / 10 : 0,
+      },
     });
   })
 );

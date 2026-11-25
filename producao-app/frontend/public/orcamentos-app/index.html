@@ -902,8 +902,8 @@ function renderLista(){
   const temFiltro=S.filtroEstado||S.filtroTipo||S.filtroAno||S.filtroUser||S.busca;
   // Total filtrado
   const totalFiltrado=lista.reduce((s,q)=>s+num(q.totais&&q.totais.base),0);
-  // Contagens por estado para os cards
-  const cnt={};ESTADOS.forEach(e=>cnt[e]=0); qs.forEach(q=>{ if(cnt[q.estado]!==undefined) cnt[q.estado]++; });
+  // Contagens por estado para os cards (inclui Anulado)
+  const cnt={};ESTADOS.forEach(e=>cnt[e]=0); cnt["Anulado"]=0; qs.forEach(q=>{ if(cnt[q.estado]!==undefined) cnt[q.estado]++; });
   // Sort icon helper
   function thSort(c,lbl){ const active=col===c; const arr=active?(dir>0?"↑":"↓"):"↕"; return `<th class="${c==="total"||c==="dias"?"r":""} th-sort${active?" th-sort-active":""}" data-sort="${c}">${lbl}<span class="sort-ico">${arr}</span></th>`; }
 
@@ -926,13 +926,17 @@ function renderLista(){
         <span class="lista-card-l">${esc(e)}</span>
       </button>`;
     }).join("")}
+    ${cnt["Anulado"]>0?`<button class="lista-card st-an${S.filtroEstado==="Anulado"?" lista-card-active":""}" data-f="Anulado" style="border-left-color:#d97706">
+      <span class="lista-card-n">${cnt["Anulado"]}</span>
+      <span class="lista-card-l">Anulado</span>
+    </button>`:""}
     ${temFiltro?`<div class="lista-total-box"><div class="lista-total-lbl">Total filtrado s/ IVA</div><div class="lista-total-v">${eur(totalFiltrado)}</div></div>`:""}
   </div>
   <div class="filters-bar">
     <div class="filters-row">
       <div class="filter-search"><input class="i" id="busca" placeholder="Procurar por cliente, nº, obra ou utilizador" value="${esc(S.busca)}"></div>
       <div class="filter-selects">
-        <select class="i" id="fEstado"><option value="">Todos os estados</option>${ESTADOS.map(e=>`<option value="${esc(e)}" ${S.filtroEstado===e?"selected":""}>${esc(e)}</option>`).join("")}</select>
+        <select class="i" id="fEstado"><option value="">Todos os estados</option>${[...ESTADOS,"Anulado"].map(e=>`<option value="${esc(e)}" ${S.filtroEstado===e?"selected":""}>${esc(e)}</option>`).join("")}</select>
         <select class="i" id="fTipo"><option value="">Todos os tipos</option><option value="chapas" ${S.filtroTipo==="chapas"?"selected":""}>Chapas quinadas</option><option value="paineis" ${S.filtroTipo==="paineis"?"selected":""}>Painéis</option>${S.revenda?`<option value="estores" ${S.filtroTipo==="estores"?"selected":""}>Estores</option><option value="mosquiteiras" ${S.filtroTipo==="mosquiteiras"?"selected":""}>Mosquiteiras</option>`:""}</select>
         ${anos.length?`<select class="i" id="fAno"><option value="">Todos os anos</option>${anos.map(a=>`<option value="${a}" ${S.filtroAno===a?"selected":""}>${a}</option>`).join("")}</select>`:""}
         ${users.length>1?`<select class="i" id="fUser"><option value="">Todos os utilizadores</option>${users.map(u=>`<option value="${esc(u)}" ${S.filtroUser===u?"selected":""}>${esc(u)}</option>`).join("")}</select>`:""}
@@ -958,7 +962,7 @@ function renderLista(){
       ${users.length>1?`<td class="user-cell">${esc(q.criadoNome||"—")}</td>`:""}
       <td class="r num fw6">${eur(num(q.totais&&q.totais.base))}</td>
       <td class="r num ${diasClass}">${dias!==null?dias+"d":"—"}</td>
-      <td><select class="i est-sel" data-est="${q.id}" aria-label="Estado" onclick="event.stopPropagation()">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
+      <td>${q.estado==="Anulado"?`<span class="pill st-an" title="${q.motivoAnulacao?esc(q.motivoAnulacao.slice(0,80)):""}">${esc(q.estado)}</span>`:`<select class="i est-sel" data-est="${q.id}" aria-label="Estado" onclick="event.stopPropagation()">${ESTADOS.map(e=>`<option ${q.estado===e?"selected":""}>${e}</option>`).join("")}</select>`}</td>
       <td class="r acts" style="white-space:nowrap"><button class="btn sm ghost" data-dup="${q.id}" title="Duplicar" onclick="event.stopPropagation()">${ico("copy")}</button><span data-delw="${q.id}"><button class="btn sm ghost danger" data-del="${q.id}" title="Apagar" onclick="event.stopPropagation()">${ico("trash")}</button></span></td>
     </tr>`;
   }).join("")}
@@ -1434,6 +1438,24 @@ async function buildPDF(q){
   }
   function need(h){ if(y+h>H-22){ doc.addPage(); header(false); return true; } return false; }
   header(true);
+  // carimbo ANULADO
+  if(q.estado==="Anulado"){
+    doc.saveGraphicsState();
+    doc.setGState(doc.GState({opacity:.13}));
+    doc.setFillColor(220,38,38);
+    doc.setFont("helvetica","bold"); doc.setFontSize(68);
+    const cx2=W/2, cy2=H/2;
+    doc.text("ANULADO",cx2,cy2,{align:"center",angle:38});
+    doc.restoreGraphicsState();
+    // banner vermelho no topo com motivo
+    const RED=[220,38,38], REDSFT=[255,235,235];
+    doc.setFillColor(...REDSFT); doc.rect(M,y,W-2*M,q.motivoAnulacao?16:10,"F");
+    doc.setDrawColor(...RED); doc.setLineWidth(.4); doc.line(M,y,W-M,y); doc.line(M,q.motivoAnulacao?y+16:y+10,W-M,q.motivoAnulacao?y+16:y+10);
+    T("ORÇAMENTO ANULADO",M+3,y+5.5,{b:1,s:9,c:RED});
+    if(q.motivoAnulacao){ T("Motivo: "+PT(q.motivoAnulacao),M+3,y+11,{s:8,c:[150,30,30],w:W-2*M-6}); }
+    if(q.anuladoEm){ T("em "+new Date(q.anuladoEm).toLocaleDateString("pt-PT"),W-M-3,y+5.5,{s:8,c:RED,a:"right"}); }
+    y+=q.motivoAnulacao?20:14;
+  }
   // bloco título + cliente
   T("ORÇAMENTO",M,y+5,{b:1,s:20,c:INK});
   T(ch?"Chapas quinadas":rv?REV[q.tipo].nome:"Painéis",M,y+11,{s:10,c:A,b:1});

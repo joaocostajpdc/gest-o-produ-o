@@ -29,6 +29,7 @@ import { colaboradoresRouter, horasRouter, viaturasRouter } from "./routes/equip
 import { chatRouter } from "./routes/chat";
 import { planeamentoRouter } from "./routes/planeamento";
 import { documentosRouter } from "./routes/documentos";
+import { adminRouter } from "./routes/admin";
 
 export function createApp() {
   const app = express();
@@ -85,6 +86,7 @@ export function createApp() {
   app.use("/api/lacagem-guias", lacagemGuiasRouter);
   app.use("/api/objetivos", objetivosRouter);
   app.use("/api/documentos", documentosRouter);
+  app.use("/api/admin", adminRouter);
 
   // Serve o build do frontend (Vite) a partir deste mesmo serviço, quando
   // existir — permite publicar backend + frontend como um único deploy

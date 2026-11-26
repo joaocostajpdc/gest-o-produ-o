@@ -29,6 +29,7 @@ import { PlaneamentoPage } from "./pages/PlaneamentoPage";
 import { ObjetivosPage } from "./pages/ObjetivosPage";
 import { DocumentosPage } from "./pages/DocumentosPage";
 import { ClientesPage } from "./pages/ClientesPage";
+import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 
 // ============================================================================
 // Páginas da área protegida, num só sítio: usadas pelo App (rota normal) e
@@ -77,5 +78,6 @@ export const protectedRoutes = (
     <Route path="/acessos" element={<AcessosPage />} />
     <Route path="/avisos-telegram" element={<TelegramPage />} />
     <Route path="/emails-automaticos" element={<EmailsPage />} />
+    <Route path="/admin" element={<AdminDashboardPage />} />
   </>
 );

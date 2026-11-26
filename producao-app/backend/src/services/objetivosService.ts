@@ -1,5 +1,6 @@
 import pdfParse from "pdf-parse";
 import { prisma } from "../config/prisma";
+import { JSDOM } from "jsdom";
 
 // ============================================================================
 // Objetivos de negócio (pedido do utilizador de 2026-10-30: "uma página para
@@ -233,6 +234,100 @@ function parseOrderLinesPages(pages: Item[][]): ParsedMap {
   }
   const docs = [...byDoc.values()].sort((a, b) => a.date.localeCompare(b.date) || a.docNumber.localeCompare(b.docNumber, "pt", { numeric: true }));
   return { title: "Relatório de encomendas cliente", documentFilter: null, from: null, to: null, docs, reportedTotalNet: null };
+}
+
+// ---------------------------------------------------------------------------
+// Parser do ficheiro XLS do Goldylocks (Relatório de encomendas).
+// O ficheiro é HTML disfarçado de XLS — deve ser lido com JSDOM, não xlrd.
+// Colunas esperadas: Data, Utilizador, Documento, Cliente, Cod., Artigo,
+//   Preço Líquido, Quantidade, Uni, Desconto, Total Líquido, Estado
+// Cada linha é um artigo; somamos por documento (nº de encomenda).
+// ---------------------------------------------------------------------------
+
+export function parseSalesMapXls(buffer: Buffer): ParsedMap {
+  const html = buffer.toString("utf-8");
+  const dom = new JSDOM(html);
+  const rows = Array.from(dom.window.document.querySelectorAll("tr"));
+
+  // Localizar linha de cabeçalho
+  let headerRow = -1;
+  const headers: string[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const cells = Array.from(rows[i].querySelectorAll("td,th")).map((c) => c.textContent?.trim() ?? "");
+    if (cells.some((c) => /^Data$/i.test(c)) && cells.some((c) => /Documento/i.test(c))) {
+      headerRow = i;
+      headers.push(...cells);
+      break;
+    }
+  }
+  if (headerRow < 0) throw new Error("Não encontrei o cabeçalho no ficheiro XLS. Verifica se é o relatório de encomendas do Goldylocks.");
+
+  const col = (name: RegExp) => headers.findIndex((h) => name.test(h));
+  const colData = col(/^Data$/i);
+  const colDoc = col(/^Documento$/i);
+  const colCliente = col(/^Cliente$/i);
+  const colCod = col(/^Cod\.?$/i);
+  const colTotal = col(/Total\s*L[ií]quido/i);
+
+  if (colData < 0 || colDoc < 0 || colTotal < 0) {
+    throw new Error("O ficheiro não tem as colunas esperadas (Data, Documento, Total Líquido).");
+  }
+
+  const byDoc = new Map<string, ParsedDoc>();
+
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const cells = Array.from(rows[i].querySelectorAll("td,th")).map((c) => c.textContent?.trim() ?? "");
+    const rawDate = cells[colData] ?? "";
+    const rawDoc = cells[colDoc] ?? "";
+    const rawTotal = cells[colTotal] ?? "";
+
+    // Linha de dados válida: data no formato dd-mm-yyyy ou dd/mm/yyyy
+    const dateMatch = rawDate.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+    if (!dateMatch) continue;
+    const date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+
+    // Documento: "Encomenda Cliente 2026/1" → docType="Encomenda Cliente", docNumber="2026/1"
+    const docMatch = rawDoc.match(/^(.+?)\s+(\d{4}\/\d+)\s*$/);
+    if (!docMatch) continue;
+    const docType = docMatch[1].trim();
+    const docNumber = docMatch[2];
+
+    // Total: pode ser "63,75" ou "6375" (cêntimos) — detectamos pela magnitude
+    let total = money(rawTotal);
+    if (Number.isNaN(total)) continue;
+    // Se o valor parece ser em cêntimos (ex: 6375 em vez de 63,75), dividir por 100
+    // Heurística: se não há vírgula e é > 500, provavelmente é cêntimos
+    if (!rawTotal.includes(",") && !rawTotal.includes(".") && Math.abs(total) > 500) {
+      total = total / 100;
+    }
+    total = round2(total);
+
+    const clientName = (colCliente >= 0 ? cells[colCliente] : "") || "—";
+    const clientCode = (colCod >= 0 ? cells[colCod] : null) || null;
+    const key = `${docType}|${docNumber}`;
+    const existing = byDoc.get(key);
+    if (existing) {
+      existing.net = round2(existing.net + total);
+      existing.gross = existing.net;
+      existing.total = existing.net;
+    } else {
+      byDoc.set(key, {
+        date,
+        docType,
+        docNumber,
+        clientCode: clientCode && /^\d+$/.test(clientCode) ? clientCode : null,
+        clientName,
+        gross: total,
+        net: total,
+        tax: 0,
+        total,
+      });
+    }
+  }
+
+  const docs = [...byDoc.values()].sort((a, b) => a.date.localeCompare(b.date) || a.docNumber.localeCompare(b.docNumber, "pt", { numeric: true }));
+  if (!docs.length) throw new Error("Não encontrei encomendas no ficheiro XLS. Verifica se é o relatório de encomendas do Goldylocks.");
+  return { title: "Relatório de encomendas cliente (XLS)", documentFilter: null, from: null, to: null, docs, reportedTotalNet: null };
 }
 
 /** Lê qualquer um dos dois mapas do Goldylocks (totais por dia, ou relatório de linhas). */

@@ -19,11 +19,13 @@
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
+    "@types/jsdom": "^30.0.0",
     "bcryptjs": "^2.4.3",
     "bwip-js": "^4.11.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "jsdom": "^31.0.1",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.2.1",
     "pdf-parse": "1.1.1",

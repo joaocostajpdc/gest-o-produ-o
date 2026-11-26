@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth";
 import { requireFeature } from "../config/featureReleases";
 import { asyncHandler } from "../utils/asyncHandler";
-import { getSummary, importSalesMap, listTargets, parseSalesMapPdf, setTarget } from "../services/objetivosService";
+import { getSummary, importSalesMap, listTargets, parseSalesMapPdf, parseSalesMapXls, setTarget } from "../services/objetivosService";
 
 // ============================================================================
 // Objetivos de negócio (2026-10-30). Ver objetivosService.ts. Em teste:
@@ -76,6 +76,24 @@ objetivosRouter.post(
       res.json(await importSalesMap(kind, map, filename, req.user?.id));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Não foi possível importar o mapa." });
+    }
+  })
+);
+
+// Importação de ficheiro XLS (Goldylocks "Relatório de encomendas")
+// O ficheiro é HTML disfarçado de XLS; aceita os MIME types que o browser envia.
+objetivosRouter.post(
+  "/importar-xls",
+  requireAdmin,
+  express.raw({ type: ["application/vnd.ms-excel", "text/html", "application/octet-stream", "multipart/form-data"], limit: "25mb" }),
+  asyncHandler(async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: "Nenhum ficheiro recebido." });
+    try {
+      const map = parseSalesMapXls(req.body);
+      const filename = typeof req.query.filename === "string" ? req.query.filename.slice(0, 200) : null;
+      res.json(await importSalesMap("ENCOMENDAS", map, filename, req.user?.id));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Não foi possível importar o ficheiro XLS." });
     }
   })
 );

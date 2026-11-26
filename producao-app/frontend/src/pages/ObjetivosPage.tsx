@@ -98,8 +98,10 @@ export function ObjetivosPage() {
   const [error, setError] = useState<string | null>(null);
   const [showTargets, setShowTargets] = useState(false);
   const [importing, setImporting] = useState<Kind | null>(null);
+  const [importingXls, setImportingXls] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const fileRefXls = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -147,6 +149,30 @@ export function ObjetivosPage() {
     }
   }
 
+  async function onFileXls(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportingXls(true);
+    setNotice(null);
+    try {
+      const r = await api.postFile<{ from: string; to: string; count: number; totalNet: number }>(
+        `/objetivos/importar-xls?filename=${encodeURIComponent(file.name)}`,
+        file,
+        file.type || "application/vnd.ms-excel"
+      );
+      setNotice(
+        `Encomendas atualizadas (XLS): ${r.count} documentos de ${r.from.split("-").reverse().join("/")} a ${r.to.split("-").reverse().join("/")}, total ${eur(r.totalNet, 2)} sem IVA.`
+      );
+      load();
+    } catch (err) {
+      setNotice(null);
+      setError(err instanceof Error ? err.message : "Não foi possível importar o ficheiro XLS.");
+    } finally {
+      setImportingXls(false);
+    }
+  }
+
   const fat = data?.faturacao;
   const wd = fat?.workingDays;
   const isCurrent = data ? data.today >= data.start && data.today <= data.end : false;
@@ -183,18 +209,23 @@ export function ObjetivosPage() {
                 Importar faturas
               </button>
               <button className="btn secondary" onClick={() => pickFile("ENCOMENDAS")}>
-                Importar encomendas
+                Importar encomendas (PDF)
+              </button>
+              <button className="btn secondary" onClick={() => { setNotice(null); fileRefXls.current?.click(); }} disabled={importingXls}>
+                {importingXls ? "A importar…" : "Importar encomendas (XLS)"}
               </button>
               <button className="btn" onClick={() => setShowTargets(true)}>
                 Definir objetivos
               </button>
               <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={onFile} />
+              <input ref={fileRefXls} type="file" accept=".xls,.xlsx,.html,application/vnd.ms-excel,text/html" hidden onChange={onFileXls} />
             </>
           )}
         </div>
       </div>
 
-      {importing && <p className="muted">Escolhe o PDF do mapa…</p>}
+      {importing && <p className="muted">Escolhe o PDF do mapa de {importing === "FATURACAO" ? "faturas" : "encomendas"}…</p>}
+      {importingXls && <p className="muted">A processar o ficheiro XLS…</p>}
       {notice && <p className="obj-notice">✓ {notice}</p>}
       {error && <p className="error-text">{error}</p>}
       {!data && !error && <p className="muted">A carregar…</p>}

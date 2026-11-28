@@ -25,7 +25,7 @@ type AdminStats = {
     id: string;
     filename: string | null;
     kind: string;
-    docCount: number;
+    count: number;
     totalNet: number | null;
     createdAt: string;
   }[];
@@ -218,7 +218,7 @@ export function AdminDashboardPage() {
                   <div>
                     <div style={{ fontWeight: 500 }}>{imp.filename ? imp.filename.slice(0, 30) : "(sem nome)"}</div>
                     <div style={{ color: "#aaa" }}>
-                      {imp.kind === "ENCOMENDAS" ? "Encomendas" : "Faturação"} · {imp.docCount} docs · {fmtDate(imp.createdAt)}
+                      {imp.kind === "ENCOMENDAS" ? "Encomendas" : "Faturação"} · {imp.count} docs · {fmtDate(imp.createdAt)}
                     </div>
                   </div>
                   {imp.totalNet != null && (

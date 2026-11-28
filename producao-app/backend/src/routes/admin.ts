@@ -89,7 +89,7 @@ adminRouter.get(
           id: true,
           filename: true,
           kind: true,
-          docCount: true,
+          count: true,
           totalNet: true,
           createdAt: true,
         },
